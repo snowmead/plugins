@@ -1,0 +1,38 @@
+{
+ "note": "scripts/build.ts refreshes these to the newest stable release that is at least 14 days old (the artifact rule), within the same major unless --major. Single-file builds (global) wherever the package ships one; for ESM, modules lists the whole import graph so pages preload it in one parallel round.",
+ "checked": "2026-10-19",
+ "libs": {
+  "motion": {
+   "pkg": "motion",
+   "version": "14.0.0",
+   "url": "https://cdn.jsdelivr.net/npm/motion@{v}/dist/motion.js",
+   "global": "Motion"
+  },
+  "vgpu": {
+   "pkg": "vgpu",
+   "version": "0.5.0",
+   "url": "https://cdn.jsdelivr.net/npm/vgpu@{v}/+esm",
+   "modules": [
+    "https://cdn.jsdelivr.net/npm/vgpu@0.5.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@vgpu/core@0.5.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@vgpu/wgsl@0.5.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@vgpu/wgsl@0.5.0/reflect-source/+esm"
+   ]
+  },
+  "d3": {
+   "pkg": "d3",
+   "version": "7.9.0",
+   "url": "https://cdn.jsdelivr.net/npm/d3@{v}/dist/d3.min.js",
+   "global": "d3"
+  },
+  "plot": {
+   "pkg": "@observablehq/plot",
+   "version": "0.6.17",
+   "url": "https://cdn.jsdelivr.net/npm/@observablehq/plot@{v}/dist/plot.umd.min.js",
+   "global": "Plot",
+   "deps": [
+    "d3"
+   ]
+  }
+ }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "thinkr",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "shot": "bun scripts/shot.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun scripts/test.ts",
+    "examples": "bun scripts/build.ts templates/plan.html && bun scripts/build.ts templates/explain.html"
+  },
+  "dependencies": {
+    "highlight.js": "11.12.0",
+    "mathjax-full": "3.2.2"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.3",
+    "typescript": "7.0.2"
+  }
+}

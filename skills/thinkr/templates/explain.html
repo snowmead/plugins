@@ -1,0 +1,183 @@
+<title>Gradient Descent</title>
+<style>
+  /* page-only styles use the runtime tokens, so both themes work */
+  #landscape .t-stage svg.path { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .axis { stroke: var(--border); }
+</style>
+
+<t-page mode="explain" version="1">
+  <header>
+    <h1>Gradient Descent</h1>
+    <p class="lede">How a model finds the bottom of its loss: take a step downhill, look again, repeat. One number, the
+      <span class="c1">learning rate</span>, decides whether it glides in, zig-zags, or flies off.</p>
+  </header>
+
+  <section>
+    <h2 id="landscape-h">A landscape of loss</h2>
+    <p>Each point on the map is one choice of two parameters. The deeper the blue, the lower the loss. The
+      <span class="c2">path</span> starts at the top left and follows the slope down.</p>
+
+    <t-figure id="landscape" ratio="16/9" alt="A heat map of an elongated bowl with a descent path that zig-zags more as the learning rate grows">
+      <t-control name="lr" label="Learning rate" min="0.02" max="0.245" step="0.005" value="0.08"></t-control>
+      <figcaption><b>Drag the learning rate.</b> Small steps crawl. Near 0.25 the path bounces across the steep walls, and past it the path leaves the map.</figcaption>
+    </t-figure>
+
+    <p>The bowl is steep in one direction and shallow in the other. The steep direction sets the speed limit: the
+      step that is safe across the walls is far too small along the floor. This is why
+      <a href="https://distill.pub/2017/momentum/">momentum</a> and adaptive methods exist.</p>
+  </section>
+
+  <section>
+    <h2 id="one-step">One step, slowly</h2>
+    <p>Every step uses the same rule. Read the slope where you stand, then move against it, scaled by the learning rate:</p>
+    $$x_{t+1} = x_t - \col{1}{\eta}\, \nabla f(x_t)$$
+
+    <t-figure id="step" alt="A parabola with a point, its tangent, the step along the axis, and the new point">
+      <svg viewBox="0 0 480 240" role="img">
+        <line class="axis" x1="20" y1="214" x2="460" y2="214" stroke-width="1"/>
+        <path d="M40 40 Q240 360 440 40" fill="none" stroke="var(--muted-fg)" stroke-width="2" data-draw/>
+        <g data-show="1+" data-focus="1">
+          <circle cx="390" cy="110" r="6" fill="var(--fg)"/>
+          <text x="402" y="104" font-size="13">x = 1.5</text>
+        </g>
+        <g data-show="2+" data-focus="2">
+          <line x1="345" y1="164" x2="435" y2="56" stroke="var(--c2)" stroke-width="2" data-draw/>
+          <text x="440" y="70" font-size="13" fill="var(--c2)" style="fill: var(--c2)">slope 3</text>
+        </g>
+        <g data-show="3+" data-focus="3">
+          <path d="M390 214 L306 214" stroke="var(--c1)" stroke-width="2.5" fill="none" data-draw/>
+          <path d="M312 208 L302 214 L312 220" stroke="var(--c1)" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+          <text x="348" y="234" font-size="13" text-anchor="middle" style="fill: var(--c1)">−η · 3 = −0.9</text>
+        </g>
+        <g data-show="4" data-focus="4">
+          <line x1="300" y1="214" x2="300" y2="186" stroke="var(--border)" stroke-dasharray="3 3"/>
+          <circle cx="300" cy="185.6" r="6" fill="var(--c3)"/>
+          <text x="286" y="178" font-size="13" text-anchor="end" style="fill: var(--c3)">x = 0.6</text>
+        </g>
+      </svg>
+      <t-step>Start at <b>x = 1.5</b> on the loss curve f(x) = x².</t-step>
+      <t-step>Read the slope there: f′(1.5) = <b>3</b>. Uphill is to the right.</t-step>
+      <t-step>Move left by the learning rate times the slope: 0.3 × 3 = <b>0.9</b>.</t-step>
+      <t-step>Land at <b>x = 0.6</b>, lower on the curve. Repeat from here.</t-step>
+      <figcaption>The slope gives both the direction and the size of the step. Near the bottom the slope is small, so the steps shrink on their own.</figcaption>
+    </t-figure>
+
+    <pre data-title="descent.py"><code class="language-python">def descend(grad, x, lr=0.3, steps=40):
+    for _ in range(steps):
+        x = x - lr * grad(x)   # one step downhill
+    return x</code></pre>
+  </section>
+
+  <section>
+    <h2 id="check">Check yourself</h2>
+    <t-question id="steep-axis" type="single" answer="bounce" toc="A bigger step">
+      <p>On the bowl above, you raise the learning rate from 0.08 to 0.24. What happens along the steep direction?</p>
+      <t-option value="faster">It converges faster, with no other change</t-option>
+      <t-option value="bounce">It overshoots and bounces from wall to wall</t-option>
+      <t-option value="stuck">It stops moving</t-option>
+      <t-explain><p>Along the steep direction the curvature is 8, so each step multiplies the error by 1 − 8η. At η = 0.24 that is −0.92: the sign flips every step, and the size shrinks only a little.</p></t-explain>
+    </t-question>
+
+    <t-question id="diverge" type="multi" answer="big-lr,steeper" toc="What makes it diverge">
+      <p>Which changes can make descent fly off instead of settling?</p>
+      <t-option value="big-lr">A learning rate above 2 ÷ the steepest curvature</t-option>
+      <t-option value="more-steps">Running more steps</t-option>
+      <t-option value="steeper">Making the loss steeper with the same learning rate</t-option>
+      <t-option value="start">Starting closer to the minimum</t-option>
+      <t-explain><p>Only the product of the learning rate and the curvature matters. More steps or a better start cannot fix a step that overshoots by more than it gains.</p></t-explain>
+    </t-question>
+  </section>
+
+  <section>
+    <h2 id="further">Go further</h2>
+    <t-refs>
+      <ul>
+        <li><a href="https://distill.pub/2017/momentum/">Why Momentum Really Works</a><small>Interactive. The same elongated bowl, and how momentum fixes the zig-zag.</small></li>
+        <li><a href="https://www.deeplearningbook.org/contents/numerical.html">Deep Learning, chapter 4: Numerical Computation</a><small>Gradient-based optimization and the condition number, with the math.</small></li>
+        <li><a href="https://en.wikipedia.org/wiki/Gradient_descent">Gradient descent</a><small>Definitions, convergence conditions, and variants.</small></li>
+      </ul>
+    </t-refs>
+  </section>
+</t-page>
+
+<script type="ts">
+  import type { Fig } from '../runtime/types';
+
+  // The loss: an elongated bowl, curvature 1 along x and 8 along y. TS and WGSL use the same formula.
+  type P = [number, number];
+  const f = (x: number, y: number) => 0.5 * x * x + 4 * y * y;
+  const grad = (x: number, y: number): P => [x, 8 * y];
+  const X = 3, Y = 3 * 9 / 16; // the map shows x in [-X, X], y in [-Y, Y]
+
+  thinkr.figure('#landscape', async (fig: Fig) => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'path');
+    fig.stage.append(svg);
+
+    // the path, redrawn on resize and on each change of the learning rate
+    const drawPath = (animate: boolean) => {
+      const { width: w, height: hh } = fig.size;
+      const lr = fig.controls.lr as number;
+      const px = (x: number, y: number): P => [((x / X) + 1) / 2 * w, (1 - (y / Y + 1) / 2) * hh];
+      let p: P = [-2.6, 1.3];
+      const pts = [px(...p)];
+      for (let i = 0; i < 40; i++) {
+        const g = grad(...p);
+        p = [p[0] - lr * g[0], p[1] - lr * g[1]];
+        if (Math.abs(p[0]) > 2 * X || Math.abs(p[1]) > 2 * Y) break;
+        pts.push(px(...p));
+      }
+      svg.setAttribute('viewBox', `0 0 ${w} ${hh}`);
+      svg.innerHTML = `<path d="M${pts.map((q) => q.map((v) => v.toFixed(1)).join(' ')).join('L')}" fill="none" stroke="var(--c2)" stroke-width="2" stroke-linejoin="round"/>`
+        + pts.map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i ? 2.5 : 5}" fill="var(--c2)"/>`).join('');
+      if (animate) fig.anim(svg.firstElementChild, { pathLength: [0, 1] }, { type: 'tween', duration: 0.8, ease: 'easeOut' });
+    };
+    fig.onResize(() => drawPath(false));
+    fig.onControl(() => drawPath(false)); // redraw on every input: the path follows the slider with no delay
+    drawPath(true);
+
+    // the field: a vgpu fragment shader
+    const colors = () => ({ lo: fig.color('bg'), hi: fig.color('c1'), line: fig.color('fg') });
+    try {
+      const { gpu, surface, effect, frameLoop, target } = await fig.vgpu();
+      const surf = surface(gpu, fig.canvas(), { dpr: [1, 2] });
+      const fx = effect(gpu, /* wgsl */ `
+        struct Params { lo: vec4f, hi: vec4f, line: vec4f, width: f32, height: f32, pad0: f32, pad1: f32 }
+        @group(0) @binding(0) var<uniform> params: Params;
+        @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+          let x = (uv.x * 2.0 - 1.0) * ${X.toFixed(4)};
+          let y = (1.0 - uv.y * 2.0) * ${Y.toFixed(4)};
+          let g = sqrt(0.5 * x * x + 4.0 * y * y) * 2.4;     // sqrt spaces the contours evenly
+          let heat = clamp(1.0 - g / 9.0, 0.0, 1.0);
+          let d = abs(fract(g - 0.5) - 0.5) / fwidth(g);
+          let contour = (1.0 - min(d, 1.0)) * 0.22;
+          let base = mix(params.lo.rgb, params.hi.rgb, heat * heat * 0.9);
+          return vec4f(mix(base, params.line.rgb, contour), 1.0);
+        }`, { set: { params: { ...colors(), width: 1, height: 1, pad0: 0, pad1: 0 } } });
+      await fx.compile(target(gpu, { size: [1, 1] })); // a WGSL error rejects here, not silently in the loop
+      // the field is still: draw a frame only when something changed, not 60 times a second
+      let dirty = true;
+      fig.onTheme(() => { fx.set({ params: colors() }); dirty = true; });
+      surf.onResize(({ width, height }) => { fx.set({ params: { width, height } }); dirty = true; });
+      let loop: { stop(): void } | null = null;
+      const start = () => { loop ??= frameLoop(gpu, (frame) => { if (dirty) { dirty = false; frame.pass(surf, fx); } }); };
+      const stop = () => { loop?.stop(); loop = null; };
+      fig.onVisible((on) => (on ? start() : stop()));
+      start(); // set up a screen ahead: draw the first frame now, so it is there when the figure scrolls in
+    } catch {
+      // no WebGPU: draw the same field on a 2D canvas, at a quarter of the resolution
+      const c = fig.canvas(), ctx = c.getContext('2d')!;
+      const paint = () => {
+        const w = (c.width = Math.max(1, fig.size.width >> 2)), hh = (c.height = Math.max(1, fig.size.height >> 2));
+        const [lo, hi] = [fig.color('bg'), fig.color('c1')], img = ctx.createImageData(w, hh);
+        for (let j = 0; j < hh; j++) for (let i = 0; i < w; i++) {
+          const x = (i / w * 2 - 1) * X, y = (1 - j / hh * 2) * Y, heat = Math.max(0, 1 - Math.sqrt(f(x, y)) * 2.4 / 9), k = heat * heat * 0.9;
+          for (let ch = 0; ch < 3; ch++) img.data[(j * w + i) * 4 + ch] = 255 * (lo[ch] + (hi[ch] - lo[ch]) * k);
+          img.data[(j * w + i) * 4 + 3] = 255;
+        }
+        ctx.putImageData(img, 0, 0);
+      };
+      paint(); fig.onResize(paint); fig.onTheme(paint);
+    }
+  });
+</script>

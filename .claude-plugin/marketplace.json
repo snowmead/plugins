@@ -1,0 +1,24 @@
+{
+  "name": "plugins",
+  "owner": {
+    "name": "Michael Assaf",
+    "url": "https://github.com/snowmead"
+  },
+  "description": "Michael Assaf's Claude plugins: thinkr (plan and explainer pages as Artifacts) and e-rust (Effective Rust).",
+  "plugins": [
+    {
+      "name": "thinkr",
+      "source": "./skills/thinkr",
+      "description": "Plan and explainer pages as Claude Artifacts: questions whose answers go back to Claude, stepped diagrams, WebGPU figures, motion and quiet UI sound, in the default shadcn/ui look.",
+      "category": "productivity",
+      "tags": ["artifacts", "plan", "explainer", "design-doc", "teaching"]
+    },
+    {
+      "name": "e-rust",
+      "source": "./skills/rust",
+      "description": "Effective Rust: defaults for reading and writing Rust: toolchain, imports and modules, types and invariants, conversions, ownership, documentation and unsafe code, tests, plus standard-library and nightly guidance.",
+      "category": "development",
+      "tags": ["rust", "coding-standards", "conventions"]
+    }
+  ]
+}
