@@ -1,0 +1,19 @@
+{
+  "name": "changelog",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "gather": "bun scripts/gather.ts",
+    "entry": "bun scripts/entry.ts",
+    "build": "bun scripts/build.ts",
+    "shot": "bun scripts/shot.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun scripts/test.ts",
+    "example": "bun scripts/test.ts --example"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.3",
+    "typescript": "7.0.2"
+  }
+}

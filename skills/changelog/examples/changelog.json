@@ -1,0 +1,8 @@
+{
+  "name": "Relay",
+  "repo": "example/webhooks",
+  "timezone": "America/Toronto",
+  "page": "https://claude.ai/artifact/example",
+  "slack": { "channel": "C0EXAMPLE1", "label": "#relay" },
+  "workflows": { "ci": "ci.yml", "review": "claude-review.yml" }
+}

@@ -1,0 +1,41 @@
+{
+ "repo": "example/webhooks",
+ "window": {
+  "since": "2026-10-19T22:05:00.000Z",
+  "until": "2026-10-20T13:40:00.000Z",
+  "ci_runs": 9,
+  "ci_failed": 1,
+  "ci_in_progress": 0,
+  "ci_median_min": 6.4
+ },
+ "prs": {
+  "42": {
+   "title": "Retry failed webhook deliveries with backoff",
+   "url": "https://github.com/example/webhooks/pull/42",
+   "author": "example-dev",
+   "created_at": "2026-10-18T15:12:00Z",
+   "merged_at": "2026-10-20T02:31:00Z",
+   "add": 96,
+   "del": 24,
+   "files": 10,
+   "hours": 35.32,
+   "ci_runs": 4,
+   "ci_failed": 1,
+   "review_runs": 2
+  },
+  "44": {
+   "title": "Show retrying deliveries on the endpoint page",
+   "url": "https://github.com/example/webhooks/pull/44",
+   "author": "example-dev",
+   "created_at": "2026-10-20T09:02:00Z",
+   "merged_at": "2026-10-20T12:48:00Z",
+   "add": 141,
+   "del": 18,
+   "files": 7,
+   "hours": 3.77,
+   "ci_runs": 2,
+   "ci_failed": 0,
+   "review_runs": 1
+  }
+ }
+}

@@ -4,7 +4,7 @@
     "name": "Michael Assaf",
     "url": "https://github.com/snowmead"
   },
-  "description": "Michael Assaf's Claude plugins: thinkr (plan and explainer pages as Artifacts), guided-review (guided code reviews as Artifacts) and e-rust (Effective Rust).",
+  "description": "Michael Assaf's Claude plugins: thinkr (plan and explainer pages as Artifacts), guided-review (guided code reviews as Artifacts), changelog (a team changelog as an Artifact, posted to Slack) and e-rust (Effective Rust).",
   "plugins": [
     {
       "name": "thinkr",
@@ -19,6 +19,13 @@
       "description": "Guided code reviews as Claude Artifacts: an overview with a before / after of the behavior, then the diff as short chapters, each explained beside its code, with review marks, a file tree and syntax-highlighted diffs.",
       "category": "development",
       "tags": ["code-review", "pull-request", "diff", "artifacts", "walkthrough"]
+    },
+    {
+      "name": "changelog",
+      "source": "./skills/changelog",
+      "description": "A team changelog as a Claude Artifact: the pull requests merged since the last entry (or the last N days), written up as features with animated scenes and PR links, saved to the page's database and posted to Slack. Runs the same by hand or on a schedule.",
+      "category": "productivity",
+      "tags": ["changelog", "release-notes", "pull-requests", "slack", "artifacts"]
     },
     {
       "name": "e-rust",
