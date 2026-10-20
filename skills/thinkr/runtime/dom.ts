@@ -60,6 +60,8 @@ export const ICON = {
   right: svg('<path d="M6 3.5 10.5 8 6 12.5"/>'),
   play: svg('<path d="M5 3.2v9.6a.5.5 0 0 0 .77.42l7.2-4.8a.5.5 0 0 0 0-.84l-7.2-4.8A.5.5 0 0 0 5 3.2Z"/>', 16, 'fill="currentColor"'),
   pause: svg('<rect x="4" y="3" width="3" height="10" rx=".8"/><rect x="9" y="3" width="3" height="10" rx=".8"/>', 16, 'fill="currentColor"'),
+  plus: svg('<path d="M8 3.5v9M3.5 8h9"/>'),
+  minus: svg('<path d="M3.5 8h9"/>'),
   check: svg('<path d="m2.5 6.2 2.3 2.3 4.7-5"/>', 12, 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'),
   sound: svg('<path d="M2.5 6h2l3-2.5v9L4.5 10h-2z"/><path d="M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6.3 6.3 0 0 1 0 9"/>'),
   mute: svg('<path d="M2.5 6h2l3-2.5v9L4.5 10h-2z"/><path d="m10.5 6 4 4M14.5 6l-4 4"/>'),

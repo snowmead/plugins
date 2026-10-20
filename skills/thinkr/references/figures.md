@@ -32,6 +32,7 @@ A figure is the reason a section exists. Choose it before you write the text.
 | `interval="2600"` | Milliseconds per step when the reader presses Play. |
 | `<t-control type="range\|select\|toggle">` | `range`: `min max step value unit`. `select`: `options="a\|b\|c" value`. `toggle`: `checked`. |
 | `<t-step>` | Adds Back / Play / Next, the step text and dots. Inline HTML is fine. |
+| `fixed` | Turns off resizing, and pan and zoom. Rarely needed. |
 
 ## Steps and motion without a script
 
@@ -40,9 +41,21 @@ Put these on parts of an inline SVG (usually `<g>` groups):
 | Attribute | Effect |
 |---|---|
 | `data-show="2"`, `"2-3"`, `"2+"`, `"1,3"` | The part shows only at those steps. |
-| `data-focus="2"` | The part dims at the other steps. Combine with `data-show`. |
+| `data-focus="2"` | The part recedes slightly (65% opacity) at the other steps, so the current step stands out. Combine with `data-show`. |
 | `data-draw` | On a `path`, `line`, `rect` or `circle`: the stroke draws itself when it appears. |
 | `data-in` | The part rises in, staggered, the first time the figure is seen. |
+
+Steps build up; they do not replace. A part the reader met in step 2 stays on screen and readable in every later
+step (`data-show="2+"`), so the last step shows the whole system and nobody has to remember an earlier frame. Use a
+single-step `data-show` only for something transient (a message in flight, a value that changes). Mark the current
+step with `data-focus` and, if it needs more, a stronger stroke or color on the new part itself; never make earlier
+parts so faint they are hard to read.
+
+Every figure can be resized: drag the top or bottom edge for height, a side for width (it grows on both sides, up
+to the window); double-click an edge to restore it. A stage whose drawing is an inline SVG with a `viewBox` also
+pans and zooms: ⌘/Ctrl + wheel or a pinch to zoom, drag to pan, double-click to zoom in (Shift: out), and with the
+stage focused `+` `-` `0` and the arrow keys; a small bar in the corner has the same. The runtime grows the
+`viewBox` to cover everything drawn, so a label past the edge still shows, but keep labels inside it anyway.
 
 Motion never hides content: a frozen frame shows the finished figure. Reduced motion turns it all off.
 

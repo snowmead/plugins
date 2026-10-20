@@ -36,6 +36,20 @@ const cases: Record<string, { run: string; expect: Record<string, unknown>; budg
       r.saved = Object.keys(JSON.parse(localStorage.getItem('thinkr:api-rate-limits:plan')).answers).length;
       r.refHost = $('t-refs .t-host').textContent;
 
+      // the figure viewport: zoom, reset, resize from an edge
+      const stage = $('#flow-fig .t-stage'), fsvg = stage.querySelector('svg');
+      await new Promise((ok) => setTimeout(ok, 100));
+      const vb = fsvg.viewBox.baseVal, bb = fsvg.getBBox();
+      r.fitsContent = vb.x <= bb.x && vb.y <= bb.y && vb.x + vb.width >= bb.x + bb.width && vb.y + vb.height >= bb.y + bb.height;
+      $('#flow-fig [aria-label="Zoom in"]').click();
+      r.zoomed = $('#flow-fig .t-zoom-level').textContent;
+      stage.dispatchEvent(new KeyboardEvent('keydown', { key: '0', bubbles: true }));
+      r.reset = $('#flow-fig .t-zoom-level').textContent;
+      const edge = $('#flow-fig .t-edge.is-s'), er = edge.getBoundingClientRect(), h0 = stage.offsetHeight;
+      const drag = (type, y) => edge.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 9, button: 0, buttons: 1, clientX: er.x + 20, clientY: y }));
+      drag('pointerdown', er.y); drag('pointermove', er.y + 100); drag('pointerup', er.y + 100);
+      r.taller = stage.offsetHeight > h0;
+
       // the send panel
       const form = $('#t-composer');
       ms.panel = t(() => $('.t-dock > .t-btn.is-primary').click());
@@ -83,7 +97,7 @@ const cases: Record<string, { run: string; expect: Record<string, unknown>; budg
       const top = $('#exceptions').getBoundingClientRect().top;
       r.nextOpen = Math.abs(top - 84) < 4 || (top > 84 && top < innerHeight && scrollY + innerHeight >= document.documentElement.scrollHeight - 2);`,
     expect: {
-      badge: 'Answered', count: '1/4', maxDisabled: true, otherShown: true, otherHidden: true, offAtStep1: true, onAtStep2: true, saved: 4, refHost: 'redis.io',
+      badge: 'Answered', count: '1/4', maxDisabled: true, otherShown: true, otherHidden: true, offAtStep1: true, onAtStep2: true, saved: 4, refHost: 'redis.io', fitsContent: true, zoomed: '150%', reset: '100%', taller: true,
       panel: 'Approve plan', panelWarn: '1 question is still open.', draft: 'Ship it after the load test.', escCloses: true,
       sendPanel: 'Send feedback', sendNoWarn: true, draftKept: 'Ship it after the load test.', outsideCloses: true,
       tocEntries: 7, tocSub: 4, tocDone: 3, railNotches: true, tocMidGlide: true, tocLands: true, tocHash: '#references', pinOn: 'Rollout', pinHeld: 'Rollout', flashed: true, wheelReleases: true, nextOpen: true,

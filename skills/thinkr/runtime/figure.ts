@@ -5,6 +5,7 @@ import type { Controls, Fig, RGBA, Size, Tokens } from './types';
 import { h, ICON } from './dom';
 import { anim, config, hasMotion, load, motionReady, reduced } from './libs';
 import { sound } from './sound';
+import { panZoom, resizable } from './view';
 
 type Setup = (fig: Fig) => void | Promise<void>;
 interface FigState extends Fig {
@@ -238,6 +239,8 @@ function build(el: HTMLElement, id: string): FigState {
   el.append(stage);
   if (foot.childNodes.length) el.append(foot);
   if (caption) el.append(caption);
+  if (!stage.classList.contains('has-ratio')) panZoom(el, stage);
+  resizable(el, stage);
   new ResizeObserver(() => fig.resize.forEach((cb) => cb(fig.size))).observe(stage);
   return fig;
 }
