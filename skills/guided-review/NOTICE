@@ -1,0 +1,22 @@
+guided-review
+Copyright 2026 Michael Assaf
+Licensed under the Apache License, Version 2.0 (LICENSE.txt).
+
+This product includes third-party material, under its own license:
+
+- Inter font (runtime/fonts/inter-latin.woff2)
+  Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
+  SIL Open Font License, Version 1.1 (runtime/fonts/OFL.txt)
+
+- JetBrains Mono font (runtime/fonts/jetbrains-mono-latin.woff2)
+  Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+  SIL Open Font License, Version 1.1 (runtime/fonts/OFL.txt)
+
+- UI sounds (runtime/sounds.json), rendered with earshot
+  Copyright (c) 2026 Leon Lin (https://github.com/Leonxlnx/earshot)
+  MIT License
+
+Not included, but used:
+
+- When a guide is viewed, loaded from cdn.jsdelivr.net: @pierre/diffs (Apache-2.0) and @pierre/trees (Apache-2.0);
+  in the local preview, mermaid (MIT).

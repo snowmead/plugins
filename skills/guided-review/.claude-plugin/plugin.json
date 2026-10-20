@@ -1,0 +1,14 @@
+{
+  "name": "guided-review",
+  "displayName": "guided-review",
+  "version": "0.1.0",
+  "description": "Guided code reviews as Claude Artifacts: an overview with a before / after of the behavior, then the diff as short chapters, each explained beside its code, with review marks, a file tree and syntax-highlighted diffs.",
+  "author": {
+    "name": "Michael Assaf",
+    "url": "https://github.com/snowmead"
+  },
+  "homepage": "https://github.com/snowmead/plugins/tree/main/skills/guided-review",
+  "repository": "https://github.com/snowmead/plugins",
+  "license": "Apache-2.0",
+  "keywords": ["code-review", "pull-request", "diff", "artifacts", "walkthrough", "review-guide"]
+}

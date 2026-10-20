@@ -1,0 +1,333 @@
+/* Guided review · a pull request read as chapters: text on the left, its code on the right.
+   Layout: a sticky tab bar, then one row per section (overview, chapters), a mini-map rail
+   at the left edge, and a Diff view with every file in path order. Inter and JetBrains Mono
+   are inlined by build.ts, so the page paints in its own type at once. */
+:root {
+  --bg: #f8f8f9;
+  --surface: #ffffff;
+  --surface-2: #f3f3f5;
+  --border: #e4e4e8;
+  --border-strong: #d2d2d8;
+  --text: #18181b;
+  --text-2: #4b4b55;
+  --muted: #74747f;
+  --faint: #a3a3ad;
+  --accent: #0f8a7c;
+  --accent-soft: #e3f4f1;
+  --add-bg: #edfbf2;
+  --add-bg-soft: #f5fcf8;
+  --add-bar: #1f9d55;
+  --add-fg: #15803d;
+  --del-bg: #fdf0f0;
+  --del-bg-soft: #fdf7f7;
+  --del-bar: #d93636;
+  --del-fg: #c02626;
+  --flash: #fff4c2;
+  --shadow: 0 1px 2px rgba(24, 24, 27, .04);
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-col: 340px;
+  --bar-h: 52px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0d10; --surface: #141418; --surface-2: #1b1b20; --border: #26262d; --border-strong: #363640;
+    --text: #f2f2f4; --text-2: #c3c3cb; --muted: #9a9aa5; --faint: #6c6c77; --accent: #3fc9b4; --accent-soft: #11302c;
+    --add-bg: #11261a; --add-bg-soft: #131d17; --add-bar: #2fb866; --add-fg: #4ade80;
+    --del-bg: #2c1517; --del-bg-soft: #221618; --del-bar: #e5484d; --del-fg: #f87171; --flash: #3d3511;
+    --shadow: none;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d0d10; --surface: #141418; --surface-2: #1b1b20; --border: #26262d; --border-strong: #363640;
+  --text: #f2f2f4; --text-2: #c3c3cb; --muted: #9a9aa5; --faint: #6c6c77; --accent: #3fc9b4; --accent-soft: #11302c;
+  --add-bg: #11261a; --add-bg-soft: #131d17; --add-bar: #2fb866; --add-fg: #4ade80;
+  --del-bg: #2c1517; --del-bg-soft: #221618; --del-bar: #e5484d; --del-fg: #f87171; --flash: #3d3511;
+  --shadow: none;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+.gr-rail[hidden] { display: none; }
+body {
+  background: var(--bg); color: var(--text); font: 14px/1.55 var(--font-ui);
+  -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01";
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg);
+}
+a { color: inherit; }
+code, .mono { font-family: var(--font-code); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.add-n { color: var(--add-fg); font-variant-numeric: tabular-nums; }
+.del-n { color: var(--del-fg); font-variant-numeric: tabular-nums; }
+
+.gr-wrap {
+  max-width: 1440px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ---------- bar ---------- */
+.gr-crumbs > span:not(.t) { white-space: nowrap; }
+.gr-crumbs { display: flex; align-items: center; gap: 8px; padding-block: 14px 0; color: var(--muted); font-size: 13px; min-width: 0; }
+.gr-crumbs .t { color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.gr-crumbs svg { flex: none; color: var(--add-fg); }
+.gr-bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+  border-bottom: 1px solid transparent; transition: border-color .15s;
+}
+.gr-bar.stuck { border-bottom-color: var(--border); }
+.gr-bar .gr-wrap { display: flex; align-items: center; gap: 8px; height: var(--bar-h); }
+.gr-tabs { display: flex; gap: 4px; }
+.gr-tab, .gr-btn {
+  height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
+  color: var(--text-2); font-size: 13px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; white-space: nowrap;
+}
+.gr-tab[aria-selected="true"] { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); font-weight: 500; }
+.gr-btn:hover, .gr-tab:hover { border-color: var(--border-strong); color: var(--text); }
+.gr-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 500; }
+.gr-spacer { flex: 1; }
+.gr-links { display: flex; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.gr-links::-webkit-scrollbar { display: none; }
+.gr-links .gr-btn, .gr-bar .gr-btn.primary { flex: none; }
+.gr-progress { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gr-progress b { color: var(--text); font-weight: 500; }
+/* unified / split: one control of two segments, in the tabs' look */
+.gr-seg { display: inline-flex; flex: none; height: 30px; padding: 2px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
+.gr-seg button { padding: 0 10px; border-radius: 5px; font-size: 12.5px; color: var(--muted); }
+.gr-seg button:hover { color: var(--text); }
+.gr-seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); font-weight: 500; box-shadow: inset 0 0 0 1px var(--border-strong); }
+.gr-icon { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
+.gr-icon:hover { background: var(--surface-2); color: var(--text); }
+.gr-icon[aria-pressed="true"] .off, .gr-icon[aria-pressed="false"] .on { display: none; }
+
+/* ---------- header ---------- */
+.gr-head { padding-block: 22px 8px; }
+.gr-head h1 { font-size: 24px; line-height: 1.3; font-weight: 600; letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+.gr-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 8px; color: var(--muted); font-size: 13px; }
+.gr-meta > * { display: inline-flex; align-items: center; gap: 6px; }
+.gr-meta > * + *::before { content: ""; width: 1px; height: 12px; background: var(--border-strong); margin-right: 6px; }
+.gr-avatar {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--accent-soft); color: var(--accent);
+  font-size: 10px; font-weight: 600; display: inline-grid; place-items: center; text-transform: uppercase;
+}
+.gr-meta a { text-decoration: none; }
+.gr-meta a:hover { color: var(--text); text-decoration: underline; }
+.gr-meta .mono { font-size: 12px; }
+
+/* ---------- sections ---------- */
+.gr-view[hidden] { display: none !important; }
+.gr-sec {
+  display: grid; grid-template-columns: var(--text-col) minmax(0, 1fr); gap: 40px;
+  padding-block: 40px; scroll-margin-top: calc(var(--bar-h) + 8px);
+}
+.gr-sec + .gr-sec { border-top: 1px solid var(--border); }
+.gr-sec.label-start { border-top: 1px dashed var(--border-strong); }
+/* Room under a short last chapter, so j, k and the rail can bring it up to the reading line. */
+#gr-guide > .gr-sec:last-child { min-height: 70vh; align-content: start; }
+/* Chapter text taller than the screen scrolls on its own, so its file list stays in reach. */
+.gr-text {
+  position: sticky; top: calc(var(--bar-h) + 20px + env(safe-area-inset-top, 0px)); align-self: start; min-width: 0;
+  max-height: calc(100vh - var(--bar-h) - 40px - env(safe-area-inset-top, 0px)); overflow-y: auto;
+}
+.gr-text h2 { font-size: 18px; line-height: 1.35; font-weight: 600; margin: 0; text-wrap: balance; letter-spacing: -.005em; }
+.gr-chmeta { display: flex; align-items: center; gap: 10px; margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+.gr-count { font-variant-numeric: tabular-nums; }
+.gr-kind {
+  font-size: 11px; font-weight: 500; letter-spacing: .03em; text-transform: uppercase; color: var(--text-2);
+  border: 1px solid var(--border-strong); border-radius: 5px; padding: 0 6px; line-height: 18px;
+}
+.gr-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.gr-check input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.gr-body { margin-top: 14px; color: var(--text-2); max-width: 62ch; }
+.gr-body p { margin: 0 0 10px; }
+.gr-body ol { margin: 0 0 10px; padding-left: 20px; }
+.gr-body li { margin: 0 0 6px; padding-left: 2px; }
+.gr-body code, .gr-table code {
+  font-size: .86em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; color: var(--text);
+}
+.gr-body a { color: var(--accent); text-decoration: none; }
+.gr-body a:hover { text-decoration: underline; }
+.gr-body .ref { border-bottom: 1px dotted var(--accent); color: inherit; }
+
+.gr-filelist { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 2px; }
+.gr-filelist button {
+  width: 100%; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 8px;
+  padding: 4px 6px; margin-left: -6px; border-radius: 6px; text-align: left; font-size: 13px;
+}
+.gr-filelist button:hover { background: var(--surface-2); }
+.gr-filelist .name { font-weight: 500; white-space: nowrap; }
+.gr-filelist .dir { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.gr-filelist .stat { font-size: 12px; white-space: nowrap; display: flex; gap: 6px; }
+.gr-filelist .part { color: var(--faint); font-size: 11px; }
+.gr-filelist .done .name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--faint); }
+
+.gr-lang {
+  font: 600 9px/14px var(--font-code); letter-spacing: .02em; padding: 0 4px; border-radius: 3px;
+  color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); text-transform: uppercase; min-width: 26px; text-align: center;
+}
+
+.gr-code-col { display: grid; gap: 16px; min-width: 0; align-content: start; }
+
+/* ---------- state table ---------- */
+.gr-table { margin-top: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow: hidden; font-size: 12px; }
+.gr-table header { display: flex; gap: 8px; align-items: baseline; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.gr-table header b { font-weight: 600; color: var(--text); }
+.gr-table header span { color: var(--muted); }
+.gr-table header a { margin-left: auto; color: var(--faint); font: 11px var(--font-code); text-decoration: none; }
+.gr-table header a:hover { color: var(--accent); }
+.gr-table .scroll { overflow-x: auto; }
+.gr-table table { border-collapse: collapse; width: 100%; }
+.gr-table th { text-align: left; font-weight: 500; color: var(--muted); padding: 5px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.gr-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); color: var(--text-2); vertical-align: top; }
+.gr-table tr:last-child td { border-bottom: 0; }
+.gr-table tr.new td { background: var(--add-bg-soft); }
+.gr-table tr.new td:first-child { box-shadow: inset 3px 0 0 var(--add-bar); }
+.gr-table tr.gone td { background: var(--del-bg-soft); text-decoration: line-through; text-decoration-color: var(--faint); }
+.gr-table tr.gone td:first-child { box-shadow: inset 3px 0 0 var(--del-bar); }
+.gr-table footer { padding: 6px 10px; color: var(--muted); border-top: 1px solid var(--border); }
+
+/* ---------- cards ---------- */
+.gr-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); min-width: 0; scroll-margin-top: calc(var(--bar-h) + 12px); }
+.gr-card > header {
+  display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px 0 6px; border-bottom: 1px solid var(--border);
+  font-size: 13px; min-width: 0;
+}
+.gr-card.collapsed > header { border-bottom: 0; }
+.gr-card.collapsed > :not(header) { display: none; }
+.gr-fold { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 5px; color: var(--muted); flex: none; }
+.gr-fold:hover { background: var(--surface-2); color: var(--text); }
+.gr-fold svg { transition: transform .15s; }
+.gr-card.collapsed .gr-fold svg { transform: rotate(-90deg); }
+.gr-card .fname { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.gr-card > header > * { flex-shrink: 0; }
+.gr-card > header > .fname, .gr-card > header > .fdir { flex-shrink: 1; }
+.gr-card .fdir { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.gr-card .fstat { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.gr-card .fstat .st { color: var(--muted); }
+.gr-card .gr-check { color: var(--muted); font-size: 12.5px; margin-left: 4px; }
+.gr-card .gen-note { padding: 8px 12px; color: var(--muted); font-size: 12.5px; border-bottom: 1px solid var(--border); }
+
+/* before / after */
+.gr-ba > header .ttl { font-weight: 500; }
+.gr-ba > header .lbl { color: var(--muted); }
+.gr-ba > header .sp { flex: 1; }
+.gr-ba .cap { padding: 10px 14px 4px; color: var(--muted); font-size: 12.5px; }
+.gr-ba .lines { padding: 6px 0 10px; overflow-x: auto; font: 12.5px/1.75 var(--font-code); }
+.gr-ba .ln {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: baseline; gap: 6px; padding-right: 10px;
+  min-width: max-content; width: 100%;
+}
+.gr-ba .ln.add { background: var(--add-bg); box-shadow: inset 3px 0 0 var(--add-bar); }
+.gr-ba .ln.del { background: var(--del-bg); box-shadow: inset 3px 0 0 var(--del-bar); }
+.gr-ba .mk { text-align: center; color: var(--faint); user-select: none; }
+.gr-ba .add .mk { color: var(--add-fg); }
+.gr-ba .del .mk { color: var(--del-fg); }
+.gr-ba .tx { white-space: pre; color: var(--text); }
+.gr-ba .note { color: var(--muted); font-family: var(--font-ui); font-size: 12px; margin-left: 10px; }
+.gr-ba .rf { display: flex; gap: 6px; justify-content: flex-end; font-size: 11px; color: var(--faint); white-space: nowrap; padding-left: 16px; }
+.gr-ba .rf a, .gr-ba .rf button { color: inherit; font: inherit; text-decoration: none; }
+.gr-ba .rf a:hover, .gr-ba .rf button:hover { color: var(--accent); text-decoration: underline; }
+.gr-ba .rf .ext::after, .gr-body a.ref[target]::after { content: " ↗"; }
+.gr-ba .rf .chn { border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; line-height: 16px; }
+.gr-ba .flow { padding: 10px 14px 14px; overflow-x: auto; }
+.gr-ba .flow pre.mermaid { margin: 0; background: none; font-family: var(--font-code); font-size: 12px; text-align: center; color: var(--muted); white-space: pre; }
+.gr-ba .flow pre.mermaid[data-processed] { color: var(--text); white-space: normal; }
+.gr-ba .flow svg { max-width: 100%; height: auto; }
+
+/* code: @pierre/diffs renders each card's code in its own shadow root. Its custom
+   properties inherit from here; the folds and moved-code chips are ours, slotted in. */
+.gr-code {
+  --diffs-font-family: var(--font-code); --diffs-header-font-family: var(--font-ui);
+  --diffs-font-size: 12.5px; --diffs-line-height: 20px; --diffs-tab-size: 4;
+  --diffs-font-features: "liga" 0, "calt" 0;
+  --diffs-bg-selection-override: var(--flash);
+  border-radius: 0 0 10px 10px; overflow: hidden;
+}
+.gr-sep { position: relative; height: 28px; }
+.gr-sep .in {
+  position: absolute; inset: 0 auto 0 0; width: var(--diffs-column-width, 100%); display: flex; align-items: center; gap: 10px;
+  padding-right: 10px; color: var(--muted); font: 12px var(--font-ui); background: var(--surface-2);
+  border-block: 1px solid var(--border); overflow: hidden;
+}
+.gr-sep.top .in { border-top: 0; }
+.gr-sep.end .in { border-bottom: 0; }
+.gr-sep .ar { width: var(--diffs-column-number-width, 48px); height: 100%; flex: none; display: grid; place-items: center; font-family: var(--font-code); color: var(--faint); }
+.gr-sep .ar button { width: 100%; height: 100%; color: var(--muted); }
+.gr-sep .ar button:hover { color: var(--accent); background: var(--accent-soft); }
+.gr-sep .lb { white-space: nowrap; }
+.gr-sep .lb button { color: var(--accent); }
+.gr-sep .lb button:hover { text-decoration: underline; }
+.gr-sep .sc { font: 11.5px var(--font-code); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gr-move { padding: 2px 10px; font: 11.5px var(--font-code); }
+.gr-move.del { background: var(--del-bg-soft); }
+.gr-move.add { background: var(--add-bg-soft); }
+.gr-move button { color: var(--muted); }
+.gr-move button:hover { color: var(--accent); }
+.gr-plain { margin: 0; padding: 10px 14px; overflow-x: auto; font: 12.5px/1.6 var(--font-code); color: var(--text); white-space: pre; }
+.gr-empty { padding: 12px 14px; color: var(--muted); font-size: 12.5px; }
+
+/* ---------- diff view ---------- */
+.gr-diff { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 28px; padding-block: 28px 40px; }
+.gr-tree { position: sticky; top: calc(var(--bar-h) + 16px + env(safe-area-inset-top, 0px)); align-self: start; min-width: 0; }
+.gr-tree h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0 0 8px; }
+.gr-tree .gr-filelist { margin: 0; }
+.gr-tree-host {
+  display: block; height: calc(100vh - var(--bar-h) - 84px); min-height: 240px;
+  --trees-bg-override: var(--bg); --trees-fg-override: var(--text-2); --trees-fg-muted-override: var(--muted);
+  --trees-font-family-override: var(--font-ui); --trees-font-size-override: 13px;
+  --trees-selected-bg-override: var(--surface-2); --trees-selected-fg-override: var(--text);
+  --trees-focus-ring-color-override: var(--accent); --trees-accent-override: var(--accent);
+  --trees-git-added-color-override: var(--add-fg); --trees-git-deleted-color-override: var(--del-fg);
+  --trees-git-modified-color-override: var(--accent); --trees-git-renamed-color-override: var(--muted);
+  --trees-status-added-override: var(--add-fg); --trees-status-deleted-override: var(--del-fg);
+  --trees-status-modified-override: var(--accent); --trees-status-renamed-override: var(--muted);
+}
+.gr-diff-cards { display: grid; gap: 16px; min-width: 0; align-content: start; }
+
+/* ---------- rail ---------- */
+.gr-rail {
+  position: fixed; left: max(14px, env(safe-area-inset-left, 0px)); top: 50%; transform: translateY(-50%); z-index: 4;
+  display: grid; gap: 7px; padding: 6px 4px;
+}
+.gr-rail button { display: block; height: 2px; width: 12px; border-radius: 2px; background: var(--border-strong); position: relative; }
+.gr-rail button.gap { margin-top: 8px; }
+.gr-rail button.on { width: 18px; background: var(--text); }
+.gr-rail button.done { background: var(--accent); }
+.gr-rail button::before { content: ""; position: absolute; inset: -4px -6px; }
+.gr-rail button span {
+  position: absolute; left: 28px; top: 50%; transform: translateY(-50%); white-space: nowrap; pointer-events: none;
+  background: var(--text); color: var(--bg); font-size: 12px; padding: 3px 8px; border-radius: 6px; opacity: 0; transition: opacity .12s;
+}
+.gr-rail button:hover span, .gr-rail button:focus-visible span { opacity: 1; }
+
+.gr-foot { padding-block: 24px 48px; color: var(--faint); font-size: 12px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.gr-foot kbd { font: 11px var(--font-code); border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--muted); }
+
+@media (max-width: 1500px) { .gr-rail { display: none; } }
+@media (max-width: 1100px) {
+  :root { --text-col: 280px; }
+  .gr-sec { gap: 28px; }
+  .gr-diff { grid-template-columns: minmax(0, 1fr); }
+  .gr-tree { position: static; }
+  .gr-tree-host { height: min(360px, 60vh); }
+}
+@media (max-width: 860px) {
+  .gr-sec { grid-template-columns: minmax(0, 1fr); gap: 18px; padding-block: 28px; }
+  .gr-text { position: static; max-height: none; overflow: visible; }
+  .gr-progress, .gr-btn .long, .gr-seg { display: none; }
+  .gr-card .fdir { display: none; }
+  .gr-card .gr-check .rv, .gr-card .fstat .st { display: none; }
+  .gr-head h1 { font-size: 21px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; scroll-behavior: auto !important; }
+}
+.gr-files { display: grid; gap: 16px; min-width: 0; }
+
+/* Code reads as typed, with no `===` or `=>` ligatures. Last, since the `font`
+   shorthands above reset it. */
+code, .mono, .gr-ba .lines, .gr-plain, .gr-sep .sc, .gr-move { font-variant-ligatures: none; }

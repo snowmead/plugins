@@ -1,0 +1,87 @@
+{
+ "note": "scripts/build.ts refreshes these to the newest release that is at least 14 days old (the artifact rule), within the same major unless --major. Stable releases only, unless the pinned version is itself a prerelease. modules lists each library's whole static import graph, so a page preloads it in one parallel round.",
+ "checked": "2026-10-20",
+ "libs": {
+  "diffs": {
+   "pkg": "@pierre/diffs",
+   "version": "1.5.2",
+   "url": "https://cdn.jsdelivr.net/npm/@pierre/diffs@{v}/+esm",
+   "modules": [
+    "https://cdn.jsdelivr.net/npm/@pierre/diffs@1.5.2/+esm",
+    "https://cdn.jsdelivr.net/npm/shiki@4.5.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@pierre/theming@1.0.1/+esm",
+    "https://cdn.jsdelivr.net/npm/@pierre/theming@1.0.1/themes/+esm",
+    "https://cdn.jsdelivr.net/npm/hast-util-to-html@9.0.5/+esm",
+    "https://cdn.jsdelivr.net/npm/@shikijs/transformers@4.5.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@pierre/theming@1.0.1/color/+esm",
+    "https://cdn.jsdelivr.net/npm/diff@9.0.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@shikijs/engine-oniguruma@4.5.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@shikijs/core@4.5.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@shikijs/engine-javascript@4.5.0/+esm",
+    "https://cdn.jsdelivr.net/npm/shiki@4.4.2/core/+esm",
+    "https://cdn.jsdelivr.net/npm/html-void-elements@3.0.0/+esm",
+    "https://cdn.jsdelivr.net/npm/property-information@7.0.0/+esm",
+    "https://cdn.jsdelivr.net/npm/zwitch@2.0.4/+esm",
+    "https://cdn.jsdelivr.net/npm/stringify-entities@4.0.4/+esm",
+    "https://cdn.jsdelivr.net/npm/ccount@2.0.1/+esm",
+    "https://cdn.jsdelivr.net/npm/comma-separated-tokens@2.0.3/+esm",
+    "https://cdn.jsdelivr.net/npm/space-separated-tokens@2.0.2/+esm",
+    "https://cdn.jsdelivr.net/npm/hast-util-whitespace@3.0.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@shikijs/types@4.5.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@shikijs/primitive@4.5.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@shikijs/vscode-textmate@10.0.2/+esm",
+    "https://cdn.jsdelivr.net/npm/oniguruma-to-es@4.3.6/+esm",
+    "https://cdn.jsdelivr.net/npm/@shikijs/core@4.4.2/+esm",
+    "https://cdn.jsdelivr.net/npm/character-entities-legacy@3.0.0/+esm",
+    "https://cdn.jsdelivr.net/npm/character-entities-html4@2.1.0/+esm",
+    "https://cdn.jsdelivr.net/npm/oniguruma-parser@0.12.2/parser/+esm",
+    "https://cdn.jsdelivr.net/npm/oniguruma-parser@0.12.2/traverser/+esm",
+    "https://cdn.jsdelivr.net/npm/regex@6.1.0/internals/+esm",
+    "https://cdn.jsdelivr.net/npm/regex-recursion@6.0.2/+esm",
+    "https://cdn.jsdelivr.net/npm/@shikijs/types@4.4.2/+esm",
+    "https://cdn.jsdelivr.net/npm/@shikijs/primitive@4.4.2/+esm",
+    "https://cdn.jsdelivr.net/npm/regex-utilities@2.3.0/+esm"
+   ]
+  },
+  "trees": {
+   "pkg": "@pierre/trees",
+   "version": "1.0.0-beta.6",
+   "url": "https://cdn.jsdelivr.net/npm/@pierre/trees@{v}/+esm",
+   "modules": [
+    "https://cdn.jsdelivr.net/npm/@pierre/trees@1.0.0-beta.6/+esm",
+    "https://cdn.jsdelivr.net/npm/@pierre/theming@1.0.0/color/+esm",
+    "https://cdn.jsdelivr.net/npm/preact@11.0.0-beta.0/jsx-runtime/+esm",
+    "https://cdn.jsdelivr.net/npm/preact@11.0.0-beta.0/+esm",
+    "https://cdn.jsdelivr.net/npm/preact@11.0.0-beta.0/hooks/+esm",
+    "https://cdn.jsdelivr.net/npm/preact-render-to-string@6.6.5/+esm",
+    "https://cdn.jsdelivr.net/npm/preact@10.28.1/+esm"
+   ]
+  },
+  "mermaid": {
+   "pkg": "mermaid",
+   "version": "12.1.0",
+   "url": "https://cdn.jsdelivr.net/npm/mermaid@{v}/dist/mermaid.esm.min.mjs",
+   "modules": [
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/mermaid.esm.min.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-SQW7XO2P.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-GDOATIN3.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-JRPEA5MG.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-MFYRHTYG.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-I2GRRCP3.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-MOTMN5Z2.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-2Z4JPSLF.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-JUO4FS6R.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-F6PIGZHG.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-7PWWD3R6.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-VZ26ENTH.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-BZANPUPN.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-MIE3LDYP.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-YF46JFGZ.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-ZZ52EIBP.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-VSAMGZVZ.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-L2B47AAZ.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-QVIEFLGF.mjs"
+   ]
+  }
+ }
+}
