@@ -16,9 +16,9 @@
     {
       "name": "guided-review",
       "source": "./skills/guided-review",
-      "description": "Guided code reviews as Claude Artifacts: an overview with a before / after of the behavior, then the diff as short chapters, each explained beside its code, with review marks, a file tree and syntax-highlighted diffs.",
+      "description": "Guided code reviews as Claude Artifacts: an overview with a before / after of the behavior, then the diff as short chapters, each explained beside its code, with review marks, a file tree and syntax-highlighted diffs. One page can hold a stack of pull requests, picked from a menu in the title.",
       "category": "development",
-      "tags": ["code-review", "pull-request", "diff", "artifacts", "walkthrough"]
+      "tags": ["code-review", "pull-request", "diff", "artifacts", "walkthrough", "stacked-prs"]
     },
     {
       "name": "changelog",

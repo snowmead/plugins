@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Diff, DiffFile, Guide } from '../runtime/types';
-import { buildDemo, git } from './demo';
+import { buildDemo, buildStack as buildStackDemo, git } from './demo';
 
 const ROOT = join(import.meta.dir, '..');
 let failed = 0;
@@ -144,7 +144,7 @@ check('code that looks like a link stays code', built.html.includes('<code>handl
 check('the title is escaped', built.html.includes('<h1>Scratch &lt;change&gt; &amp; &quot;more&quot;</h1>'));
 // The diff's own `</script>` line stays inside the data block.
 const data = built.html.match(/<script type="application\/json" id="gr-data">([^<]*)<\/script>/)?.[1];
-check('the data block ends at its own closing tag', !!data && JSON.parse(data).files.find((f: DiffFile) => f.path === 'tests/a_test.rs').new.includes('// </script><img src=x onerror=alert(1)>'));
+check('the data block ends at its own closing tag', !!data && JSON.parse(data).prs[0].files.find((f: DiffFile) => f.path === 'tests/a_test.rs').new.includes('// </script><img src=x onerror=alert(1)>'));
 check('fonts are inline and nothing blocks the first paint', built.html.includes('font/woff2;base64') && !/<link[^>]+rel="stylesheet"/.test(built.html));
 check('the libraries are preloaded at exact versions', /<link rel="modulepreload" href="https:\/\/cdn\.jsdelivr\.net\/npm\/@pierre\/diffs@\d+\.\d+\.\d+[^"]*"/.test(built.html));
 check('the published page loads no mermaid; the viewer draws flows', !built.html.includes('mermaid@'));
@@ -179,6 +179,27 @@ for (const [name, guide, message] of refusals) {
   const r = build(guide);
   check(`build refuses ${name}`, r.status === 1 && message.test(r.log), r.log);
 }
+
+// Several pull requests on one page: a stack.json lists each guide with its diff.
+function buildStack(guides: unknown[]) {
+  const prs = guides.map((g, i) => { writeFileSync(join(tmp, `g${i}.json`), JSON.stringify(g)); return { guide: `g${i}.json`, diff: 'diff.json' }; });
+  const stackPath = join(tmp, 'stack.json');
+  writeFileSync(stackPath, JSON.stringify({ prs }));
+  rmSync(join(tmp, 'stack.artifact.html'), { force: true });
+  const r = bun('build.ts', [`--stack=${stackPath}`]);
+  return { ...r, html: r.status === 0 ? readFileSync(join(tmp, 'stack.artifact.html'), 'utf8') : '' };
+}
+const second = { ...guideFor('Two.'), pr: { number: 2, title: 'The same change, again', url: 'https://github.com/example/scratch/pull/2' } };
+const pair = buildStack([guideFor('One.'), second]);
+check('a stack of two pull requests builds', pair.status === 0, pair.log);
+check('each pull request gets its own panel and ids', pair.html.includes('id="pr1-c-one"') && pair.html.includes('id="pr2-c-one"') && pair.html.includes('id="pr1-overview"'));
+check('the title becomes a menu of them', (pair.html.match(/class="gr-pick-item"/g) ?? []).length === 4 && pair.html.includes('2 pull requests'));
+check('a stack page is named by its pull requests', pair.html.startsWith('<title>Guided review #1–#2</title>'));
+check('the page data lists both', !!pair.html.match(/"prs":\[\{"id":"pr1"/) && pair.html.includes('"id":"pr2"'));
+const twice = buildStack([guideFor('One.'), guideFor('One.')]);
+check('build refuses a stack that lists a pull request twice', twice.status === 1 && /lists #1 2 times/.test(twice.log), twice.log);
+const tagged = buildStack([guideFor('One.'), { ...second, chapters: second.chapters.slice(1) }]);
+check('a stack\'s errors name their pull request', tagged.status === 1 && /error #2: src\/a\.rs hunk 1 .* is in no chapter/.test(tagged.log), tagged.log);
 rmSync(tmp, { recursive: true, force: true });
 console.log(failed ? `fail  scripts (${failed})` : 'ok    scripts (gather and build against a scratch repository)');
 
@@ -240,7 +261,7 @@ const RUN = `
   const card = (scope, path) => [...document.querySelectorAll(scope + ' .gr-file')].find((c) => c.dataset.path === path);
   const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (!fn() && Date.now() < end) await sleep(50); return !!fn(); };
   r.railButtons = document.querySelectorAll('.gr-rail button').length;
-  r.generatedFolded = card('#gr-guide', 'src/api/schema.gen.ts').classList.contains('collapsed');
+  r.generatedFolded = card('.gr-guide', 'src/api/schema.gen.ts').classList.contains('collapsed');
 
   // code renders as it comes near; the moved-code chip and the flow come with it
   $('#c-signing').scrollIntoView();
@@ -254,7 +275,7 @@ const RUN = `
   scrollTo(0, 0); await sleep(100);
   const box = $('input[data-review-chapter="retry-decision"]');
   ms.mark = t(() => box.click());
-  r.progress = $('#gr-progress').textContent;
+  r.progress = $('.gr-progress').textContent;
   r.chapterFolds = [...document.querySelectorAll('#c-retry-decision .gr-file')].every((c) => c.classList.contains('collapsed'));
   r.saved = !!JSON.parse(localStorage.getItem('gr:42')).c['retry-decision'];
 
@@ -265,24 +286,24 @@ const RUN = `
   await sleep(150);
   r.keyMoves = Math.abs($('#c-worker').getBoundingClientRect().top - 60) < 30;
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
-  r.keyMarks = $('#gr-progress').textContent;
+  r.keyMarks = $('.gr-progress').textContent;
 
   // a before / after ref to a line a chapter shows stays in the guide and selects the line
   const ref = (line) => [...document.querySelectorAll('#overview .rf a[data-ref]')].find((a) => a.dataset.ref === 'src/webhooks/deliver.ts' && a.dataset.line === String(line));
   ref(31).click();
-  r.jumpInGuide = await until(() => !$('#gr-guide').hidden && card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line="31"][data-selected-line]'));
+  r.jumpInGuide = await until(() => !$('.gr-guide').hidden && card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line="31"][data-selected-line]'));
 
   // a ref to a line folded away in every chapter opens the Diff tab's card of the whole file at that line
   ref(16).click();
-  r.jumpFoldToDiff = await until(() => !$('#gr-diff').hidden);
-  r.foldRow = await until(() => card('#gr-diff', 'src/webhooks/deliver.ts')?.querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line="16"][data-selected-line]'));
+  r.jumpFoldToDiff = await until(() => !$('.gr-diff').hidden);
+  r.foldRow = await until(() => card('.gr-diff', 'src/webhooks/deliver.ts')?.querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line="16"][data-selected-line]'));
 
   // the Diff tab: every file, and the tree with its review ticks
   $('.gr-tab[data-view="guide"]').click();
   ms.tab = t(() => $('.gr-tab[data-view="diff"]').click());
-  r.diffCards = document.querySelectorAll('#gr-diff .gr-file').length;
-  r.tree = await until(() => $('#gr-tree-host').shadowRoot || $('#gr-tree-host').children.length);
-  const treeText = () => ($('#gr-tree-host').shadowRoot ?? $('#gr-tree-host')).textContent;
+  r.diffCards = document.querySelectorAll('.gr-diff .gr-file').length;
+  r.tree = await until(() => $('.gr-tree-host').shadowRoot || $('.gr-tree-host').children.length);
+  const treeText = () => ($('.gr-tree-host').shadowRoot ?? $('.gr-tree-host')).textContent;
   r.treeTick = await until(() => treeText().includes('✓'));
 
   // the speaker button mutes, and remembers
@@ -303,34 +324,84 @@ const RUN = `
   $('[data-diff-style="unified"]').click();
   r.unified = await until(() => dcard()?.querySelector('[data-diff-type="single"]'));`;
 
-const out = join(mkdtempSync(join(tmpdir(), 'guided-review-page-')), 'demo');
-const demo = buildDemo(out, true);
-if (demo.code) { console.log(demo.log); process.exit(1); }
-const tab = await browser(join(dirname(out), 'profile'));
-try {
-  await tab.open('file://' + out + '.preview.html');
-  const raw = await tab.run(`(async () => {
-    const r = {}, ms = {}, $ = (s) => document.querySelector(s), sleep = (n) => new Promise((ok) => setTimeout(ok, n));
-    const t = (fn) => { const s = performance.now(); fn(); return +(performance.now() - s).toFixed(2); };
-    await sleep(300);
-    ms.boot = +performance.getEntriesByName('gr:boot')[0].duration.toFixed(2);
-    ${RUN}
-    return JSON.stringify({ r, ms });
-  })()`);
-  if (typeof raw !== 'string' || !raw.startsWith('{')) { console.log(`fail  page: ${raw}`); failed++; }
-  else {
+// The stack: #42 and #43, based on it, on one page. The picker, [ and ], marks kept per pull request, an anchor that
+// opens #43, and a jump inside it.
+const STACK_RUN = `
+  const vis = (q) => [...document.querySelectorAll(q)].filter((e) => !e.hidden && !e.closest('[hidden]'));
+  const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (!fn() && Date.now() < end) await sleep(50); return !!fn(); };
+  r.startsOn = vis('.gr-pr')[0]?.dataset.pr; r.count = vis('.gr-pick-n')[0]?.textContent;
+  r.stacked = !!vis('.gr-picklist.stacked, .gr-pick .stacked').length || !!document.querySelector('.gr-pr:not([hidden]) .gr-picklist.stacked');
+  vis('.gr-pick-btn')[0].click();
+  r.opens = vis('.gr-picklist').length === 1 && document.activeElement?.dataset.pick === 'pr42';
+  document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+  r.arrowMoves = document.activeElement?.dataset.pick;
+  ms.pick = t(() => document.activeElement.click());
+  r.picked = vis('.gr-pr')[0]?.dataset.pr; r.closed = vis('.gr-picklist').length === 0;
+  r.followers = [vis('.gr-crumbs .t')[0]?.textContent, vis('.gr-btn.primary')[0]?.textContent.trim(), vis('.gr-progress')[0]?.textContent].join(' | ');
+  r.rail = [...document.querySelectorAll('.gr-rail button')].map((b) => b.dataset.target).join(' ');
+  await until(() => vis('.gr-file diffs-container').length);
+  ms.back = t(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: '[', bubbles: true })));
+  r.bracketBack = vis('.gr-pr')[0]?.dataset.pr;
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: ']', bubbles: true }));
+  r.bracketNext = vis('.gr-pr')[0]?.dataset.pr;
+  vis('input[data-review-chapter="counts"]')[0].click();
+  r.ownMarks = [!!JSON.parse(localStorage.getItem('gr:43') ?? '{}').c?.counts, !!JSON.parse(localStorage.getItem('gr:42') ?? '{"c":{}}').c?.counts].join();
+  r.pickerProgress = document.querySelector('[data-progress-of="pr43"]').textContent;
+  const ref = [...document.querySelectorAll('#pr43-overview .rf a[data-ref]')].find((a) => a.dataset.line === '17');
+  ref.click();
+  r.jump = await until(() => vis('.gr-file').find((c) => c.dataset.path === 'src/api/endpoint.ts')?.querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line="17"][data-selected-line]'));`;
+const STACK_EXPECT: Record<string, unknown> = {
+  startsOn: 'pr42', count: '1 of 2', stacked: true, opens: true, arrowMoves: 'pr43', picked: 'pr43', closed: true,
+  followers: 'Show retrying deliveries on the endpoint page | Open #43 on GitHub↗ | 0 of 3 chapters reviewed',
+  rail: 'pr43-overview pr43-c-counts pr43-c-docs pr43-c-tests', bracketBack: 'pr42', bracketNext: 'pr43',
+  ownMarks: 'true,false', pickerProgress: '1/3', jump: true, anchor: 'pr43', anchorAt: true,
+};
+
+async function runPage(name: string, file: string, run: string, expect: Record<string, unknown>, budget: Record<string, number>, after?: (tab: Awaited<ReturnType<typeof browser>>, r: Record<string, unknown>) => Promise<void>) {
+  const tab = await browser(join(dirname(file), `profile-${name}`));
+  try {
+    await tab.open('file://' + file);
+    const raw = await tab.run(`(async () => {
+      const r = {}, ms = {}, $ = (s) => document.querySelector(s), sleep = (n) => new Promise((ok) => setTimeout(ok, n));
+      const t = (fn) => { const s = performance.now(); fn(); return +(performance.now() - s).toFixed(2); };
+      await sleep(300);
+      ms.boot = +performance.getEntriesByName('gr:boot')[0].duration.toFixed(2);
+      ${run}
+      return JSON.stringify({ r, ms });
+    })()`);
+    if (typeof raw !== 'string' || !raw.startsWith('{')) { console.log(`fail  ${name}: ${raw}`); failed++; return; }
     const { r: got, ms } = JSON.parse(raw) as { r: Record<string, unknown>; ms: Record<string, number> };
+    if (after) await after(tab, got);
     const bad = Object.entries(expect).filter(([k, v]) => got[k] !== v);
-    for (const [k, v] of bad) console.log(`fail  page.${k}: expected ${JSON.stringify(v)}, got ${JSON.stringify(got[k])}`);
+    for (const [k, v] of bad) console.log(`fail  ${name}.${k}: expected ${JSON.stringify(v)}, got ${JSON.stringify(got[k])}`);
     const slow = Object.entries(budget).filter(([k, max]) => !(ms[k] <= max));
-    for (const [k, max] of slow) console.log(`slow  page.${k}: ${ms[k]} ms, budget ${max} ms`);
-    for (const e of tab.errors) console.log(`error page: ${e.split('\n')[0]}`);
+    for (const [k, max] of slow) console.log(`slow  ${name}.${k}: ${ms[k]} ms, budget ${max} ms`);
+    for (const e of tab.errors) console.log(`error ${name}: ${e.split('\n')[0]}`);
     if (!bad.length && !slow.length && !tab.errors.length)
-      console.log(`ok    page (${Object.keys(expect).length} checks, no errors; ${Object.entries(ms).map(([k, v]) => `${k} ${v}ms`).join(', ')})`);
+      console.log(`ok    ${name} (${Object.keys(expect).length} checks, no errors; ${Object.entries(ms).map(([k, v]) => `${k} ${v}ms`).join(', ')})`);
     failed += bad.length + slow.length + tab.errors.length;
+  } finally {
+    tab.close();
   }
+}
+
+const dir = mkdtempSync(join(tmpdir(), 'guided-review-page-'));
+try {
+  const demo = buildDemo(join(dir, 'demo'), true);
+  const stack = buildStackDemo(join(dir, 'stack'), true);
+  if (demo.code || stack.code) { console.log(demo.log + stack.log); process.exit(1); }
+  await runPage('page', join(dir, 'demo.preview.html'), RUN, expect, budget);
+  await runPage('stack', join(dir, 'stack.preview.html'), STACK_RUN, STACK_EXPECT, { boot: BUDGET.boot, pick: BUDGET.interaction, back: BUDGET.interaction }, async (tab, r) => {
+    // A link with #pr43-c-docs opens on #43, at that chapter.
+    // Another document first: a navigation that changes only the anchor fires no load.
+    await tab.open('about:blank');
+    await tab.open('file://' + join(dir, 'stack.preview.html') + '#pr43-c-docs');
+    const at = JSON.parse(await tab.run(`(async () => { await new Promise((ok) => setTimeout(ok, 400));
+      const p = [...document.querySelectorAll('.gr-pr')].find((e) => !e.hidden);
+      return JSON.stringify({ anchor: p?.dataset.pr, anchorAt: Math.abs(document.getElementById('pr43-c-docs').getBoundingClientRect().top - 60) < 40 || scrollY + innerHeight >= document.documentElement.scrollHeight - 2 }); })()`));
+    Object.assign(r, at);
+  });
 } finally {
-  tab.close();
-  rmSync(dirname(out), { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true });
 }
 process.exit(failed ? 1 : 0);

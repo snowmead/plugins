@@ -4,6 +4,7 @@
 import type { DiffFile, DiffStyle, Hunk, Move, PageChapter, PierreAnnotation, PierreFileDiff, PierreFileDiffMeta, PierreHunkSeparator } from './types';
 import { $, $$, CHEVRON, D, esc, onTheme, split, stat, store, themeType } from './dom';
 import { libs } from './libs';
+import type { Ctx } from './ctx';
 
 /** Lines a click on a fold opens. */
 export const STEP = 20;
@@ -46,6 +47,7 @@ function patchOf(f: DiffFile, hunks: Hunk[]) {
 // ---------------------------------------------------------------- card state
 export interface CardState {
   el: Element;
+  ctx: Ctx;
   f: DiffFile;
   hunks: Hunk[];
   whole: boolean;
@@ -118,10 +120,10 @@ export function startDiffStyle() {
   narrow.addEventListener('change', restyle);
 }
 
-const chaptersOf = (f: DiffFile, hunks: Hunk[]) => D.chapters.filter((c) => c.files.some((x) => x.path === f.path && (!x.hunks || x.hunks.some((id) => hunks.some((h) => h.id === id)))));
+const chaptersOf = (ctx: Ctx, f: DiffFile, hunks: Hunk[]) => ctx.pr.chapters.filter((c) => c.files.some((x) => x.path === f.path && (!x.hunks || x.hunks.some((id) => hunks.some((h) => h.id === id)))));
 
 /** Keyed by the index of the shown hunk below the fold (the last fold: hunks.length). */
-function elsewhereOf(f: DiffFile, hunks: Hunk[]) {
+function elsewhereOf(ctx: Ctx, f: DiffFile, hunks: Hunk[]) {
   const out: PageChapter[][] = [];
   if (hunks.length === f.hunks.length) return out;
   const at = hunks.map((h) => f.hunks.indexOf(h));
@@ -129,7 +131,7 @@ function elsewhereOf(f: DiffFile, hunks: Hunk[]) {
     const lo = i === 0 ? -1 : at[i - 1];
     const hi = i === hunks.length ? f.hunks.length : at[i];
     const left = f.hunks.slice(lo + 1, hi);
-    if (left.length) out[i] = chaptersOf(f, left);
+    if (left.length) out[i] = chaptersOf(ctx, f, left);
   }
   return out;
 }
@@ -250,7 +252,7 @@ export const chipOf = (f: DiffFile) => {
 const WORD: Partial<Record<DiffFile['status'], string>> = { added: 'added', deleted: 'deleted', renamed: 'renamed', copied: 'copied' };
 
 /** A file's card: every hunk (the Diff tab), or some of them in a chapter. */
-export function card(f: DiffFile, hunkIds: number[] | null, chapter: string | null) {
+export function card(ctx: Ctx, f: DiffFile, hunkIds: number[] | null, chapter: string | null) {
   const hunks = hunkIds ? f.hunks.filter((h) => hunkIds.includes(h.id)) : f.hunks;
   let a = 0, d = 0;
   for (const h of hunks) for (const l of h.lines) { if (l[0] === '+') a++; else if (l[0] === '-') d++; }
@@ -277,7 +279,7 @@ export function card(f: DiffFile, hunkIds: number[] | null, chapter: string | nu
     + `<span class="fstat">${part}${word ? `<span class="st">${word}</span>` : ''}${stat(a, d)}</span>`
     + `<label class="gr-check"><input type="checkbox" data-review-file="${esc(f.path)}"${chapter ? ` data-review-ch="${esc(chapter)}"` : ''}><span class="rv">Reviewed</span></label></header>` + gen + body;
   if (hunks.length && !f.binary) {
-    cards.set(el, { el, f, hunks, whole, elsewhere: elsewhereOf(f, hunks) });
+    cards.set(el, { el, ctx, f, hunks, whole, elsewhere: elsewhereOf(ctx, f, hunks) });
     if (mounter) mounter.observe(el); else void mount(el);
   }
   if (f.kind === 'generated') setFold(el, true);

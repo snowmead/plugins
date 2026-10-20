@@ -24,6 +24,7 @@
   --del-fg: #c02626;
   --flash: #fff4c2;
   --shadow: 0 1px 2px rgba(24, 24, 27, .04);
+  --pop-shadow: 0 12px 32px rgba(24, 24, 27, .12), 0 2px 6px rgba(24, 24, 27, .06);
   --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-code: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --text-col: 340px;
@@ -35,7 +36,7 @@
     --text: #f2f2f4; --text-2: #c3c3cb; --muted: #9a9aa5; --faint: #6c6c77; --accent: #3fc9b4; --accent-soft: #11302c;
     --add-bg: #11261a; --add-bg-soft: #131d17; --add-bar: #2fb866; --add-fg: #4ade80;
     --del-bg: #2c1517; --del-bg-soft: #221618; --del-bar: #e5484d; --del-fg: #f87171; --flash: #3d3511;
-    --shadow: none;
+    --shadow: none; --pop-shadow: 0 12px 32px rgba(0, 0, 0, .55);
     color-scheme: dark;
   }
 }
@@ -44,7 +45,7 @@
   --text: #f2f2f4; --text-2: #c3c3cb; --muted: #9a9aa5; --faint: #6c6c77; --accent: #3fc9b4; --accent-soft: #11302c;
   --add-bg: #11261a; --add-bg-soft: #131d17; --add-bar: #2fb866; --add-fg: #4ade80;
   --del-bg: #2c1517; --del-bg-soft: #221618; --del-bar: #e5484d; --del-fg: #f87171; --flash: #3d3511;
-  --shadow: none;
+  --shadow: none; --pop-shadow: 0 12px 32px rgba(0, 0, 0, .55);
   color-scheme: dark;
 }
 
@@ -104,6 +105,54 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .gr-icon:hover { background: var(--surface-2); color: var(--text); }
 .gr-icon[aria-pressed="true"] .off, .gr-icon[aria-pressed="false"] .on { display: none; }
 
+/* ---------- several pull requests ---------- */
+/* Each pull request's crumbs, bar items and panel carry data-pr; only the chosen one's show. */
+[data-pr][hidden] { display: none !important; }
+.gr-barlinks { display: flex; gap: 8px; align-items: center; min-width: 0; }
+
+/* the title as a menu of the page's pull requests */
+.gr-pick { position: relative; }
+.gr-pick-btn {
+  display: inline-flex; align-items: baseline; gap: 10px; max-width: 100%; margin-left: -8px; padding: 2px 8px;
+  border-radius: 8px; font: inherit; letter-spacing: inherit; text-align: left; color: var(--text);
+}
+.gr-pick-btn:hover, .gr-pick-btn[aria-expanded="true"] { background: var(--surface-2); }
+.gr-pick-btn .t { min-width: 0; }
+.gr-pick-n {
+  flex: none; align-self: center; font: 500 12px/20px var(--font-ui); letter-spacing: 0; color: var(--muted);
+  border: 1px solid var(--border-strong); border-radius: 999px; padding: 0 8px; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.gr-pick-btn > svg { flex: none; align-self: center; width: 16px; height: 16px; color: var(--muted); transition: transform .15s; }
+.gr-pick-btn[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.gr-picklist {
+  position: absolute; top: calc(100% + 6px); left: -8px; z-index: 6; width: min(640px, calc(100vw - 32px)); max-height: min(70vh, 560px);
+  overflow-y: auto; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--pop-shadow);
+}
+.gr-pick-head { display: flex; justify-content: space-between; gap: 12px; padding: 6px 10px 8px; font-size: 12px; color: var(--muted); }
+.gr-pick-head kbd, .gr-pick-n kbd { font: 11px var(--font-code); border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
+.gr-pick-item {
+  position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; align-items: start;
+  width: 100%; padding: 9px 10px; border-radius: 8px; text-align: left;
+}
+.gr-pick-item:hover, .gr-pick-item:focus-visible { background: var(--surface-2); }
+.gr-pick-item[aria-selected="true"] { background: var(--accent-soft); }
+.gr-pick-item .i {
+  position: relative; z-index: 1; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%;
+  border: 1.5px solid var(--border-strong); background: var(--surface); font: 500 11px var(--font-code); color: var(--muted);
+}
+.gr-pick-item[aria-selected="true"] .i { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+/* a stack: one line joins each pull request to the one it is based on */
+.stacked .gr-pick-item:not(:last-child)::before {
+  content: ""; position: absolute; left: 20.25px; top: 31px; bottom: -9px; width: 1.5px; background: var(--border-strong);
+}
+.gr-pick-item .tx { min-width: 0; display: grid; gap: 2px; }
+.gr-pick-item b { font-weight: 500; font-size: 14px; line-height: 1.4; color: var(--text); }
+.gr-pick-item .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.gr-pick-item .sub { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; color: var(--muted); }
+.gr-pick-item .sub .mono { font-size: 11.5px; overflow-wrap: anywhere; }
+.gr-pick-item .pg { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 2px; white-space: nowrap; }
+.gr-pick-item .pg.all { color: var(--accent); font-weight: 500; }
+
 /* ---------- header ---------- */
 .gr-head { padding-block: 22px 8px; }
 .gr-head h1 { font-size: 24px; line-height: 1.3; font-weight: 600; letter-spacing: -.01em; margin: 0; text-wrap: balance; }
@@ -127,7 +176,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .gr-sec + .gr-sec { border-top: 1px solid var(--border); }
 .gr-sec.label-start { border-top: 1px dashed var(--border-strong); }
 /* Room under a short last chapter, so j, k and the rail can bring it up to the reading line. */
-#gr-guide > .gr-sec:last-child { min-height: 70vh; align-content: start; }
+.gr-guide > .gr-sec:last-child { min-height: 70vh; align-content: start; }
 /* Chapter text taller than the screen scrolls on its own, so its file list stays in reach. */
 .gr-text {
   position: sticky; top: calc(var(--bar-h) + 20px + env(safe-area-inset-top, 0px)); align-self: start; min-width: 0;

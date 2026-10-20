@@ -79,3 +79,20 @@ A state table lays out the cases a change decides between, one row per case, wit
 `summary`, `steps`, `body`, table cells and `note` take a small Markdown subset: `` `code` ``, `**bold**`, `*em*`,
 `[text](https://…)`, and `[text](ref:path:line)` for a link that jumps to a line of the diff (or to GitHub, for an
 unchanged file). Name functions, types and fields in backticks.
+
+## stack.json
+
+Several pull requests on one page: a stack, or any set to review together. `build.ts --stack=<path>` reads it.
+
+| Field | Required | What it holds |
+|---|---|---|
+| `name` | no | The page's name in the browser tab and the artifact gallery, 2 to 4 words, such as "Webhook retries stack". Defaults to "Guided review #140–#142". |
+| `diffStyle` | no | `"unified"` or `"split"` for every pull request on the page; without it, the first guide's. |
+| `prs` | yes | The pull requests in the order the menu lists them, a stack from its base up: `[{ "guide": "pr-140/guide.json", "diff": "pr-140/diff.json" }, …]`. Paths are relative to the stack file. Each pull request appears once. |
+
+Each guide is checked on its own, as above, and its errors start with its number. Its `name` and `diffStyle` give
+way to the stack's. Every element id on the page starts with the pull request's own (`pr140-`), so two guides may use
+the same chapter ids. A link's anchor picks the pull request: `#pr140`, `#pr140-c-<id>` or `#pr140-diff`. The menu
+draws the pull requests as a stack when each one's base (`pr.base`, or the branch `gather.ts` read) is the branch of
+the one before it.
+

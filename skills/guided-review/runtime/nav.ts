@@ -1,32 +1,60 @@
-/* Moving around: the Guide and Diff views, jumps from a ref to its line, the chapter rail, j and k. */
-import { $, $$, D, FILES, esc } from './dom';
+/* Moving around: the pull request on screen, its Guide and Diff views, jumps from a ref to its line, the chapter
+   rail, j and k. */
+import { $, $$, esc } from './dom';
 import { type CardState, card, cards, findRow, setFold } from './cards';
-import { showFile, tree } from './marks';
+import { type Ctx, active, ctxs, diffOf, guideOf, setActive } from './ctx';
+import { buildTree, progress, restoreChapters, showFile } from './marks';
 
 // ---------------------------------------------------------------- views
-export function renderGuide() {
-  for (const box of $$('.gr-files[data-chapter]')) {
-    const ch = D.chapters.find((c) => c.id === box.dataset.chapter)!;
-    for (const s of ch.files) box.append(card(FILES.get(s.path)!, s.hunks, ch.id));
+/** A pull request's guide cards, made the first time it is on screen. */
+function renderGuide(c: Ctx) {
+  if (c.guideDone) return;
+  c.guideDone = true;
+  for (const box of $$('.gr-files[data-chapter]', c.root)) {
+    const ch = c.pr.chapters.find((x) => x.id === box.dataset.chapter)!;
+    for (const s of ch.files) box.append(card(c, c.files.get(s.path)!, s.hunks, ch.id));
   }
+  for (const f of c.pr.files) showFile(c, f.path);
+  restoreChapters(c);
 }
-let diffDone = false;
-export function renderDiff() {
-  if (diffDone) return;
-  diffDone = true;
-  const cardsEl = $('#gr-diff-cards')!;
-  for (const f of [...D.files].sort((x, y) => x.path.localeCompare(y.path))) cardsEl.append(card(f, null, null));
-  for (const f of D.files) showFile(f.path);
-  void tree.build($('#gr-tree-host')!);
+export function renderDiff(c: Ctx) {
+  if (c.diffDone) return;
+  c.diffDone = true;
+  const cardsEl = $('.gr-diff-cards', c.root)!;
+  for (const f of [...c.pr.files].sort((x, y) => x.path.localeCompare(y.path))) cardsEl.append(card(c, f, null, null));
+  for (const f of c.pr.files) showFile(c, f.path);
+  void buildTree(c, $('.gr-tree-host', c.root)!);
 }
 export type View = 'guide' | 'diff';
-export const view = (): View => ($('#gr-diff')!.hidden ? 'guide' : 'diff');
+let shown: View = 'guide';
+export const view = (): View => shown;
+/** Guide or Diff, for the pull request on screen; the tab stays when the reader picks another. */
 export function show(v: View) {
+  shown = v;
+  const c = active();
   for (const t of $$('.gr-tab')) t.setAttribute('aria-selected', String(t.dataset.view === v));
-  $('#gr-guide')!.hidden = v !== 'guide';
-  $('#gr-diff')!.hidden = v !== 'diff';
+  guideOf(c).hidden = v !== 'guide';
+  diffOf(c).hidden = v !== 'diff';
   $('.gr-rail')?.toggleAttribute('hidden', v !== 'guide');
-  if (v === 'diff') renderDiff();
+  if (v === 'diff') renderDiff(c);
+}
+/** Put a pull request on screen: its crumbs, bar items and panel show, the others hide. */
+export function choose(c: Ctx) {
+  const was = active();
+  setActive(c);
+  for (const el of $$('[data-pr]')) el.hidden = el.dataset.pr !== c.pr.id;
+  renderGuide(c);
+  show(shown);
+  buildRail();
+  progress(c);
+  if (was !== c) scrollTo(0, 0);
+  onScroll();
+  return was !== c;
+}
+/** The pull request before (-1) or after (1) the one on screen. */
+export function step(delta: number) {
+  const i = ctxs.indexOf(active()) + delta;
+  return i >= 0 && i < ctxs.length ? choose(ctxs[i]) : false;
 }
 
 // ---------------------------------------------------------------- jumps
@@ -45,7 +73,7 @@ export function pin(el: Element, block: ScrollLogicalPosition = 'start') {
     for (const [n, x] of xs) n.scrollLeft = x;
   };
   const obs = new ResizeObserver(place);
-  for (const v of $$('.gr-view')) obs.observe(v);
+  for (const v of $$('.gr-view', active().root)) obs.observe(v);
   const stop = () => unpin();
   pinned = { obs, stop, timer: window.setTimeout(stop, 1500) };
   // After this event, which may be the key press that asked for the jump.
@@ -59,11 +87,12 @@ function unpin() {
   for (const ev of PIN_ENDS) removeEventListener(ev, pinned.stop);
   pinned = null;
 }
-export function toCard(path: string, scope: Element | null) {
-  const c = $$('.gr-file', scope ?? document).find((x) => x.dataset.path === path);
-  if (!c) return;
-  setFold(c, false);
-  pin(c);
+export function toCard(c: Ctx, path: string, scope: Element | null) {
+  const el = $$('.gr-file', scope ?? c.root).find((x) => x.dataset.path === path);
+  if (!el) return;
+  if (scope?.classList.contains('gr-diff')) show('diff');
+  setFold(el, false);
+  pin(el);
 }
 function flash(st: CardState, row: Element, line: number, side: 'o' | 'n') {
   pin(row, 'center');
@@ -71,27 +100,27 @@ function flash(st: CardState, row: Element, line: number, side: 'o' | 'n') {
   clearTimeout(st.flashTimer);
   st.flashTimer = window.setTimeout(() => st.inst?.setSelectedLines(null), 1800);
 }
-/** Jump to a line: the guide's card that holds it, else the Diff tab's card of the whole file. */
-export async function jump(path: string, line: number, side: 'o' | 'n', chapter: string | null, from: Element | null) {
-  const inDiff = !!from?.closest('#gr-diff');
-  const of = (scope: string) => $$('.gr-file', $(scope)!).filter((c) => c.dataset.path === path);
+/** Jump to a line of a pull request: the guide's card that holds it, else the Diff tab's card of the whole file. */
+export async function jump(c: Ctx, path: string, line: number, side: 'o' | 'n', chapter: string | null, from: Element | null) {
+  const inDiff = !!from?.closest('.gr-diff');
+  const of = (scope: Element) => $$('.gr-file', scope).filter((x) => x.dataset.path === path);
   // A card whose hunks hold the line first, then the guide's cards before the Diff tab's, then the chapter's own.
-  const holds = (c: Element) => (line && cards.get(c)?.hunks.some((h) => h.lines.some((l) => (side === 'o' ? l[1] : l[2]) === line)) ? 4 : 0);
-  const rank = (c: Element) => holds(c) + (c.closest('#gr-guide') ? 2 : 0) + (chapter && c.closest(`[data-chapter="${CSS.escape(chapter)}"]`) ? 1 : 0);
-  renderDiff();
-  const list = (inDiff ? of('#gr-diff') : [...of('#gr-guide'), ...of('#gr-diff')]).sort((x, y) => rank(y) - rank(x));
-  for (const c of list) {
-    show(c.closest('#gr-diff') ? 'diff' : 'guide');
-    setFold(c, false);
-    if (!line) { pin(c); return; }
-    const row = await findRow(c, line, side);
-    if (row) { flash(cards.get(c)!, row, line, side); return; }
+  const holds = (x: Element) => (line && cards.get(x)?.hunks.some((h) => h.lines.some((l) => (side === 'o' ? l[1] : l[2]) === line)) ? 4 : 0);
+  const rank = (x: Element) => holds(x) + (x.closest('.gr-guide') ? 2 : 0) + (chapter && x.closest(`[data-chapter="${CSS.escape(chapter)}"]`) ? 1 : 0);
+  renderDiff(c);
+  const list = (inDiff ? of(diffOf(c)) : [...of(guideOf(c)), ...of(diffOf(c))]).sort((x, y) => rank(y) - rank(x));
+  for (const x of list) {
+    show(x.closest('.gr-diff') ? 'diff' : 'guide');
+    setFold(x, false);
+    if (!line) { pin(x); return; }
+    const row = await findRow(x, line, side);
+    if (row) { flash(cards.get(x)!, row, line, side); return; }
   }
-  if (list[0]) { show(list[0].closest('#gr-diff') ? 'diff' : 'guide'); setFold(list[0], false); pin(list[0]); }
+  if (list[0]) { show(list[0].closest('.gr-diff') ? 'diff' : 'guide'); setFold(list[0], false); pin(list[0]); }
 }
 
 // ---------------------------------------------------------------- the rail, j and k
-const sections = () => $$('#gr-guide .gr-sec');
+const sections = () => $$('.gr-sec', guideOf(active()));
 /** The section at the reading line, 30% down the screen. */
 export function current() {
   const y = innerHeight * 0.3;
@@ -100,9 +129,11 @@ export function current() {
   for (const s of all) if (s.getBoundingClientRect().top <= y) cur = s;
   return cur;
 }
-export function buildRail() {
+/** The rail lists the sections of the pull request on screen. */
+function buildRail() {
   const rail = $('.gr-rail');
   if (!rail) return;
+  rail.replaceChildren();
   for (const s of sections()) {
     const b = document.createElement('button');
     b.type = 'button';

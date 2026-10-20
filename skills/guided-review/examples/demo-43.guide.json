@@ -1,0 +1,58 @@
+{
+  "pr": { "number": 43, "title": "Show retrying deliveries on the endpoint page", "url": "https://github.com/example/webhooks/pull/43", "author": "example-dev", "base": "retry-webhooks", "head": "endpoint-retrying" },
+  "overview": {
+    "summary": "#42 added a retrying state, but the endpoint page still counted deliveries as pending, delivered or failed, so a delivery waiting for its next post was invisible. This pull request counts each of the four states and shows when the soonest retry is due.",
+    "steps": [
+      "`deliveryCounts` counts the four states and finds the soonest retry.",
+      "The docs describe the endpoint page's counts."
+    ],
+    "beforeAfter": {
+      "label": "call tree",
+      "title": "The endpoint page asks for its delivery counts",
+      "lines": [
+        { "t": "deliveryCounts(db, endpointId)", "op": "+", "ref": "src/api/endpoint.ts:15" },
+        { "t": "count each state: pending, retrying, delivered, failed", "op": "+", "d": 1, "ref": "src/api/endpoint.ts:16" },
+        { "t": "db.deliveries.count(where)", "op": "+", "d": 2, "note": "new on Db", "ref": "src/db.ts:26" },
+        { "t": "the soonest retrying delivery, by nextAttemptAt", "op": "+", "d": 1, "ref": "src/api/endpoint.ts:17" },
+        { "t": "returns the counts and nextRetryAt", "op": "+", "d": 1, "ref": "src/api/endpoint.ts:18" }
+      ]
+    }
+  },
+  "chapters": [
+    {
+      "id": "counts",
+      "title": "Counts for every delivery state",
+      "body": [
+        "[`deliveryCounts`](ref:src/api/endpoint.ts:15) asks the store for one count per state, in parallel, and reads the single retrying delivery with the smallest `nextAttemptAt` to say when the next post is due.",
+        "`Db` gains `count`, which takes the same filter as `find`. With no retrying delivery, `nextRetryAt` is `null`."
+      ],
+      "table": {
+        "title": "What the page shows",
+        "caption": "per endpoint",
+        "ref": "src/api/endpoint.ts:18",
+        "columns": ["State", "Before", "Now"],
+        "rows": [
+          ["pending", "counted", "counted"],
+          { "cells": ["retrying", "counted as pending", "its own count, with the next post's time"], "new": true },
+          ["delivered", "counted", "counted"],
+          ["failed", "counted", "counted"]
+        ]
+      },
+      "files": ["src/api/endpoint.ts", "src/db.ts"]
+    },
+    {
+      "id": "docs",
+      "kind": "docs",
+      "title": "The endpoint page in the docs",
+      "body": "A new section says what the endpoint page counts, and that Retrying shows when the next post is due.",
+      "files": ["docs/webhooks.md"]
+    },
+    {
+      "id": "tests",
+      "kind": "tests",
+      "title": "Tests for the counts",
+      "body": "One test counts a mix of states and checks that the soonest retry wins; another checks that `nextRetryAt` is `null` with nothing retrying.",
+      "files": ["tests/endpoint.ts"]
+    }
+  ]
+}

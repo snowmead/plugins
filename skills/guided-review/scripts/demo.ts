@@ -1,12 +1,15 @@
 #!/usr/bin/env bun
-/* The demo: a small pull request ("Retry failed webhook deliveries with backoff") and its guide, built into
-   examples/demo.artifact.html and examples/demo.preview.html. test.ts and the screenshots use it too.
+/* The demo: a small pull request ("Retry failed webhook deliveries with backoff", #42) and its guide, built into
+   examples/demo.{artifact,preview}.html; and a stack of it with the pull request based on it ("Show retrying
+   deliveries on the endpoint page", #43), built into examples/stack.{artifact,preview}.html. test.ts and the
+   screenshots use them too.
 
      bun scripts/demo.ts
 
-   examples/demo/base/ is the repository on main; examples/demo/head/ holds the files the pull request adds or
-   changes. makeDemoRepo() commits the two on main and on a branch in a scratch repository. */
-import { cpSync, mkdtempSync, rmSync } from 'node:fs';
+   examples/demo/base/ is the repository on main; examples/demo/head/ holds the files #42 adds or changes, and
+   examples/demo/stack/ the files #43 changes on top of it. makeDemoRepo() commits each on its own branch, stacked, in
+   a scratch repository. */
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,7 +22,8 @@ export const git = (cwd: string, ...args: string[]) => {
   return p.stdout.toString();
 };
 
-/** A scratch repository: main holds the base, branch retry-webhooks the pull request. Returns its path. */
+/** A scratch repository: main holds the base, branch retry-webhooks #42, and branch endpoint-retrying #43 on top of
+    it. Returns its path. */
 export function makeDemoRepo(): string {
   const repo = mkdtempSync(join(tmpdir(), 'guided-review-demo-'));
   git(repo, 'init', '-q', '-b', 'main');
@@ -30,6 +34,11 @@ export function makeDemoRepo(): string {
   cpSync(join(DEMO, 'head'), repo, { recursive: true });
   git(repo, 'add', '-A');
   git(repo, 'commit', '-qm', 'Retry failed webhook deliveries with backoff');
+  git(repo, 'checkout', '-qb', 'endpoint-retrying');
+  cpSync(join(DEMO, 'stack'), repo, { recursive: true });
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-qm', 'Show retrying deliveries on the endpoint page');
+  git(repo, 'checkout', '-q', 'retry-webhooks');
   return repo;
 }
 
@@ -54,4 +63,32 @@ export function buildDemo(out = join(ROOT, 'examples', 'demo'), quiet = false): 
   }
 }
 
-if (import.meta.main) process.exit(buildDemo().code);
+/** Gather both stacked pull requests, each against its own base, and build them into one page with a stack.json. */
+export function buildStack(out = join(ROOT, 'examples', 'stack'), quiet = false): { code: number; log: string } {
+  const repo = makeDemoRepo();
+  try {
+    const prs = [
+      { n: 42, base: 'main', head: 'retry-webhooks', guide: join(ROOT, 'examples/demo.guide.json') },
+      { n: 43, base: 'retry-webhooks', head: 'endpoint-retrying', guide: join(ROOT, 'examples/demo-43.guide.json') },
+    ];
+    let log = '';
+    const run = (cmd: string[]) => {
+      const p = Bun.spawnSync(cmd, { cwd: repo, stdout: quiet ? 'pipe' : 'inherit', stderr: quiet ? 'pipe' : 'inherit' });
+      if (quiet) log += (p.stdout?.toString() ?? '') + (p.stderr?.toString() ?? '');
+      return p.exitCode;
+    };
+    for (const p of prs) {
+      const code = run(['bun', join(ROOT, 'scripts/gather.ts'), `--base=${p.base}`, `--head=${p.head}`, `--out=${join(repo, `diff-${p.n}.json`)}`, '--quiet']);
+      if (code) return { code, log };
+    }
+    const stack = { name: 'Webhook retries stack', prs: prs.map((p) => ({ guide: p.guide, diff: `diff-${p.n}.json` })) };
+    writeFileSync(join(repo, 'stack.json'), JSON.stringify(stack, null, 1));
+    git(repo, 'checkout', '-q', 'endpoint-retrying');
+    const code = run(['bun', join(ROOT, 'scripts/build.ts'), `--stack=${join(repo, 'stack.json')}`, `--out=${out}`, `--repo=${repo}`]);
+    return { code, log };
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+}
+
+if (import.meta.main) process.exit(buildDemo().code || buildStack().code);

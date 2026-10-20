@@ -82,16 +82,34 @@ export interface Guide {
   chapters: Chapter[];
 }
 
+// ---------------------------------------------------------------- stack.json
+/** Several pull requests on one page, in the order the picker lists them: a stack from its base up. Paths are
+    relative to this file. */
+export interface Stack {
+  /** The page's name in the browser tab and the artifact gallery, 2 to 4 words. */
+  name?: string;
+  diffStyle?: DiffStyle;
+  prs: { guide: string; diff: string }[];
+}
+
 // ---------------------------------------------------------------- the page's data (#gr-data)
 export interface PageChapter { id: string; title: string; files: { path: string; hunks: number[] | null }[] }
-export interface PageData {
+export interface PagePr {
+  /** The PR's panel id ("pr42"), and the prefix of every element id inside it: "pr42-", or "" on a page with one PR. */
+  id: string;
+  prefix: string;
   /** Where review marks are kept: by pull request, not head, so they carry over to a rebuilt guide. */
   key: string;
+  number: number | null;
+  title: string;
+  chapters: PageChapter[];
+  files: DiffFile[];
+}
+export interface PageData {
   libs: Record<'diffs' | 'trees', string>;
   diffStyle: DiffStyle;
   sounds: Record<string, { uri: string; db: number }>;
-  chapters: PageChapter[];
-  files: DiffFile[];
+  prs: PagePr[];
 }
 export type SoundName = 'select' | 'deselect' | 'nav' | 'toggle' | 'reveal';
 

@@ -1,10 +1,9 @@
 /* The page's data and small DOM helpers shared by the runtime. */
-import type { DiffFile, PageData, ThemeType } from './types';
+import type { PageData, ThemeType } from './types';
 
 /** When the runtime started, for the boot timing the tests read (performance measure "gr:boot"). */
 export const T0 = performance.now();
 export const D: PageData = JSON.parse(document.getElementById('gr-data')!.textContent!);
-export const FILES = new Map<string, DiffFile>(D.files.map((f) => [f.path, f]));
 
 export const $ = <T extends Element = HTMLElement>(s: string, el: ParentNode = document) => el.querySelector<T>(s);
 export const $$ = <T extends Element = HTMLElement>(s: string, el: ParentNode = document) => [...el.querySelectorAll<T>(s)];
