@@ -9,6 +9,7 @@ import { load, motionReady, warm } from './libs';
 import { createFigures, tokens } from './figure';
 import { createQuestions } from './questions';
 import { createDock } from './feedback';
+import { createChanges } from './changes';
 import { createToc, glideTo } from './toc';
 
 const page = document.querySelector<HTMLElement>('t-page');
@@ -71,13 +72,16 @@ function boot(page: HTMLElement) {
       a.append(h('span', { class: 't-host' }, new URL(a.href).hostname.replace(/^www\./, '')));
   }
 
-  // ---------------------------------------------------------------- figures, questions, plan dock
+  // ---------------------------------------------------------------- figures, questions, plan changes and dock
   warm();
   const figures = createFigures(page);
   const key = `thinkr:${page.getAttribute('key') ?? slug(title)}:${mode}`;
   const { questions, onChange } = createQuestions(page, mode, key);
   createToc(layout, page, questions, onChange);
-  if (mode === 'plan') createDock({ page, version, key, questions, onChange, jump: glideTo });
+  if (mode === 'plan') {
+    createChanges({ layout, page, bar, end, key, version, jump: glideTo });
+    createDock({ page, version, key, questions, onChange, jump: glideTo });
+  }
 
   const api: Thinkr = {
     figure: (sel, setup) => figures.register(sel, setup),

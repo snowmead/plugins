@@ -5,7 +5,9 @@ Artifact.
 
 - **Plan pages** lay out what Claude is about to build: a stepped diagram of how it works, then 2 to 5 single or
   multiple choice questions about the real forks. You answer them, press **Send feedback** or **Approve plan**, add
-  an optional message, and Claude picks up your answers in the session.
+  an optional message, and Claude picks up your answers in the session. Each new version lists what changed and why
+  under **Changes**; click an entry to jump to the change, with the added words underlined and the removed ones
+  struck through.
 - **Explainer pages** teach one idea: diagrams you step through, WebGPU figures you can move, quick self-checks, and
   links to the sources behind every claim.
 
@@ -65,7 +67,7 @@ references/                       authoring.md, figures.md, loop.md
 templates/                        plan.html, explain.html (working examples)
 runtime/                          TypeScript runtime, CSS, library pins
 kit/                              link to the shared kit: tokens, fonts, sounds, UI parts, build helpers
-scripts/                          build.ts, shot.ts (used by the skill); test.ts (maintenance)
+scripts/                          build.ts with changes.ts and tree.ts, shot.ts (used by the skill); test.ts (maintenance)
 package.json, bun.lock            build dependencies; the first build installs them
 ```
 

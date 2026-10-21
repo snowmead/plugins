@@ -16,6 +16,8 @@
 import { join } from 'node:path';
 import { bundle, preview, soundScript, styles } from '../kit/build/page';
 import { type LibMap, libs, preloads } from '../kit/build/libs';
+import { type Node, parse } from './tree';
+import { type History, KINDS, track } from './changes';
 
 const RT = join(import.meta.dir, '..', 'runtime');
 const HOSTS = ['https://cdnjs.cloudflare.com/', 'https://cdn.jsdelivr.net/npm/', 'https://unpkg.com/'];
@@ -83,36 +85,9 @@ async function highlight(html: string) {
   });
 }
 
-// ---------------------------------------------------------------- a small HTML tree (enough for the checks)
-type Node = { tag: string; attrs: Record<string, string>; parents: string[]; line: number; kids: Node[]; words: number };
-const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
-
-function parse(src: string): Node[] {
-  const nodes: Node[] = [], stack: Node[] = [];
-  const re = /<!--[\s\S]*?-->|<(script|style)\b[^>]*>[\s\S]*?<\/\1>|<(\/?)([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
-  let last = 0, m: RegExpExecArray | null;
-  const text = (s: string) => { const n = s.split(/\s+/).filter(Boolean).length; for (const x of stack) x.words += n; };
-  while ((m = re.exec(src))) {
-    text(src.slice(last, m.index));
-    last = re.lastIndex;
-    if (!m[3]) continue; // comment, script or style
-    const tag = m[3].toLowerCase();
-    if (m[2]) { const i = stack.findLastIndex((n) => n.tag === tag); if (i >= 0) stack.length = i; continue; }
-    const attrs: Record<string, string> = {};
-    for (const a of m[4].matchAll(/([^\s=/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) attrs[a[1].toLowerCase()] = a[2] ?? a[3] ?? a[4] ?? '';
-    const node: Node = { tag, attrs, parents: stack.map((n) => n.tag), line: src.slice(0, m.index).split('\n').length, kids: [], words: 0 };
-    stack.at(-1)?.kids.push(node);
-    nodes.push(node);
-    if (!VOID.has(tag) && !m[4].trimEnd().endsWith('/')) stack.push(node);
-  }
-  text(src.slice(last));
-  return nodes;
-}
-
 // ---------------------------------------------------------------- checks
-function check(src: string) {
+function check(src: string, nodes: Node[]) {
   const errors: string[] = [], warns: string[] = [];
-  const nodes = parse(src);
   const by = (tag: string) => nodes.filter((n) => n.tag === tag);
 
   const title = /<title>([\s\S]*?)<\/title>/.exec(src.slice(0, 8192));
@@ -123,7 +98,7 @@ function check(src: string) {
     if (new RegExp(t.replace('!', '<!') + '[\\s>]', 'i').test(src)) errors.push(`Remove ${t}: the artifact viewer adds the document shell.`);
 
   const pages = by('t-page');
-  if (pages.length !== 1) { errors.push(`Need exactly one <t-page>, found ${pages.length}.`); return { errors, warns, mode: null }; }
+  if (pages.length !== 1) { errors.push(`Need exactly one <t-page>, found ${pages.length}.`); return { errors, warns, mode: null, version: 0 }; }
   const mode = pages[0].attrs.mode;
   if (mode !== 'plan' && mode !== 'explain') errors.push('<t-page mode="plan|explain"> is required.');
   if (!/^\d+$/.test(pages[0].attrs.version ?? '')) errors.push('<t-page version="N"> is required. Start at 1; add 1 on each republish.');
@@ -181,6 +156,26 @@ function check(src: string) {
   for (const n of by('t-notes'))
     errors.push(`line ${n.line}: remove <t-notes>. The message box in the Send feedback / Approve plan panel replaces it.`);
 
+  // changes: one <t-amends> list of what each version changed and why
+  const version = +(pages[0].attrs.version ?? 1);
+  if (mode === 'explain' && by('t-amend').length) errors.push('Remove <t-amends>: the Changes list is for plans.');
+  for (const a of by('t-amend')) {
+    const v = a.attrs.version, kind = a.attrs.kind;
+    if (a.parents.at(-1) !== 't-amends') errors.push(`line ${a.line}: put <t-amend> inside the page's one <t-amends>.`);
+    if (!/^\d+$/.test(v ?? '') || +v < 2 || +v > version) errors.push(`line ${a.line}: <t-amend version="N"> names the version the change landed in, from 2 to ${version}.`);
+    if (!KINDS.includes(kind)) errors.push(`line ${a.line}: <t-amend kind="${kind ?? ''}"> must be ${KINDS.join(', ')}.`);
+    if (!a.words) errors.push(`line ${a.line}: <t-amend> needs a sentence: what changed, and why.`);
+    if (!a.attrs.label) errors.push(`line ${a.line}: give the <t-amend> a label="…": the change in 2 to 6 words, its one-line row in Changes.`);
+    else if (a.attrs.label.trim().split(/\s+/).length > 8) warns.push(`line ${a.line}: label="${a.attrs.label}" is long for a one-line row. Use 2 to 6 words.`);
+    if (kind === 'answer' && (!a.attrs.re || !a.attrs.answer))
+      errors.push(`line ${a.line}: an answer's <t-amend> needs re="…" (the question, word for word) and answer="…" (the reader's answer), so the reader sees what the answer was for.`);
+    else if (kind !== 'claude' && kind !== 'answer' && !a.attrs.re) warns.push(`line ${a.line}: give the <t-amend> a re="…": the comment or message it answers, short.`);
+    if (a.attrs.answer && kind !== 'answer') warns.push(`line ${a.line}: answer="…" is for kind="answer". Put what was said in re="…".`);
+  }
+  if (by('t-amends').length > 1) errors.push('Use one <t-amends> per page, right after the <header>.');
+  for (const [re, what] of [[/<t-removed\b/, '<t-removed>'], [/\sdata-(v|amend)="/, 'data-v and data-amend'], [/<del\s+data-t=/, '<del data-t>']] as const)
+    if (re.test(src)) errors.push(`Remove ${what} from the page: the build writes the change marks. Edit the page source, not a built file.`);
+
   // a long run of prose with nothing to look at
   const VISUAL = new Set(['t-figure', 't-question', 'pre', 'table', 't-callout']);
   for (const s of by('section')) {
@@ -204,7 +199,7 @@ function check(src: string) {
     [/<img[^>]+src="https?:/, 'Remote images are blocked. Use inline SVG or a data: URI.'],
   ];
   for (const [re, msg] of banned) if (re.test(src)) errors.push(msg);
-  return { errors, warns, mode };
+  return { errors, warns, mode, version };
 }
 
 // ---------------------------------------------------------------- pack
@@ -240,13 +235,27 @@ const file = argv.find((a) => !a.startsWith('--'));
 if (!file) process.exit(0);
 
 const src = await Bun.file(file).text();
-const { errors, warns, mode } = check(src);
+const stem = file.replace(/\.html?$/, '');
+const nodes = parse(src);
+const { errors, warns, mode, version } = check(src, nodes);
+
+// a plan's changes: against the snapshot of the version before, kept beside the page (scripts/changes.ts)
+const historyFile = Bun.file(`${stem}.history.json`);
+let changes: ReturnType<typeof track> | null = null;
+if (mode === 'plan' && !errors.length) {
+  const history = await historyFile.json().catch(() => null) as History | null;
+  changes = track(src, nodes, version, history?.versions ? history : null);
+  warns.push(...changes.warns);
+  errors.push(...changes.errors);
+}
 for (const w of warns) console.log('  warn  ' + w);
 for (const e of errors) console.log('  error ' + e);
 if (errors.length) { console.log(`${errors.length} error(s). Nothing written.`); process.exit(1); }
 
-const out = await pack(src, libmap);
-const stem = file.replace(/\.html?$/, '');
+const out = await pack(changes?.html ?? src, libmap);
 await Bun.write(`${stem}.artifact.html`, out);
 await Bun.write(`${stem}.preview.html`, preview(out));
-console.log(`ok    ${mode} page, ${warns.length} warning(s), ${Math.round(out.length / 1024)} KB\n      publish: ${stem}.artifact.html\n      preview: ${stem}.preview.html`);
+if (changes) await Bun.write(historyFile, JSON.stringify(changes.history));
+console.log(`ok    ${mode} page, ${warns.length} warning(s), ${Math.round(out.length / 1024)} KB`
+  + (changes ? `\n      changes: ${changes.summary}` : '')
+  + `\n      publish: ${stem}.artifact.html\n      preview: ${stem}.preview.html`);

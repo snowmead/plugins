@@ -35,6 +35,67 @@ t-page { display: block; min-width: 0; max-width: 720px; width: 100%; margin-inl
   .t-toc-thumb { transition: clip-path .2s cubic-bezier(.2, .8, .2, 1); }
 }
 
+/* ---------- changes (plans): versions that fold, each change one row that opens to say why, in the look of "On this
+   page". A column left of the page on wide screens, a panel from the bar's Changes button below. */
+t-amends { display: none; }
+.t-changes { font-size: 13px; }
+.t-changes-head { display: flex; align-items: center; justify-content: space-between; height: 20px; margin-bottom: 6px; }
+.t-changes-head p { margin: 0; font-weight: 500; }
+.t-changes ol { list-style: none; margin: 0; padding: 0; }
+.t-chg-vbtn { appearance: none; border: 0; background: none; width: 100%; display: flex; align-items: center; gap: 6px; padding: 5px 0; color: var(--muted-fg);
+  font: 12.5px/1.4 var(--font); text-align: left; cursor: pointer; transition: color .15s; }
+.t-chg-vbtn:hover, .t-chg-vbtn[aria-expanded="true"] { color: var(--fg); }
+.t-chg-chev { display: grid; color: var(--muted-fg); transition: transform .15s; }
+.t-chg-vbtn[aria-expanded="false"] .t-chg-chev { transform: rotate(-90deg); }
+.t-chg-vn { margin-left: auto; font: 11.5px var(--mono); color: var(--muted-fg); }
+.t-chg-items { margin: 2px 0 8px 5.5px; border-left: 1px solid var(--border); }
+.t-chg { margin-left: -1px; border-left: 1.5px solid transparent; transition: border-color .15s; }
+.t-chg.is-on { border-left-color: var(--fg); }
+.t-chg-row { appearance: none; border: 0; background: none; width: 100%; display: flex; align-items: center; gap: 8px; padding: 5px 0 5px 12px; color: var(--muted-fg);
+  font: 13px/1.4 var(--font); text-align: left; cursor: pointer; transition: color .15s; }
+.t-chg-row:hover, .t-chg.is-on .t-chg-row { color: var(--fg); }
+.t-chg-row:focus-visible, .t-chg-vbtn:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; border-radius: 4px; }
+.t-chg-label { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.t-chg.is-on .t-chg-label { white-space: normal; }
+.t-chg-dot { flex: none; width: 6px; height: 6px; border-radius: 99px; background: var(--fg); }
+.t-chg-detail { padding: 0 0 8px 12px; font-size: 12.5px; line-height: 1.5; color: var(--fg-2); }
+.t-chg:not(.is-on) .t-chg-detail { display: none; }
+.t-chg-qa { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; margin: 0 0 6px; }
+.t-chg-qa dt { font: 500 11px/18.75px var(--mono); color: var(--muted-fg); }
+.t-chg-qa dd { margin: 0; }
+.t-chg-a { color: var(--fg); font-weight: 500; }
+.t-chg-from { margin: 0 0 6px; color: var(--muted-fg); }
+.t-chg-from q { color: var(--fg-2); }
+.t-chg-body > :last-child { margin-bottom: 0; }
+.t-chg-body code { font: 0.86em var(--mono); background: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: 0 0.3em; }
+.t-chg-body a { color: inherit; text-decoration-color: var(--border); text-underline-offset: 3px; }
+.t-changes-btn .t-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--primary); color: var(--primary-fg); font: 500 11px/18px var(--font); text-align: center; font-variant-numeric: tabular-nums; }
+@media (min-width: 1320px) {
+  .t-layout.has-changes { grid-template-columns: 220px minmax(0, 720px) 220px; }
+  .t-layout.has-changes:not(:has(> .t-toc)) { grid-template-columns: 220px minmax(0, 720px); }
+  .t-layout.has-changes t-page { margin: 0; }
+  .t-changes { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 84px); align-self: start; max-height: calc(100vh - 120px); overflow-y: auto; scrollbar-width: none; }
+  .t-changes-btn, .t-changes-close { display: none; }
+}
+@media (max-width: 1319.98px) {
+  .t-changes { position: fixed; z-index: 30; top: calc(env(safe-area-inset-top, 0px) + var(--bar-h) + 8px); left: max(16px, env(safe-area-inset-left, 0px));
+    width: min(320px, calc(100vw - 32px)); max-height: calc(100dvh - var(--bar-h) - 104px); overflow-y: auto; padding: 10px 14px 6px;
+    border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); background: var(--card); box-shadow: var(--shadow);
+    visibility: hidden; opacity: 0; pointer-events: none; } /* closed, but laid out: opening only flips these */
+  .t-changes.is-open { visibility: visible; opacity: 1; pointer-events: auto; }
+  .t-changes-head { margin-right: -8px; }
+}
+
+/* the bar while a change is picked: which one, where you are among its places, and the way out */
+.t-chgnav { display: none; flex: 1; min-width: 0; align-items: center; gap: 8px; font-size: 13px; }
+.t-bar.is-stepping .t-chgnav { display: flex; }
+.t-bar.is-stepping .t-bar-title { display: none; }
+.t-chgnav .k-badge { flex: none; font-family: var(--mono); }
+.t-chgnav-label { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--fg-2); }
+.t-chgnav-pos { flex: none; font: 12px var(--mono); color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+.t-chgnav .k-btn { flex: none; }
+@media (max-width: 520px) { .t-chgnav .k-badge, .t-bar.is-stepping .t-changes-btn { display: none; } }
+
 /* ---------- type */
 t-page header { margin-bottom: 48px; }
 .t-eyebrow { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 12.5px; color: var(--muted-fg); }
@@ -52,7 +113,7 @@ t-page li { margin: 4px 0; }
 t-page li::marker { color: var(--muted-fg); }
 t-page a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; transition: text-decoration-color .15s; }
 t-page a:hover { text-decoration-color: var(--fg); }
-t-page a.t-ext::after { content: "↗"; display: inline-block; margin-left: 2px; font-size: 0.8em; color: var(--muted-fg); text-decoration: none; transition: transform .15s; }
+t-page a.t-ext::after, .t-chg-body a.t-ext::after { content: "↗"; display: inline-block; margin-left: 2px; font-size: 0.8em; color: var(--muted-fg); text-decoration: none; transition: transform .15s; }
 t-page a.t-ext:hover::after { transform: translate(1px, -1px); color: var(--fg); }
 t-refs { display: block; margin: 24px 0; }
 t-refs ul, t-refs ol { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
@@ -235,6 +296,21 @@ t-explain > :last-child { margin-bottom: 0; }
 .t-composer-foot { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .t-composer-hint { margin-right: auto; display: flex; gap: 3px; color: var(--muted-fg); }
 .t-composer-hint kbd { font-size: 11px; color: var(--muted-fg); }
+
+/* ---------- change marks (scripts/changes.ts writes them; they show only on the picked change's blocks). Added words
+   are underlined, removed words struck through, so color is never the only signal. */
+t-page ins { text-decoration: none; color: inherit; }
+t-page del[data-t] { display: none; text-decoration: none; }
+t-removed { display: block; margin: 0 0 16px; }
+t-page [data-amend], t-page [data-removed] { scroll-margin-top: 100px; }
+t-page .is-lit { border-radius: 4px; background: color-mix(in oklch, var(--ok) 8%, transparent); box-shadow: 0 0 0 6px color-mix(in oklch, var(--ok) 8%, transparent); }
+t-page .is-lit ins { border-radius: 2px; background: color-mix(in oklch, var(--ok) 20%, transparent); text-decoration: underline 1.5px var(--ok); text-underline-offset: 3px; }
+t-page .is-lit del[data-t] { display: inline; }
+t-page .is-lit del[data-t]::before { content: attr(data-t); border-radius: 2px; color: var(--bad); background: color-mix(in oklch, var(--bad) 10%, transparent); text-decoration: line-through 1.5px; }
+t-page [data-removed].is-lit { color: var(--bad); text-decoration: line-through; background: color-mix(in oklch, var(--bad) 7%, transparent); box-shadow: 0 0 0 6px color-mix(in oklch, var(--bad) 7%, transparent); }
+t-refs li[data-removed] { padding: 10px 14px; font-size: 14px; }
+t-page [data-removed]::before { content: "Removed"; display: inline-block; margin-right: 8px; padding: 0 7px; border: 1px solid; border-radius: 99px; font-size: 11px; line-height: 17px; vertical-align: 1px; }
+t-page t-figure.is-lit, t-page t-question.is-lit { background: var(--card); box-shadow: 0 0 0 2px color-mix(in oklch, var(--ok) 55%, transparent); }
 
 /* where a contents click landed: a ring that fades, on the heading or the question card */
 @keyframes t-flash { from { outline-color: color-mix(in oklch, var(--fg) 40%, transparent); } to { outline-color: transparent; } }

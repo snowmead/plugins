@@ -16,7 +16,7 @@ animate (motion), WebGPU shaders (vgpu), questions, a send panel, UI sounds (ear
 
 | Mode | The page's one job | The reader does |
 |---|---|---|
-| `plan` | Decide what to build before you build it | Steps through the flow, answers 2 to 5 questions, presses **Send feedback** or **Approve plan**, adds an optional message, submits |
+| `plan` | Decide what to build before you build it | Steps through the flow, answers 2 to 5 questions, presses **Send feedback** or **Approve plan**, adds an optional message, submits; on later versions, opens **Changes** to see what each answer changed |
 | `explain` | Make one idea understood | Moves the figures, steps through them, tries the self-checks, follows links to go deeper |
 
 ## Files
@@ -27,13 +27,14 @@ animate (motion), WebGPU shaders (vgpu), questions, a send panel, UI sounds (ear
 | `references/authoring.md` | Every element and attribute. Read it before your first page. |
 | `references/figures.md` | Figures: stepped SVG, motion, controls, the TypeScript figure API, vgpu recipes. Read it before you draw. |
 | `references/loop.md` | Publishing, reading feedback, replying, republishing. Read it before you publish. |
-| `scripts/build.ts` | Checks a page and packs it into one file to publish. |
+| `scripts/build.ts` | Checks a page and packs it into one file to publish. For a plan, it also marks what changed since the last version (`scripts/changes.ts`). |
 | `scripts/shot.ts` | Screenshots a packed page at desktop and phone width, light and dark. |
 | `runtime/` | The TypeScript runtime, CSS and pinned library versions. `build.ts` inlines them with the kit's. |
 | `kit/` | What thinkr shares with the other Artifact skills: tokens, fonts, sounds, the bar and buttons, build helpers. |
 
 The skill lives at `${CLAUDE_SKILL_DIR}`; run its scripts by that full path, exactly as written below. Tooling runs
-on Bun; page scripts are TypeScript. The other files in `scripts/` are for maintaining the skill, not for making pages.
+on Bun; page scripts are TypeScript. `changes.ts` and `tree.ts` are parts of `build.ts`; `test.ts` is for maintaining
+the skill, not for making pages.
 
 **Before the first build**, check `bun --version`. When Bun is missing, stop and ask the user to install it
 (`curl -fsSL https://bun.sh/install | bash`, or `brew install oven-sh/bun/bun`); do not install it yourself. The
@@ -59,7 +60,13 @@ first build installs the build's own packages once, from the pinned lockfile.
   right option and open a `<t-explain>`.
 - **Quiet design.** Use the semantic colors `c1` to `c5` for meaning only, the same meaning in text and figures. No
   decoration, no emoji, no gradients outside data. Short sentences, active voice, plain words.
-- **Stable ids.** Give ids to sections, figures and questions, and keep them across versions. Answers attach to ids.
+- **Stable ids.** Give ids to sections, figures and questions, and keep them across versions. Answers and change
+  entries attach to ids.
+- **Every change in a plan says why.** From version 2, each answer, comment or message you act on gets a `<t-amend>`
+  in the page's `<t-amends>`: a short label, where it came from, what it answers (for an answer, the question and the
+  reader's answer), where the page changed, one sentence on what and why. The build compares the page with the
+  version before and marks the changed words; the reader opens the entry to see them. Thread replies point at the
+  entry in one line instead of retelling it.
 - **Keep it honest.** Mark example numbers as examples. Say when a figure simplifies.
 - **Never make the reader wait.** The page paints at once (fonts inline, math and code rendered at build) and every
   library it uses is preloaded. Keep figure code just as quick: do work only when something changed (a still shader
@@ -90,6 +97,7 @@ first build installs the build's own packages once, from the pinned lockfile.
 6. **Tell the user** the link in one or two sentences. Plan: answer the questions, then Send feedback or Approve plan
    (with an optional message) and Submit; comment on anything with the comment button. Explainer: step through the
    figures, try the checks.
-7. **Iterate** on each comment or send (`references/loop.md`): change the page, add 1 to `version`, rebuild,
-   publish the same file path, reply in the thread. After an approval, ask the user for a go before you build: in the
-   chat, or in plan mode by calling ExitPlanMode.
+7. **Iterate** on each comment or send (`references/loop.md`): change the page, add 1 to `version`, add a
+   `<t-amend>` for each change, rebuild in the same folder (the build keeps `<name>.history.json` there to compare
+   versions), publish the same file path, reply in the thread in one line. After an approval, ask the user for a go
+   before you build: in the chat, or in plan mode by calling ExitPlanMode.

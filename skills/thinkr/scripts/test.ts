@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /* Runtime regression test: builds the two templates, drives them in headless Chrome, and checks what the
-   reader would see after each action. Run it after changing anything in runtime/.
+   reader would see after each action. Run it after changing anything in runtime/ or scripts/changes.ts.
 
      bun scripts/test.ts        # needs Chrome; set CHROME when it is not in a usual place */
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -11,13 +11,35 @@ import { browser, findChrome } from '../kit/build/chrome';
 const ROOT = join(import.meta.dir, '..');
 findChrome();
 
+// The plan is tested at version 2: built once as the template, then changed as below and built again, so the build
+// has a version to compare with and the page has Changes to pick.
+const PLAN_V2: [string | RegExp, string][] = [
+  ['version="1"', 'version="2"'],
+  ['  </header>\n', `  </header>
+  <t-amends>
+    <t-amend version="2" kind="answer" label="Requests pass when Redis is down" re="When Redis does not answer within 20 ms, what should the gateway do?" answer="Let the request through" at="flow">
+      The check now says what it costs when Redis is down.
+    </t-amend>
+    <t-amend version="2" kind="comment" label="Two weeks of shadow mode" re="Is one week of shadow mode enough?" at="rollout references">
+      Shadow mode runs two weeks, and the Retry-After reference went with the old timeline.
+    </t-amend>
+  </t-amends>
+`],
+  ['It costs one Redis round trip per request.', 'It costs one Redis round trip per request, and lets the request through when Redis is slow.'],
+  ['so we can set the numbers from real', 'so we can tune the numbers from two weeks of real'],
+  ['    <t-question id="exceptions"', '    <p>Two weeks covers a month-end billing run.</p>\n\n    <t-question id="exceptions"'],
+  [/ *<li><a href="https:\/\/developer\.mozilla\.org\/en-US\/docs\/Web\/HTTP\/Headers\/Retry-After">[\s\S]*?<\/li>\n/, ''],
+];
+
 // Each case runs in the page; `r` collects facts, `expect` lists what they must be, and `budget` caps timings
 // in ms: t(fn) times the synchronous work a click or input does before the browser can paint the result. An
 // interaction must fit well inside one 60 Hz frame (16.7 ms), so the next frame already shows its result.
 const BUDGET = { boot: 30, interaction: 12 };
-const cases: Record<string, { run: string; expect: Record<string, unknown>; budget: Record<string, number> }> = {
+// `prime` runs on a first load and the page is opened again, as a reader coming back would open it.
+const cases: Record<string, { prime?: string; run: string; expect: Record<string, unknown>; budget: Record<string, number> }> = {
   plan: {
-    budget: { boot: BUDGET.boot, select: BUDGET.interaction, step: BUDGET.interaction, panel: BUDGET.interaction, toc: BUDGET.interaction },
+    prime: `localStorage.setItem('thinkr:api-rate-limits:plan:seen', '1')`, // this reader last saw version 1
+    budget: { boot: BUDGET.boot, select: BUDGET.interaction, step: BUDGET.interaction, panel: BUDGET.interaction, toc: BUDGET.interaction, change: BUDGET.interaction },
     run: `
       ms.select = t(() => $('#algorithm--bucket').click());
       r.badge = $('#algorithm .t-qstate').textContent;
@@ -94,12 +116,46 @@ const cases: Record<string, { run: string; expect: Record<string, unknown>; budg
       $('.t-progress').click();
       await new Promise((ok) => setTimeout(ok, 1500));
       const top = $('#exceptions').getBoundingClientRect().top;
-      r.nextOpen = Math.abs(top - 84) < 4 || (top > 84 && top < innerHeight && scrollY + innerHeight >= document.documentElement.scrollHeight - 2);`,
+      r.nextOpen = Math.abs(top - 84) < 4 || (top > 84 && top < innerHeight && scrollY + innerHeight >= document.documentElement.scrollHeight - 2);
+
+      // Changes: one-line rows (new ones dotted), the marks the build wrote (hidden until a row opens), opening a
+      // row (its question and answer, its marks, the stepper), switching, closing, folding a version
+      const rows = [...document.querySelectorAll('.t-chg-row')];
+      r.chgEntries = rows.length;
+      r.chgNew = document.querySelectorAll('.t-chg-dot').length + ' ' + $('.t-changes-btn .t-count')?.textContent;
+      r.chgRail = getComputedStyle($('.t-changes')).position;
+      r.chgMarked = document.querySelectorAll('t-page [data-amend]').length;
+      r.chgQuiet = getComputedStyle($('del[data-t]')).display === 'none' && $('[data-removed]').hidden && !$('.is-lit')
+        && getComputedStyle($('.t-chg-detail')).display === 'none';
+      r.chgHeading = $('#flow').textContent;
+      ms.change = t(() => rows[1].click());
+      r.chgPos = $('.t-chgnav-pos').textContent;
+      r.chgLit = document.querySelectorAll('.is-lit').length;
+      r.chgShown = !$('[data-removed]').hidden && getComputedStyle($('.is-lit del[data-t]')).display === 'inline';
+      r.chgBar = $('.t-bar').classList.contains('is-stepping') && $('.t-chgnav-label').textContent;
+      $('[aria-label="Next change"]').click();
+      r.chgNext = $('.t-chgnav-pos').textContent;
+      rows[0].click();
+      r.chgSwitch = $('.t-chgnav-pos').textContent + ' ' + document.querySelectorAll('.t-chg.is-on').length;
+      r.chgQA = [...document.querySelectorAll('.t-chg.is-on .t-chg-qa dd')].map((d) => d.textContent).join(' | ');
+      rows[0].click();
+      r.chgReclick = !$('.t-chg.is-on') && !$('.is-lit');
+      rows[1].click();
+      dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      r.chgCleared = !$('.is-lit') && !$('.t-chg.is-on') && $('[data-removed]').hidden && !$('.t-bar').classList.contains('is-stepping');
+      $('.t-chg-vbtn').click();
+      r.chgFold = $('.t-chg-items').hidden;
+      $('.t-chg-vbtn').click();
+      r.chgUnfold = !$('.t-chg-items').hidden;
+      r.chgSeen = JSON.parse(localStorage.getItem('thinkr:api-rate-limits:plan:seen'));`,
     expect: {
       badge: 'Answered', count: '1/4', maxDisabled: true, otherShown: true, otherHidden: true, offAtStep1: true, onAtStep2: true, saved: 4, refHost: 'redis.io', fitsContent: true, zoomed: '150%', reset: '100%', taller: true,
       panel: 'Approve plan', panelWarn: '1 question is still open.', draft: 'Ship it after the load test.', escCloses: true,
       sendPanel: 'Send feedback', sendNoWarn: true, draftKept: 'Ship it after the load test.', outsideCloses: true,
       tocEntries: 7, tocSub: 4, tocDone: 3, railNotches: true, tocMidGlide: true, tocLands: true, tocHash: '#references', pinOn: 'Rollout', pinHeld: 'Rollout', flashed: true, wheelReleases: true, nextOpen: true,
+      chgEntries: 2, chgNew: '2 2', chgRail: 'sticky', chgMarked: 4, chgQuiet: true, chgHeading: 'How a request is checked', chgPos: '1 / 3', chgLit: 3, chgShown: true,
+      chgBar: 'Two weeks of shadow mode', chgNext: '2 / 3', chgSwitch: '1 / 1 1', chgQA: 'When Redis does not answer within 20 ms, what should the gateway do? | Let the request through',
+      chgReclick: true, chgCleared: true, chgFold: true, chgUnfold: true, chgSeen: 2,
     },
   },
   explain: {
@@ -128,12 +184,30 @@ const cases: Record<string, { run: string; expect: Record<string, unknown>; budg
 const tmp = mkdtempSync(join(tmpdir(), 'thinkr-test-'));
 let failed = 0;
 try {
+  const build = (file: string) => {
+    const b = Bun.spawnSync(['bun', join(ROOT, 'scripts/build.ts'), file]);
+    if (b.exitCode || / warn /.test(b.stdout.toString())) { console.log(b.stdout.toString()); process.exit(1); }
+  };
   for (const [name, c] of Object.entries(cases)) {
-    const b = Bun.spawnSync(['bun', join(ROOT, 'scripts/build.ts'), join(ROOT, `templates/${name}.html`)]);
-    if (b.exitCode) { console.log(b.stdout.toString()); process.exit(1); }
+    // built in the temp folder, so the history file the build keeps for a plan never lands in templates/
+    const file = join(tmp, `${name}.html`);
+    await Bun.write(file, Bun.file(join(ROOT, `templates/${name}.html`)));
+    build(file);
+    if (name === 'plan') {
+      let src = await Bun.file(file).text();
+      for (const [from, to] of PLAN_V2) {
+        const hit = typeof from === 'string' ? from : from.exec(src)?.[0];
+        if (!hit || !src.includes(hit)) { console.log(`fail  plan: the template no longer has ${from}; update PLAN_V2`); process.exit(1); }
+        src = src.replace(hit, to);
+      }
+      await Bun.write(file, src);
+      build(file);
+    }
     const chromeTab = await browser(join(tmp, 'profile-' + name));
     try {
-      await chromeTab.open('file://' + join(ROOT, `templates/${name}.preview.html`));
+      const url = 'file://' + join(tmp, `${name}.preview.html`);
+      await chromeTab.open(url);
+      if (c.prime) { await chromeTab.run(c.prime); await chromeTab.open(url); }
       const raw = await chromeTab.run(`(async () => {
         const r = {}, ms = {}, $ = (s) => document.querySelector(s);
         const t = (fn) => { const s = performance.now(); fn(); return +(performance.now() - s).toFixed(2); };

@@ -74,6 +74,51 @@ themes are handled; never write a literal color.
 - In a plan, each choice question has **Add a note** for the reader's reason.
 - `<t-explain>` inside a self-check holds the explanation shown after **Check**.
 
+## Changes (plans, from version 2)
+
+Each republish of a plan says what changed and why, so the reader sees what their answers and comments did without
+rereading the page. Put one `<t-amends>` right after the `<header>`, add the new version's entries at the top, and
+keep the older ones: the list is the plan's history.
+
+```html
+<t-amends>
+  <t-amend version="3" kind="answer" label="Limits per org too" at="flow scopes"
+           re="What should each limit be counted against?" answer="API key; Organization">
+    The gateway now looks up each key's org, and the decided question is gone.
+  </t-amend>
+  <t-amend version="2" kind="comment" label="Two weeks of shadow mode" re="Is one week of shadow mode enough?" at="rollout">
+    Shadow mode runs two weeks, to cover a month-end billing run.
+  </t-amend>
+</t-amends>
+```
+
+| Attribute | Use |
+|---|---|
+| `version="N"` | Required. The version the change landed in, from 2 to the page's `version`. |
+| `kind` | Required. What led to it: `answer` (an answer to a question on the page), `comment` (a comment on the page), `message` (the message sent with Send feedback or Approve plan), `chat` (something said in the chat), `claude` (your own fix). |
+| `label="…"` | Required. The change in 2 to 6 words: its one-line row in Changes. |
+| `re="…"` | What it answers. For `answer`, required: the question word for word, shown beside **Q** (numbers shift once a decided question is removed, so never the number alone). For a comment, message or chat, what was said, short, shown as a quote. Leave it out only for `claude`. |
+| `answer="…"` | Required for `answer`: the reader's answer as they gave it (the option labels, their Other text or their written answer), shown beside **A**. |
+| `at="id id"` | Where it changed: the ids of the changed elements, of a parent, or of a section's `h2`. The old id of something you removed (a decided question) works too. Optional when the version has one entry. |
+
+Write a `"` inside an attribute as `&quot;`. The text is one or two sentences: what changed, and why. Do not repeat
+the answer; it is shown above the text. Inline `code` and links are fine. An answer that changed nothing on the page
+still gets an entry, with no `at=`, so the reader finds it in the list.
+
+You write the why; the build finds the where. It keeps each version's blocks in `<name>.history.json` next to the
+page and compares the page with the version before:
+
+- In a paragraph, list item, heading or table row that changed, added words are marked and removed words kept, to
+  show struck through. A changed figure, question or code block is marked as a whole.
+- A removed block leaves a hidden stub where it was ("Removed", then its text, or a question's or figure's name).
+- Each change is tied to the entries of its version whose `at=` covers it. The build warns about a change no entry
+  covers, and about an entry whose `at=` covers nothing that changed.
+- A block keeps its marks until it changes again, so an older entry still shows its words while they stand.
+
+Never write the marks yourself (`<ins>`, `<del data-t>`, `data-v`, `data-amend`, `<t-removed>`): the build owns them
+and refuses a page that has them. Without the history file (a new session, a copied page) the page still builds; its
+entries then point to their `at=` elements, without word marks, until the next version.
+
 ## What the reader gets (you do not write these)
 
 - A sticky bar with the page name once they scroll, and a sound toggle. Sounds play after their first click.
@@ -83,4 +128,11 @@ themes are handled; never write a literal color.
   and **Approve plan**. Either button opens a panel above the dock with an optional message ("Anything else Claude
   should know?") and **Submit** (⌘↵). Approving with open questions says how many are open, with a link to the first.
   There is no notes element: the message box is where anything else goes.
+- In a plan with `<t-amends>`, **Changes**: versions that fold, newest first, each change a one-line row with its
+  label; left of the page on wide screens, behind a Changes button in the bar on narrower ones. The current version
+  and any with news start open. Opening a row shows where it came from (Q and A for an answer, the quote for a
+  comment) and why, lights its changes (added words underlined, removed words struck through, removed blocks shown)
+  and glides to the first; the bar then shows where they are (2 / 3) with previous, next and close (Esc). One row is
+  open at a time; clicking it again closes it. Rows newer than the reader's last visit get a dot, and their count
+  shows on the Changes button.
 - Claude's own comment button (from the artifact viewer) works on any paragraph, figure, question or code line.

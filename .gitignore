@@ -3,3 +3,4 @@ node_modules/
 *.preview.html
 .chrome-profile/
 .DS_Store
+*.history.json
