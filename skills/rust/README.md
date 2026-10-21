@@ -8,10 +8,10 @@ standard-library choices and nightly features.
 Install in Claude Code:
 
 ```
-/plugin install e-rust --marketplace snowmead/plugins
+/plugin install snowmead --marketplace snowmead/plugins
 ```
 
-Or for any agent: `npx skills add snowmead/plugins --skill rust`. More in the repository:
-https://github.com/snowmead/plugins
+That installs the plugin snowmead, with this skill as `/snowmead:rust`. Or for any agent:
+`npx skills add snowmead/plugins --skill rust`. More in the repository: https://github.com/snowmead/plugins
 
 Licensed under Apache-2.0 (`LICENSE.txt`).

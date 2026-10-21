@@ -34,7 +34,7 @@ how a person narrows a run. If something fails, stop, post nothing, and report w
 setup: when the repository has no config and a person asked in the chat, set it up with them first (below). An
 unattended run with no config stops and reports that setup is needed.
 
-To schedule it, make a routine or cron job whose prompt runs this skill, such as `/changelog:changelog 1` each weekday
+To schedule it, make a routine or cron job whose prompt runs this skill, such as `/snowmead:changelog 1` each weekday
 morning. The session it runs in needs `gh`, the repository's checkout, and a Slack connector for the post.
 
 ## Files

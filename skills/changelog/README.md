@@ -15,10 +15,10 @@ It runs the same when you ask and when a routine or cron fires it: no questions 
 narrow a run.
 
 ```
-/changelog:changelog            # since the last entry
-/changelog:changelog 7          # the last 7 days
-/changelog:changelog 3 no-slack # save it, but post nothing
-/changelog:changelog dry-run    # write it and show me; save and post nothing
+/snowmead:changelog            # since the last entry
+/snowmead:changelog 7          # the last 7 days
+/snowmead:changelog 3 no-slack # save it, but post nothing
+/snowmead:changelog dry-run    # write it and show me; save and post nothing
 ```
 
 The page is a quiet feed of entries on a date rail, in Geist, with six soft UI sounds (earshot) that wait for your
@@ -29,10 +29,11 @@ first click. It carries its fonts and sounds inline and reads its entries live.
 In Claude Code (2.1.275 or later):
 
 ```
-/plugin install changelog --marketplace snowmead/plugins
+/plugin install snowmead --marketplace snowmead/plugins
 ```
 
-On older versions: `/plugin marketplace add snowmead/plugins`, then `/plugin install changelog@plugins`. For other
+This installs the plugin snowmead, which holds all four of these skills; run this one as `/snowmead:changelog`. On
+older versions: `/plugin marketplace add snowmead/plugins`, then `/plugin install snowmead@plugins`. For other
 agents, or as a plain skill: `npx skills add snowmead/plugins --skill changelog`.
 
 ### Requirements
@@ -60,7 +61,6 @@ Run these in this folder, after `bun install`:
 | `bun run example` | Builds the example entry into `examples/changelog.preview.html` |
 
 ```
-.claude-plugin/plugin.json        name, version, metadata
 SKILL.md                          what Claude reads first
 references/                       writing.md, format.md
 examples/                         entry.ts, stats.json, changelog.json (a made-up "Relay" day)

@@ -4,35 +4,14 @@
     "name": "Michael Assaf",
     "url": "https://github.com/snowmead"
   },
-  "description": "Michael Assaf's Claude plugins: thinkr (plan and explainer pages as Artifacts), guided-review (guided code reviews as Artifacts), changelog (a team changelog as an Artifact, posted to Slack) and e-rust (Effective Rust).",
+  "description": "Michael Assaf's Claude plugins: snowmead, with the skills thinkr (plan and explainer pages as Artifacts), guided-review (guided code reviews as Artifacts), changelog (a team changelog as an Artifact, posted to Slack) and rust (Effective Rust).",
   "plugins": [
     {
-      "name": "thinkr",
-      "source": "./skills/thinkr",
-      "description": "Plan and explainer pages as Claude Artifacts: questions whose answers go back to Claude, stepped diagrams, WebGPU figures, motion and quiet UI sound, in the default shadcn/ui look.",
+      "name": "snowmead",
+      "source": "./",
+      "description": "Michael Assaf's skills for Claude: thinkr (plan and explainer pages as Artifacts), guided-review (guided code reviews as Artifacts), changelog (a team changelog as an Artifact, posted to Slack) and rust (Effective Rust).",
       "category": "productivity",
-      "tags": ["artifacts", "plan", "explainer", "design-doc", "teaching"]
-    },
-    {
-      "name": "guided-review",
-      "source": "./skills/guided-review",
-      "description": "Guided code reviews as Claude Artifacts: an overview with a before / after of the behavior, then the diff as short chapters, each explained beside its code, with review marks, a file tree and syntax-highlighted diffs. One page can hold a stack of pull requests, picked from a menu in the title.",
-      "category": "development",
-      "tags": ["code-review", "pull-request", "diff", "artifacts", "walkthrough", "stacked-prs"]
-    },
-    {
-      "name": "changelog",
-      "source": "./skills/changelog",
-      "description": "A team changelog as a Claude Artifact: the pull requests merged since the last entry (or the last N days), written up as features with animated scenes and PR links, saved to the page's database and posted to Slack. Runs the same by hand or on a schedule.",
-      "category": "productivity",
-      "tags": ["changelog", "release-notes", "pull-requests", "slack", "artifacts"]
-    },
-    {
-      "name": "e-rust",
-      "source": "./skills/rust",
-      "description": "Effective Rust: defaults for reading and writing Rust: toolchain, imports and modules, types and invariants, conversions, ownership, documentation and unsafe code, tests, plus standard-library and nightly guidance.",
-      "category": "development",
-      "tags": ["rust", "coding-standards", "conventions"]
+      "tags": ["artifacts", "plan", "explainer", "code-review", "pull-request", "changelog", "slack", "rust"]
     }
   ]
 }

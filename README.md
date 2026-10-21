@@ -1,41 +1,39 @@
 # plugins
 
-Michael Assaf's plugins and skills for Claude, in one marketplace.
+Michael Assaf's skills for Claude, in one plugin, `snowmead`, from the marketplace `plugins`. Every skill runs
+under the same prefix: `/snowmead:<skill>`.
 
-| Plugin | Skill | What it does |
+| Skill | Run it | What it does |
 |---|---|---|
-| [thinkr](skills/thinkr) | `thinkr` | Turns a plan or an explanation into a clean, interactive page, published as a Claude Artifact. Plan pages ask you about the real forks and send your answers back to Claude; explainer pages teach with diagrams you step through, WebGPU figures and self-checks. Needs [Bun](https://bun.sh). |
-| [guided-review](skills/guided-review) | `guided-review` | Turns a pull request or branch, or a stack of them, into a guided code review, published as a Claude Artifact: an overview with a before / after of the behavior, then the diff as short chapters, each explained beside its code, with review marks, a file tree and syntax-highlighted diffs. A stack's pull requests are picked from a menu in the title. Needs [Bun](https://bun.sh). |
-| [changelog](skills/changelog) | `changelog` | Keeps a team changelog as a Claude Artifact: each run writes up the pull requests merged since the last entry (or in the last N days) as features with animated scenes and PR links, and posts a summary to Slack. Runs the same by hand or on a schedule. Needs [Bun](https://bun.sh) and the GitHub CLI. |
-| [e-rust](skills/rust) | `rust` | Effective Rust: defaults for reading and writing Rust, from the toolchain and module layout to types, conversions, ownership, unsafe code and tests, with standard-library and nightly references. |
+| [thinkr](skills/thinkr) | `/snowmead:thinkr` | Turns a plan or an explanation into a clean, interactive page, published as a Claude Artifact. Plan pages ask you about the real forks and send your answers back to Claude; explainer pages teach with diagrams you step through, WebGPU figures and self-checks. Needs [Bun](https://bun.sh). |
+| [guided-review](skills/guided-review) | `/snowmead:guided-review` | Turns a pull request or branch, or a stack of them, into a guided code review, published as a Claude Artifact: an overview with a before / after of the behavior, then the diff as short chapters, each explained beside its code, with review marks, a file tree and syntax-highlighted diffs. A stack's pull requests are picked from a menu in the title. Needs [Bun](https://bun.sh). |
+| [changelog](skills/changelog) | `/snowmead:changelog` | Keeps a team changelog as a Claude Artifact: each run writes up the pull requests merged since the last entry (or in the last N days) as features with animated scenes and PR links, and posts a summary to Slack. Runs the same by hand or on a schedule. Needs [Bun](https://bun.sh) and the GitHub CLI. |
+| [rust](skills/rust) | `/snowmead:rust` | Effective Rust: defaults for reading and writing Rust, from the toolchain and module layout to types, conversions, ownership, unsafe code and tests, with standard-library and nightly references. |
 
 ## Install
 
 ### Claude Code
 
-Add the marketplace once, then install what you want:
+Add the marketplace once, then install the plugin:
 
 ```
 /plugin marketplace add snowmead/plugins
-/plugin install thinkr@plugins
-/plugin install guided-review@plugins
-/plugin install changelog@plugins
-/plugin install e-rust@plugins
+/plugin install snowmead@plugins
 ```
 
 Or add and install in one step (Claude Code 2.1.275 or later):
 
 ```
-/plugin install thinkr --marketplace snowmead/plugins
-/plugin install guided-review --marketplace snowmead/plugins
-/plugin install changelog --marketplace snowmead/plugins
-/plugin install e-rust --marketplace snowmead/plugins
+/plugin install snowmead --marketplace snowmead/plugins
 ```
 
-From your shell: `claude plugin marketplace add snowmead/plugins`, then `claude plugin install thinkr@plugins`.
+From your shell: `claude plugin marketplace add snowmead/plugins`, then `claude plugin install snowmead@plugins`.
 
 Updates: `/plugin marketplace update plugins`, or turn on auto-update for the marketplace under `/plugin` →
-Marketplaces. A plugin updates when its `version` changes.
+Marketplaces. The plugin updates when its `version` changes.
+
+Coming from the old one-skill plugins (`thinkr`, `guided-review`, `changelog`, `e-rust`)? Uninstall them, for example
+`/plugin uninstall thinkr@plugins`, so each skill shows up once.
 
 ### Other agents, or as plain skills
 
@@ -49,27 +47,28 @@ npx skills add snowmead/plugins --skill rust -g  # every project
 
 ## Layout
 
-Each plugin is one skill, and its folder is both the skill and the plugin root:
+The repository root is the plugin `snowmead`, and each folder in `skills/` is one of its skills:
 
 ```
-.claude-plugin/marketplace.json   the marketplace "plugins", listing each plugin below
-skills/thinkr/                    plugin thinkr  (.claude-plugin/plugin.json, SKILL.md, …)
-skills/guided-review/             plugin guided-review  (.claude-plugin/plugin.json, SKILL.md, …)
-skills/changelog/                 plugin changelog  (.claude-plugin/plugin.json, SKILL.md, …)
-skills/rust/                      plugin e-rust  (.claude-plugin/plugin.json, SKILL.md, references/)
+.claude-plugin/marketplace.json   the marketplace "plugins", listing the one plugin
+.claude-plugin/plugin.json        plugin snowmead: name, version, metadata
+skills/thinkr/                    skill thinkr  (SKILL.md, …)
+skills/guided-review/             skill guided-review  (SKILL.md, …)
+skills/changelog/                 skill changelog  (SKILL.md, …)
+skills/rust/                      skill rust  (SKILL.md, references/)
 ```
 
-To add a plugin: create `skills/<skill>/` with `SKILL.md` and `.claude-plugin/plugin.json`, add an entry to
-`.claude-plugin/marketplace.json` with `"source": "./skills/<skill>"`, and check it:
+To add a skill: create `skills/<skill>/` with `SKILL.md` (it runs as `/snowmead:<skill>`), name it in the
+descriptions in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, and check it:
 
 ```sh
-claude plugin validate --strict . && claude plugin validate --strict skills/<skill>
+claude plugin validate --strict . && claude plugin validate --strict .claude-plugin/plugin.json
+claude --plugin-dir . plugin details snowmead   # lists the skills it loads
 ```
 
-**Release:** bump `version` in the plugin's `.claude-plugin/plugin.json` (installed copies update only when it
-changes), validate, commit, then tag with `claude plugin tag skills/<skill> --push` (tags look like
-`thinkr--v0.2.0`).
+**Release:** bump `version` in `.claude-plugin/plugin.json` (installed copies update only when it changes),
+validate, commit, then tag with `claude plugin tag . --push` (tags look like `snowmead--v0.2.0`).
 
 ## License
 
-Apache-2.0 (`LICENSE`). Third-party parts keep their own licenses, listed in each plugin's `NOTICE`.
+Apache-2.0 (`LICENSE`). Third-party parts keep their own licenses, listed in each skill's `NOTICE`.

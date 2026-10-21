@@ -29,11 +29,12 @@ libraries are preloaded with their whole import graphs. Quiet UI sounds (the sam
 In Claude Code (2.1.275 or later):
 
 ```
-/plugin install guided-review --marketplace snowmead/plugins
+/plugin install snowmead --marketplace snowmead/plugins
 ```
 
-On older versions: `/plugin marketplace add snowmead/plugins`, then `/plugin install guided-review@plugins`. For
-other agents, or as a plain skill: `npx skills add snowmead/plugins --skill guided-review` (add `-g` for every
+This installs the plugin snowmead, which holds all four of these skills; run this one as `/snowmead:guided-review`.
+On older versions: `/plugin marketplace add snowmead/plugins`, then `/plugin install snowmead@plugins`. For other
+agents, or as a plain skill: `npx skills add snowmead/plugins --skill guided-review` (add `-g` for every
 project).
 
 ### Requirements
@@ -67,7 +68,6 @@ Run these in this folder, after `bun install`:
 | `bun scripts/fonts.ts` | Re-downloads Inter and JetBrains Mono (Latin) and their license into `runtime/fonts/` |
 
 ```
-.claude-plugin/plugin.json        name, version, metadata
 SKILL.md                          what Claude reads first
 references/                       guide-format.md, writing.md
 examples/                         demo.guide.json, demo-43.guide.json, and demo/ (the demo's base, its head and the PR stacked on it)

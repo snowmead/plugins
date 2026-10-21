@@ -25,8 +25,8 @@ type LibMap = Record<string, Omit<Lib, 'pkg' | 'version'>>;
 
 const decode = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 
-/** Import a build dependency. A plugin install already ran `bun install`; other installs (npx skills, a
-    plain copy) have no node_modules yet, so the first build installs them once, from the pinned lockfile. */
+/** Import a build dependency. A fresh install (the plugin, npx skills, a plain copy) has no node_modules yet,
+    so the first build installs them once, from the pinned lockfile. */
 let installed = false;
 async function need<T>(spec: string): Promise<T> {
   try { return await import(spec); } catch { /* not installed yet */ }

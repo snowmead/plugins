@@ -19,10 +19,11 @@ rendered ahead of time, and libraries are preloaded.
 In Claude Code (2.1.275 or later):
 
 ```
-/plugin install thinkr --marketplace snowmead/plugins
+/plugin install snowmead --marketplace snowmead/plugins
 ```
 
-On older versions: `/plugin marketplace add snowmead/plugins`, then `/plugin install thinkr@plugins`. For other
+This installs the plugin snowmead, which holds all four of these skills; run this one as `/snowmead:thinkr`. On
+older versions: `/plugin marketplace add snowmead/plugins`, then `/plugin install snowmead@plugins`. For other
 agents, or as a plain skill: `npx skills add snowmead/plugins --skill thinkr` (add `-g` for every project).
 
 ### Requirements
@@ -60,13 +61,12 @@ Sounds stay in one family: short, crisp ticks and clicks under 100 ms, matched i
 the contents tick. UI sound should confirm, never alarm.
 
 ```
-.claude-plugin/plugin.json        name, version, metadata
 SKILL.md                          what Claude reads first
 references/                       authoring.md, figures.md, loop.md
 templates/                        plan.html, explain.html (working examples)
 runtime/                          TypeScript runtime, CSS, fonts, library pins, sound kit
 scripts/                          build.ts, shot.ts (used by the skill); test.ts, fonts.ts, sounds.py (maintenance)
-package.json, bun.lock            build dependencies; Claude Code installs them with the plugin
+package.json, bun.lock            build dependencies; the first build installs them
 ```
 
 Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`: Geist fonts
