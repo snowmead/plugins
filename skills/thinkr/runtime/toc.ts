@@ -2,9 +2,9 @@
    with a short diagonal notch wherever the list goes into a section's questions and back; a darker copy of the
    same line, clipped to the current entry, slides along it as the reader scrolls. Clicking an entry glides there. */
 import type { Question } from './questions';
-import { h, onScroll, slug } from './dom';
+import { h, onScroll, slug } from '../kit/web/dom';
+import { sound } from '../kit/web/sound';
 import { reduced } from './libs';
-import { sound } from './sound';
 
 const X = [0.5, 12.5]; // the rail's x for sections and for questions
 const NOTCH = 6;       // half the height of a diagonal step

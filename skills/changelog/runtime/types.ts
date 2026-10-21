@@ -114,11 +114,7 @@ export interface PageConfig {
   name: string;
   /** The page's own link, for copied entry links; empty before the first publish. */
   url: string;
-  sounds: Record<SoundName, { uri: string }>;
-  levels: Record<SoundName, number>;
-  master: number;
 }
-export type SoundName = 'open' | 'close' | 'hover' | 'switch' | 'copy' | 'new';
 
 /** The slice of the artifact runtime the page uses: its database, read live. */
 export interface Doc { id: string; exists: boolean; data(): unknown }
@@ -131,7 +127,6 @@ export interface Db { collection(name: string): Query }
 
 declare global {
   interface Window {
-    webkitAudioContext?: typeof AudioContext;
     CHANGELOG?: PageConfig;
     claude?: { use?(name: string): Promise<unknown> };
   }

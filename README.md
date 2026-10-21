@@ -56,10 +56,16 @@ skills/thinkr/                    skill thinkr  (SKILL.md, …)
 skills/guided-review/             skill guided-review  (SKILL.md, …)
 skills/changelog/                 skill changelog  (SKILL.md, …)
 skills/rust/                      skill rust  (SKILL.md, references/)
+kit/                              what the Artifact skills share (see kit/README.md)
 ```
 
+thinkr, guided-review and changelog share one look, one sound kit and one set of build and test helpers through
+[`kit/`](kit). Each links it as `skills/<skill>/kit -> ../../kit`, so the skill works on its own too: `npx skills`
+copies the link in as real files. When `kit/` changes, test every skill that links it and bump the plugin's version.
+
 To add a skill: create `skills/<skill>/` with `SKILL.md` (it runs as `/snowmead:<skill>`), name it in the
-descriptions in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, and check it:
+descriptions in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, and check it. A skill that builds
+an Artifact page links the kit too (`ln -s ../../kit skills/<skill>/kit`).
 
 ```sh
 claude plugin validate --strict . && claude plugin validate --strict .claude-plugin/plugin.json

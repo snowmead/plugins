@@ -2,9 +2,10 @@
    so a run adds an entry without republishing the page, and open views show it at once. The hash picks the view:
    empty for the feed, a date for that entry. build.ts bundles this after the page's markup and its config. */
 import type { Db, Entry } from './types';
-import { CFG, T0, h, store } from './dom';
+import { barLine, h, store } from '../kit/web/dom';
+import { afterFirstGesture, hoverTicks, sound } from '../kit/web/sound';
+import { CFG, T0 } from './dom';
 import { viewOpened } from './scene';
-import { onFirstGesture, renderSwitch, sound } from './sound';
 import { entryView, feedView } from './views';
 
 const SEEN_KEY = 'changelog-seen';
@@ -21,8 +22,8 @@ const newEntry = {
     this.done = true;
     const newest = entries[0]?.date;
     if (!newest) return;
-    const seen = store.get(SEEN_KEY);
-    if (!seen || seen < newest) sound.play('new');
+    const seen = store.get<string>(SEEN_KEY);
+    if (!seen || seen < newest) sound.play('reveal');
     store.set(SEEN_KEY, newest);
   },
 };
@@ -41,11 +42,11 @@ function route(fromHashChange: boolean) {
   performance.measure('changelog:route', { start: t, end: performance.now() });
   if (date) {
     scrollTo(0, 0);
-    if (fromHashChange) sound.play('open');
+    if (fromHashChange) sound.play('nav');
   } else {
     const from = prev?.startsWith('entry:') ? document.getElementById('e-' + prev.slice(6)) : null;
     scrollTo(0, from ? Math.max(0, from.offsetTop - 80) : feedScroll);
-    if (fromHashChange && prev) sound.play('close');
+    if (fromHashChange && prev) sound.play('nav');
   }
 }
 addEventListener('hashchange', () => route(true));
@@ -56,9 +57,9 @@ function unavailable() {
 }
 const valid = (d: unknown): d is Entry => !!d && typeof (d as Entry).date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test((d as Entry).date);
 
-document.getElementById('sound')!.addEventListener('click', () => sound.toggle());
-onFirstGesture(() => { newEntry.gestured = true; newEntry.check(); });
-renderSwitch();
+afterFirstGesture(() => { newEntry.gestured = true; newEntry.check(); });
+hoverTicks();
+barLine(document.querySelector('.k-bar')!);
 document.querySelectorAll('[data-name]').forEach((el) => { el.textContent = CFG.name; });
 performance.measure('changelog:boot', { start: T0, end: performance.now() });
 

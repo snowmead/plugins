@@ -1,7 +1,7 @@
 /* Scenes are SVG drawn by changelog runs. The page keeps only drawing markup, and plays each scene when it scrolls
    into view; one already on screen when a view opens stays at rest, the finished picture. */
 import type { Scene } from './types';
-import { h } from './dom';
+import { h } from '../kit/web/dom';
 
 /** Drops scripts, foreign content, images, links, on* attributes and outside references. */
 export function cleanSvg(markup: string): SVGSVGElement | null {

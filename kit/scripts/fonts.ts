@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-/* Download Geist and Geist Mono (Latin, variable weight) from Google Fonts into runtime/fonts/. build.ts inlines
-   them, so a page paints at once in its own type: no stylesheet to wait for, no font swap after load.
+/* Download Geist and Geist Mono (Latin, variable weight) from Google Fonts into kit/fonts/. Every skill's build inlines
+   them (kit/build/page.ts), so a page paints at once in its own type: no stylesheet to wait for, no font swap after load.
 
-     bun scripts/fonts.ts      # run again only to pick up a new Geist release */
+     bun kit/scripts/fonts.ts      # run again only to pick up a new Geist release */
 import { join } from 'node:path';
 
-const OUT = join(import.meta.dir, '..', 'runtime', 'fonts');
+const OUT = join(import.meta.dir, '..', 'fonts');
 const CSS = 'https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36';
 

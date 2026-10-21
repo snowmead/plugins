@@ -1,10 +1,11 @@
-"""Render the page's UI sounds from the latest earshot and write runtime/sounds.json.
+"""Render the kit's UI sounds from the latest earshot and write kit/sounds.json, which every page shares.
 
     uv run --no-project --python 3.13 --with numpy --with scipy --with soundfile --with soxr \
-        python -I scripts/sounds.py
+        python -I kit/scripts/sounds.py [--no-pull]
 
-Clones (or fast-forwards) earshot's default branch into ~/.cache/thinkr/earshot, so every run uses the
-newest bank. Rendering needs no models and no network beyond the clone.
+Clones (or fast-forwards) earshot's default branch into ~/.cache/plugins-kit/earshot, so every run uses the
+newest bank; --no-pull renders from the commit already there, which leaves the existing sounds as they are when
+only KIT changed. Rendering needs no models and no network beyond the clone.
 
 Every sound is one of earshot's short, crisp UI ticks and clicks (30 to 95 ms, no thumps, no ringing). They are
 matched on loudness, not peak: a 39 ms tick and a 90 ms tink with the same peak differ by 10 dB or more to the ear.
@@ -16,13 +17,14 @@ import base64, io, json, os, subprocess, sys, wave
 import numpy as np
 
 REPO = 'https://github.com/Leonxlnx/earshot'
-CACHE = os.path.expanduser('~/.cache/thinkr/earshot')
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'runtime', 'sounds.json')
+CACHE = os.path.expanduser('~/.cache/plugins-kit/earshot')
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'sounds.json')
 SR = 32000
 RMS_DB = -22    # every sound's loudest 10 ms, after normalizing (low enough that no peak needs capping)
 LEVEL = -21     # playback gain in dB for an offset of 0; the contents tick, which reads as "subtle"
 
-# event -> (earshot bank id, offset in dB from LEVEL). Keep offsets within about ±2 dB.
+# event -> (earshot bank id, offset in dB from LEVEL). Keep offsets within about ±2 dB, except hover, which sits
+# well under the rest because it plays without a click.
 KIT = {
     'nav':      ('pro_hover_tick/ping', 0),     # a contents click glides to a section: the reference
     'step':     ('pro_hover_tick/soft', -1),    # a figure moves one step
@@ -31,15 +33,16 @@ KIT = {
     'reveal':   ('pro_hover_tick/glass', 0),    # a panel or an answer opens
     'toggle':   ('pro_hover_tick/air', -1),     # a switch, a select, the sound button
     'send':     ('pro_pop/tink', 1),            # feedback sent, or a self-check is right: a light tonal tink
+    'hover':    ('pro_hover_tick/soft', -12),   # a mouse moves onto a control: the step tick, far under; at most one each 80 ms
 }
 
 
-def sync():
-    if os.path.isdir(os.path.join(CACHE, '.git')):
-        subprocess.run(['git', '-C', CACHE, 'pull', '-q', '--ff-only'], check=True)
-    else:
+def sync(pull=True):
+    if not os.path.isdir(os.path.join(CACHE, '.git')):
         os.makedirs(os.path.dirname(CACHE), exist_ok=True)
         subprocess.run(['git', 'clone', '-q', '--depth', '1', REPO, CACHE], check=True)
+    elif pull:
+        subprocess.run(['git', '-C', CACHE, 'pull', '-q', '--ff-only'], check=True)
     return subprocess.run(['git', '-C', CACHE, 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
 
 
@@ -68,7 +71,7 @@ def encode(y, sr):
 
 
 def main():
-    commit = sync()
+    commit = sync(pull='--no-pull' not in sys.argv)
     sys.path.insert(0, CACHE)
     import earshot
     from earshot.forge import bank

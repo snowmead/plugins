@@ -8,11 +8,12 @@
    2. page: builds the demo (scripts/demo.ts) and drives it in headless Chrome over DevTools: what the reader sees
       after each action, no console errors, and timing budgets (boot ≤ 30 ms, each interaction ≤ 12 ms, a redraw of
       the cards on screen ≤ one frame). */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Diff, DiffFile, Guide } from '../runtime/types';
 import { buildDemo, buildStack as buildStackDemo, git } from './demo';
+import { browser, findChrome } from '../kit/build/chrome';
 
 const ROOT = join(import.meta.dir, '..');
 let failed = 0;
@@ -204,9 +205,7 @@ rmSync(tmp, { recursive: true, force: true });
 console.log(failed ? `fail  scripts (${failed})` : 'ok    scripts (gather and build against a scratch repository)');
 
 // ---------------------------------------------------------------- 2. page
-const chrome = [process.env.CHROME, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', Bun.which('google-chrome'), Bun.which('chromium')]
-  .find((p) => p && existsSync(p));
-if (!chrome) { console.log('No Chrome found. Set CHROME=/path/to/chrome.'); process.exit(1); }
+findChrome();
 
 // `r` collects facts and `ms` timings: t(fn) times the synchronous work a click or key does before the browser can
 // paint the result. An interaction must fit well inside one 60 Hz frame (16.7 ms).
@@ -219,43 +218,6 @@ const expect: Record<string, unknown> = {
   jumpInGuide: true, jumpFoldToDiff: true, foldRow: true, diffCards: 10, tree: true, treeTick: true, soundOff: 'false', soundSaved: false,
   styleStart: 'true', split: true, styleSaved: 'split', splitJump: true, unified: true,
 };
-
-async function browser(profile: string) {
-  const proc = Bun.spawn([chrome!, '--headless=new', '--remote-debugging-port=0', '--window-size=1440,900', '--no-first-run',
-    '--no-default-browser-check', `--user-data-dir=${profile}`, 'about:blank'], { stderr: 'ignore', stdout: 'ignore' });
-  const portFile = join(profile, 'DevToolsActivePort');
-  for (let i = 0; i < 100 && !existsSync(portFile); i++) await Bun.sleep(50);
-  const port = (await Bun.file(portFile).text()).split('\n')[0];
-  const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json() as { type: string; webSocketDebuggerUrl: string }[];
-  const ws = new WebSocket(targets.find((t) => t.type === 'page')!.webSocketDebuggerUrl);
-  await new Promise((ok) => ws.addEventListener('open', ok, { once: true }));
-  let id = 0;
-  const waiting = new Map<number, (v: any) => void>();
-  const events = new Map<string, () => void>();
-  const errors: string[] = []; // any exception or console.error on the page fails the test
-  ws.addEventListener('message', (e) => {
-    const msg = JSON.parse(String(e.data));
-    if (msg.id) return waiting.get(msg.id)?.(msg);
-    if (msg.method === 'Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails.exception?.description ?? msg.params.exceptionDetails.text);
-    if (msg.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(msg.params.type)) errors.push(msg.params.args.map((a: any) => a.value ?? a.description).join(' '));
-    events.get(msg.method)?.();
-  });
-  const send = (method: string, params: object = {}) => new Promise<any>((ok) => { waiting.set(++id, ok); ws.send(JSON.stringify({ id, method, params })); });
-  await Promise.all([send('Page.enable'), send('Runtime.enable')]);
-  return {
-    errors,
-    async open(url: string) {
-      const loaded = new Promise<void>((ok) => events.set('Page.loadEventFired', ok));
-      await send('Page.navigate', { url });
-      await loaded;
-    },
-    async run(code: string) {
-      const res = await send('Runtime.evaluate', { expression: code, awaitPromise: true, returnByValue: true, userGesture: true });
-      return res.result?.exceptionDetails ? 'ERR ' + (res.result.exceptionDetails.exception?.description ?? 'error') : res.result?.result?.value;
-    },
-    close() { ws.close(); proc.kill(); },
-  };
-}
 
 const RUN = `
   const card = (scope, path) => [...document.querySelectorAll(scope + ' .gr-file')].find((c) => c.dataset.path === path);
@@ -307,9 +269,9 @@ const RUN = `
   r.treeTick = await until(() => treeText().includes('✓'));
 
   // the speaker button mutes, and remembers
-  $('#gr-sound').click();
-  r.soundOff = $('#gr-sound').getAttribute('aria-pressed');
-  r.soundSaved = JSON.parse(localStorage.getItem('gr:sound'));
+  $('[data-k-sound]').click();
+  r.soundOff = $('[data-k-sound]').getAttribute('aria-pressed');
+  r.soundSaved = JSON.parse(localStorage.getItem('kit:sound'));
 
   // unified or split: the switch redraws every drawn card and is remembered, and refs land in the right column
   $('.gr-tab[data-view="guide"]').click();
@@ -337,7 +299,7 @@ const STACK_RUN = `
   r.arrowMoves = document.activeElement?.dataset.pick;
   ms.pick = t(() => document.activeElement.click());
   r.picked = vis('.gr-pr')[0]?.dataset.pr; r.closed = vis('.gr-picklist').length === 0;
-  r.followers = [vis('.gr-crumbs .t')[0]?.textContent, vis('.gr-btn.primary')[0]?.textContent.trim(), vis('.gr-progress')[0]?.textContent].join(' | ');
+  r.followers = [vis('.gr-crumbs .t')[0]?.textContent, vis('.gr-bar .k-btn.is-primary')[0]?.textContent.trim(), vis('.gr-progress')[0]?.textContent].join(' | ');
   r.rail = [...document.querySelectorAll('.gr-rail button')].map((b) => b.dataset.target).join(' ');
   await until(() => vis('.gr-file diffs-container').length);
   ms.back = t(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: '[', bubbles: true })));
@@ -358,7 +320,7 @@ const STACK_EXPECT: Record<string, unknown> = {
 };
 
 async function runPage(name: string, file: string, run: string, expect: Record<string, unknown>, budget: Record<string, number>, after?: (tab: Awaited<ReturnType<typeof browser>>, r: Record<string, unknown>) => Promise<void>) {
-  const tab = await browser(join(dirname(file), `profile-${name}`));
+  const tab = await browser(join(dirname(file), `profile-${name}`), { warnings: true });
   try {
     await tab.open('file://' + file);
     const raw = await tab.run(`(async () => {

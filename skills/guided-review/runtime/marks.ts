@@ -5,7 +5,8 @@
    A card's mark is kept by chapter and path, so ticking one chapter leaves the same file's other hunks unread in
    another. The Diff tab's card stands for the whole file: it reads and writes the marks of every chapter that holds
    part of it. */
-import { $$, esc, split, stat, store } from './dom';
+import { $$, esc, store } from '../kit/web/dom';
+import { split, stat } from './dom';
 import { type Ctx, active, diffOf } from './ctx';
 import { chipOf, setFold } from './cards';
 import { libs } from './libs';

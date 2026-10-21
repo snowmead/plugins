@@ -1,13 +1,14 @@
 /* Public types: the figure API page scripts use, the config build.ts injects, and the slice of the claude.ai
    artifact capabilities the runtime calls. */
 
+import type { SoundName } from '../kit/web/types';
+export type { SoundName };
+
 /** A library: a single-file build that sets `global` (after its `deps`), or an ES module with its import graph. */
 export type Libs = Record<string, { url: string; global?: string; deps?: string[]; modules?: string[] }>;
-export type SoundKit = Record<string, { uri: string; db: number }>;
 /** `use`: the libraries this page needs, which build.ts found in its scripts. */
-export interface Config { libs: Libs; use: string[]; sounds: SoundKit }
+export interface Config { libs: Libs; use: string[] }
 
-export type SoundName = 'select' | 'deselect' | 'step' | 'nav' | 'reveal' | 'toggle' | 'send';
 export type Mode = 'plan' | 'explain';
 export type RGBA = [number, number, number, number];
 export type Controls = Record<string, number | string | boolean>;
@@ -83,6 +84,5 @@ declare global {
     THINKR?: Config;
     thinkr: Thinkr;
     claude?: { use<K extends keyof CapabilityMap>(name: K): Promise<CapabilityMap[K] | null> };
-    webkitAudioContext?: typeof AudioContext;
   }
 }

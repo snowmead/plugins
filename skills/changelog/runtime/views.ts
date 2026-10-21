@@ -1,10 +1,11 @@
 /* The two views: the feed of every entry, newest first, and one entry in full. */
 import type { Entry, PrRow } from './types';
-import { CFG, fmtDate, fmtN, h, linkFor, plural, showToast, tzName } from './dom';
+import { h } from '../kit/web/dom';
+import { ICON } from '../kit/web/icons';
+import { sound } from '../kit/web/sound';
+import { toast } from '../kit/web/toast';
+import { CFG, fmtDate, fmtN, linkFor, plural, tzName } from './dom';
 import { scene } from './scene';
-import { sound } from './sound';
-
-const LINK_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
 
 function numsLine(e: Entry) {
   const n = e.numbers ?? ({} as Entry['numbers']);
@@ -21,12 +22,11 @@ function rail(e: Entry, newest: boolean, full: boolean) {
 }
 
 function copyButton(date: string) {
-  const b = h('button', { class: 'btn', type: 'button', 'data-hover': true });
-  b.innerHTML = LINK_ICON + 'Copy link';
+  const b = h('button', { class: 'k-btn is-sm', type: 'button', 'data-hover': true, html: ICON.link + 'Copy link' });
   b.addEventListener('click', () => {
     const url = linkFor(date);
-    const done = () => { sound.play('copy'); showToast('Link copied'); };
-    try { navigator.clipboard.writeText(url).then(done, () => showToast('Copy this link:', url)); } catch { showToast('Copy this link:', url); }
+    const done = () => { sound.play('select'); toast('Link copied'); };
+    try { navigator.clipboard.writeText(url).then(done, () => toast('Copy this link:', url)); } catch { toast('Copy this link:', url); }
   });
   return b;
 }

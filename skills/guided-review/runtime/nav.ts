@@ -1,6 +1,6 @@
 /* Moving around: the pull request on screen, its Guide and Diff views, jumps from a ref to its line, the chapter
    rail, j and k. */
-import { $, $$, esc } from './dom';
+import { $, $$, esc } from '../kit/web/dom';
 import { type CardState, card, cards, findRow, setFold } from './cards';
 import { type Ctx, active, ctxs, diffOf, guideOf, setActive } from './ctx';
 import { buildTree, progress, restoreChapters, showFile } from './marks';
@@ -151,7 +151,7 @@ export function onScroll() {
   ticking = true;
   requestAnimationFrame(() => {
     ticking = false;
-    $('.gr-bar')?.classList.toggle('stuck', scrollY > 60);
+    $('.gr-bar')?.classList.toggle('is-scrolled', scrollY > 60);
     const cur = current();
     for (const b of $$('.gr-rail button')) b.classList.toggle('on', b.dataset.target === cur?.id);
   });

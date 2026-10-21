@@ -29,7 +29,8 @@ animate (motion), WebGPU shaders (vgpu), questions, a send panel, UI sounds (ear
 | `references/loop.md` | Publishing, reading feedback, replying, republishing. Read it before you publish. |
 | `scripts/build.ts` | Checks a page and packs it into one file to publish. |
 | `scripts/shot.ts` | Screenshots a packed page at desktop and phone width, light and dark. |
-| `runtime/` | The TypeScript runtime, CSS, fonts, pinned library versions and the sound kit. `build.ts` inlines all of it. |
+| `runtime/` | The TypeScript runtime, CSS and pinned library versions. `build.ts` inlines them with the kit's. |
+| `kit/` | What thinkr shares with the other Artifact skills: tokens, fonts, sounds, the bar and buttons, build helpers. |
 
 The skill lives at `${CLAUDE_SKILL_DIR}`; run its scripts by that full path, exactly as written below. Tooling runs
 on Bun; page scripts are TypeScript. The other files in `scripts/` are for maintaining the skill, not for making pages.

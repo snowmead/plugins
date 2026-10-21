@@ -54,18 +54,18 @@ Run these in this folder, after `bun install`:
 | `bun run typecheck` | `tsc` over the runtime and the scripts |
 | `bun run examples` | Builds `templates/plan.html` and `templates/explain.html` |
 | `bun scripts/build.ts --refresh` | Moves motion, vgpu, d3 and Plot to their newest release that is at least 14 days old (the artifact rule); `--major` crosses a major version |
-| `bun scripts/fonts.ts` | Re-downloads Geist and Geist Mono (Latin) into `runtime/fonts/` |
-| `uv run --no-project --python 3.13 --with numpy --with scipy --with soundfile --with soxr python -I scripts/sounds.py` | Re-renders the UI sounds from earshot's newest commit into `runtime/sounds.json` |
 
-Sounds stay in one family: short, crisp ticks and clicks under 100 ms, matched in loudness and played within ±2 dB of
-the contents tick. UI sound should confirm, never alarm.
+The look, the fonts, the sounds, the bar and buttons, and the build and test helpers come from the shared
+[kit](../../kit), linked here as `kit/`; its README says how to change them. Sounds stay in one family: short, crisp
+ticks and clicks under 100 ms, matched in loudness. UI sound should confirm, never alarm.
 
 ```
 SKILL.md                          what Claude reads first
 references/                       authoring.md, figures.md, loop.md
 templates/                        plan.html, explain.html (working examples)
-runtime/                          TypeScript runtime, CSS, fonts, library pins, sound kit
-scripts/                          build.ts, shot.ts (used by the skill); test.ts, fonts.ts, sounds.py (maintenance)
+runtime/                          TypeScript runtime, CSS, library pins
+kit/                              link to the shared kit: tokens, fonts, sounds, UI parts, build helpers
+scripts/                          build.ts, shot.ts (used by the skill); test.ts (maintenance)
 package.json, bun.lock            build dependencies; the first build installs them
 ```
 

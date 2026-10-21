@@ -10,18 +10,16 @@
 
    Speed: the page carries its fonts inline, math and code highlighting are rendered here (no MathJax or
    highlight.js in the page), and every library the page uses is preloaded from the head, its whole import
-   graph at once, so nothing waits on a request chain. Needs `bun install` in this skill's directory. */
+   graph at once, so nothing waits on a request chain. Needs `bun install` in this skill's directory.
+
+   The fonts, the shared stylesheet, the sounds and the library pinning come from the kit (kit/build/). */
 import { join } from 'node:path';
+import { bundle, preview, soundScript, styles } from '../kit/build/page';
+import { type LibMap, libs, preloads } from '../kit/build/libs';
 
 const RT = join(import.meta.dir, '..', 'runtime');
-const LIBS = join(RT, 'libs.json');
 const HOSTS = ['https://cdnjs.cloudflare.com/', 'https://cdn.jsdelivr.net/npm/', 'https://unpkg.com/'];
 const ID = /^[A-Za-z][A-Za-z0-9_.-]*$/;
-const DAY = 86_400_000;
-
-type Lib = { pkg: string; version: string; url: string; global?: string; deps?: string[]; modules?: string[] };
-type LibFile = { note: string; checked: string; libs: Record<string, Lib> };
-type LibMap = Record<string, Omit<Lib, 'pkg' | 'version'>>;
 
 const decode = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 
@@ -43,56 +41,6 @@ async function need<T>(spec: string): Promise<T> {
 }
 
 // ---------------------------------------------------------------- libraries
-const semver = (v: string) => v.split('.').map(Number);
-const newer = (a: string, b: string) => { const [x, y] = [semver(a), semver(b)]; for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false; };
-
-async function refresh(major: boolean) {
-  const data: LibFile = await Bun.file(LIBS).json();
-  const cutoff = Date.now() - 14 * DAY;
-  const changed: string[] = [];
-  await Promise.all(Object.entries(data.libs).map(async ([name, lib]) => {
-    let meta: { time?: Record<string, string> };
-    try {
-      const r = await fetch(`https://registry.npmjs.org/${lib.pkg}`, { signal: AbortSignal.timeout(8000) });
-      meta = await r.json();
-    } catch (e) {
-      console.log(`  libs: ${name} not checked (${(e as Error).name}); keeping ${lib.version}`);
-      return;
-    }
-    const cur = lib.version.split('.')[0];
-    let best: string | null = null;
-    for (const [v, t] of Object.entries(meta.time ?? {})) {
-      if (!/^\d+\.\d+\.\d+$/.test(v) || (!major && v.split('.')[0] !== cur) || Date.parse(t) > cutoff) continue;
-      if (!best || newer(v, best)) best = v;
-    }
-    if (best && best !== lib.version) { changed.push(`${name} ${lib.version} -> ${best}`); lib.version = best; }
-    if (!lib.global) lib.modules = await graph(lib.url.replace('{v}', lib.version)).catch(() => lib.modules ?? []);
-  }));
-  data.checked = new Date().toISOString().slice(0, 10);
-  await Bun.write(LIBS, JSON.stringify(data, null, 1) + '\n');
-  console.log('  libs: ' + (changed.length ? changed.join(', ') : 'up to date'));
-}
-
-/** Every module an ESM entry on jsDelivr imports, transitively, so a page can preload them in one round. */
-async function graph(entry: string): Promise<string[]> {
-  const seen = new Set([entry]), queue = [entry];
-  while (queue.length) {
-    const src = await (await fetch(queue.shift()!, { signal: AbortSignal.timeout(8000) })).text();
-    for (const [, path] of src.matchAll(/(?:from|import)\s*["'](\/npm\/[^"']+)["']/g)) {
-      const url = 'https://cdn.jsdelivr.net' + path;
-      if (!seen.has(url)) { seen.add(url); queue.push(url); }
-    }
-  }
-  return [...seen];
-}
-
-async function libs(force: boolean, major: boolean): Promise<LibMap> {
-  let data: LibFile = await Bun.file(LIBS).json();
-  const stale = Date.now() - Date.parse(data.checked) > 7 * DAY || Object.values(data.libs).some((l) => !l.global && !l.modules?.length);
-  if (force || stale) { await refresh(major); data = await Bun.file(LIBS).json(); }
-  return Object.fromEntries(Object.entries(data.libs).map(([k, { pkg: _p, version, url, ...rest }]) => [k, { url: url.replace('{v}', version), ...rest }]));
-}
-
 /** The libraries a page needs: motion always (the runtime animates with it), plus what its scripts load. */
 function used(scripts: string, libmap: LibMap): string[] {
   const out = new Set(['motion']);
@@ -100,21 +48,6 @@ function used(scripts: string, libmap: LibMap): string[] {
   for (const [, name] of scripts.matchAll(/load\(\s*['"`]([\w-]+)['"`]/g)) if (libmap[name]) out.add(name);
   for (const name of [...out]) for (const dep of libmap[name].deps ?? []) out.add(dep);
   return [...out];
-}
-
-/** Preload hints for the head: each library's file, or its whole module graph, fetched while the page parses. */
-const hints = (names: string[], libmap: LibMap) => names.flatMap((n) => {
-  const l = libmap[n];
-  return l.global ? [`<link rel="preload" as="script" href="${l.url}">`] : (l.modules?.length ? l.modules : [l.url]).map((m) => `<link rel="modulepreload" href="${m}" crossorigin>`);
-}).join('\n');
-
-async function fontFaces() {
-  const { faces } = await Bun.file(join(RT, 'fonts', 'fonts.json')).json() as { faces: { family: string; weight: string; range: string; file: string }[] };
-  const css = await Promise.all(faces.map(async (f) => {
-    const b64 = Buffer.from(await Bun.file(join(RT, 'fonts', f.file)).arrayBuffer()).toString('base64');
-    return `@font-face{font-family:'${f.family}';font-style:normal;font-weight:${f.weight};font-display:swap;src:url(data:font/woff2;base64,${b64}) format('woff2');unicode-range:${f.range}}`;
-  }));
-  return css.join('\n') + '\n';
 }
 
 // math and code are rendered here, so the page never waits for MathJax (2 MB) or highlight.js
@@ -275,12 +208,6 @@ function check(src: string) {
 }
 
 // ---------------------------------------------------------------- pack
-async function runtime() {
-  const out = await Bun.build({ entrypoints: [join(RT, 'index.ts')], target: 'browser', format: 'iife', minify: true });
-  if (!out.success) { for (const log of out.logs) console.log('  error ' + log); process.exit(1); }
-  return (await out.outputs[0].text()).replaceAll('</script', '<\\/script');
-}
-
 /** Page scripts are TypeScript: strip the types, keep the code (imports of types vanish). */
 function transpile(scripts: string) {
   const ts = new Bun.Transpiler({ loader: 'ts', target: 'browser' });
@@ -297,20 +224,18 @@ async function pack(src: string, libmap: LibMap) {
   const scripts = at >= 0 ? transpile(body.slice(at)) : '';
   const math = await renderMath(await highlight(at >= 0 ? body.slice(0, at) : body));
   const use = used(scripts, libmap);
-  const { sounds } = await Bun.file(join(RT, 'sounds.json')).json();
-  const cfg = { libs: libmap, use, sounds: Object.fromEntries(Object.entries(sounds as Record<string, { uri: string; db: number }>).map(([k, v]) => [k, { uri: v.uri, db: v.db }])) };
-  const [css, fonts, js] = await Promise.all([Bun.file(join(RT, 'thinkr.css')).text(), fontFaces(), runtime()]);
+  const [css, sounds, js] = await Promise.all([styles(join(RT, 'thinkr.css')), soundScript(['nav', 'step', 'select', 'deselect', 'reveal', 'toggle', 'send']), bundle(join(RT, 'index.ts'))]);
   // title first (the viewer reads it from the first 8 KB), then preloads so libraries download while the page
   // parses; the runtime goes after the content and before page scripts, so they can call thinkr.figure()
-  return `${title}\n<meta name="claude:viewport-fit-sides" content="cover">\n${hints(use, libmap)}\n`
-    + `<style>\n${fonts}${css}${math.css}</style>\n`
+  return `${title}\n<meta name="claude:viewport-fit-sides" content="cover">\n${preloads(use, libmap)}\n`
+    + `<style>\n${css}${math.css}</style>\n`
     + math.html.trimEnd() + '\n'
-    + `<script>window.THINKR = ${JSON.stringify(cfg)};</script>\n<script>\n${js}</script>\n`
+    + `<script>window.THINKR = ${JSON.stringify({ libs: libmap, use })};</script>\n${sounds}<script>\n${js}</script>\n`
     + scripts;
 }
 
 const argv = Bun.argv.slice(2);
-const libmap = await libs(argv.includes('--refresh'), argv.includes('--major'));
+const libmap = await libs(join(RT, 'libs.json'), { force: argv.includes('--refresh'), major: argv.includes('--major') });
 const file = argv.find((a) => !a.startsWith('--'));
 if (!file) process.exit(0);
 
@@ -323,7 +248,5 @@ if (errors.length) { console.log(`${errors.length} error(s). Nothing written.`);
 const out = await pack(src, libmap);
 const stem = file.replace(/\.html?$/, '');
 await Bun.write(`${stem}.artifact.html`, out);
-await Bun.write(`${stem}.preview.html`,
-  '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>\n'
-  + out + '\n</body></html>\n');
+await Bun.write(`${stem}.preview.html`, preview(out));
 console.log(`ok    ${mode} page, ${warns.length} warning(s), ${Math.round(out.length / 1024)} KB\n      publish: ${stem}.artifact.html\n      preview: ${stem}.preview.html`);

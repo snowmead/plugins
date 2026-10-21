@@ -3,9 +3,9 @@
    startup so a figure's setup never waits. motion drives every animation; without it (reduced motion, offline)
    the page still works, only without the movement. */
 import type { AnimOpts, Config, Keyframes, Motion, MotionAnimation } from './types';
-import { h } from './dom';
+import { h } from '../kit/web/dom';
 
-export const config: Config = window.THINKR ?? { libs: {}, use: [], sounds: {} };
+export const config: Config = window.THINKR ?? { libs: {}, use: [] };
 export const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const loaded = new Map<string, Promise<any>>();

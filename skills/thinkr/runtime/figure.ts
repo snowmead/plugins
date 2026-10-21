@@ -2,9 +2,11 @@
    data-show / data-focus; data-in and data-draw parts build in with motion the first time the figure is seen.
    Scripted figures register with thinkr.figure() and set up lazily, when the figure nears the screen. */
 import type { Controls, Fig, RGBA, Size, Tokens } from './types';
-import { h, ICON } from './dom';
+import { h } from '../kit/web/dom';
+import { ICON } from '../kit/web/icons';
+import { sound } from '../kit/web/sound';
+import { isDark, onTheme } from '../kit/web/theme';
 import { anim, config, hasMotion, load, motionReady, reduced } from './libs';
-import { sound } from './sound';
 import { panZoom, resizable } from './view';
 
 type Setup = (fig: Fig) => void | Promise<void>;
@@ -38,14 +40,10 @@ export function tokens(): Tokens {
     const [r, g, b, a] = rgba(cssVar(t));
     out[t === 'muted-fg' ? 'mutedFg' : t] = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},${+a.toFixed(3)})`;
   }
-  const theme = document.documentElement.dataset.theme;
-  const dark = theme ? theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-  return { ...(out as Omit<Tokens, 'dark' | 'font' | 'mono'>), dark, font: 'Geist, system-ui, sans-serif', mono: '"Geist Mono", ui-monospace, monospace' };
+  return { ...(out as Omit<Tokens, 'dark' | 'font' | 'mono'>), dark: isDark(), font: 'Geist, system-ui, sans-serif', mono: '"Geist Mono", ui-monospace, monospace' };
 }
 
-const fireTheme = () => requestAnimationFrame(() => { const t = tokens(); themeCbs.forEach((cb) => cb(t)); });
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', fireTheme);
-new MutationObserver(fireTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+onTheme(() => { const t = tokens(); themeCbs.forEach((cb) => cb(t)); });
 
 // ---------------------------------------------------------------- motion
 /** "2", "2-4", "2+" or "1,3": is step n in it? */
@@ -202,9 +200,9 @@ function build(el: HTMLElement, id: string): FigState {
   const stepText = h('div', { class: 't-steptext', 'aria-live': 'polite' });
   const dots = h('div', { class: 't-dots', 'aria-hidden': 'true' }, steps.map(() => h('i')));
   const stop = () => { clearInterval(playing); playing = 0; play.innerHTML = ICON.play; };
-  const back = h('button', { class: 't-btn is-icon is-sm', type: 'button', 'aria-label': 'Previous step', html: ICON.left, onclick: () => { stop(); fig.goTo(fig.step - 1); } });
-  const next = h('button', { class: 't-btn is-icon is-sm', type: 'button', 'aria-label': 'Next step', html: ICON.right, onclick: () => { stop(); fig.goTo(fig.step + 1); } });
-  const play = h('button', { class: 't-btn is-icon is-sm', type: 'button', 'aria-label': 'Play steps', html: ICON.play });
+  const back = h('button', { class: 'k-btn is-icon is-sm', type: 'button', 'aria-label': 'Previous step', html: ICON.left, onclick: () => { stop(); fig.goTo(fig.step - 1); } });
+  const next = h('button', { class: 'k-btn is-icon is-sm', type: 'button', 'aria-label': 'Next step', html: ICON.right, onclick: () => { stop(); fig.goTo(fig.step + 1); } });
+  const play = h('button', { class: 'k-btn is-icon is-sm', type: 'button', 'aria-label': 'Play steps', html: ICON.play });
   play.addEventListener('click', () => {
     if (playing) return stop();
     if (fig.step === steps.length) fig.goTo(1);

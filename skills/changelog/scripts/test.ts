@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Entry } from '../runtime/types';
 import { type RawPr, type Run, dateIn, inWindow, label, loadConfig, prStats, runsOf, span, windowCi } from './lib';
+import { browser, findChrome } from '../kit/build/chrome';
 
 const ROOT = join(import.meta.dir, '..');
 const argv = Bun.argv.slice(2);
@@ -113,8 +114,7 @@ if (argv.includes('--live')) {
 }
 
 // ---------------------------------------------------------------- 2. page
-const chrome = [process.env.CHROME, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', Bun.which('google-chrome'), Bun.which('chromium')].find((p) => p && existsSync(p));
-if (!chrome) { console.log('No Chrome found. Set CHROME=/path/to/chrome.'); process.exit(1); }
+findChrome();
 
 // The feed's entries: the example, an older one, and one whose scene carries markup the page must strip.
 const older: Entry = { ...doc, date: '2026-10-18', title: 'Deliveries keep their last status code', themes: doc.themes.slice(1), window_end: '2026-10-18T20:00:00Z' };
@@ -128,45 +128,8 @@ const BUDGET = { boot: 30, render: 30, route: 12 };
 const expect: Record<string, unknown> = {
   title: 'Relay Changelog', entries: 3, dots: 1, lead: true, shipped: 2, brand: 'Relay',
   entryThemes: 2, prLinks: 2, prRows: 2, scoreCol: true, watch: 2, pager: 'Older', backToFeed: true, missing: true,
-  copied: true, stripped: true, soundOff: 'Sound off', muted: '1', narrowFeed: true, narrowEntry: true,
+  copied: true, stripped: true, soundOff: 'false', muted: 'false', narrowFeed: true, narrowEntry: true,
 };
-
-async function browser(profile: string) {
-  const proc = Bun.spawn([chrome!, '--headless=new', '--remote-debugging-port=0', '--window-size=1440,900', '--no-first-run',
-    '--no-default-browser-check', `--user-data-dir=${profile}`, 'about:blank'], { stderr: 'ignore', stdout: 'ignore' });
-  const portFile = join(profile, 'DevToolsActivePort');
-  for (let i = 0; i < 100 && !existsSync(portFile); i++) await Bun.sleep(50);
-  const port = (await Bun.file(portFile).text()).split('\n')[0];
-  const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json() as { type: string; webSocketDebuggerUrl: string }[];
-  const ws = new WebSocket(targets.find((t) => t.type === 'page')!.webSocketDebuggerUrl);
-  await new Promise((ok) => ws.addEventListener('open', ok, { once: true }));
-  let id = 0;
-  const waiting = new Map<number, (v: any) => void>();
-  const events = new Map<string, () => void>();
-  const errors: string[] = []; // any exception, console.error or console.warn on the page fails the test
-  ws.addEventListener('message', (e) => {
-    const msg = JSON.parse(String(e.data));
-    if (msg.id) return waiting.get(msg.id)?.(msg);
-    if (msg.method === 'Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails.exception?.description ?? msg.params.exceptionDetails.text);
-    if (msg.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(msg.params.type)) errors.push(msg.params.args.map((a: any) => a.value ?? a.description).join(' '));
-    events.get(msg.method)?.();
-  });
-  const send = (method: string, params: object = {}) => new Promise<any>((ok) => { waiting.set(++id, ok); ws.send(JSON.stringify({ id, method, params })); });
-  await Promise.all([send('Page.enable'), send('Runtime.enable')]);
-  return {
-    errors, send,
-    async open(url: string) {
-      const loaded = new Promise<void>((ok) => events.set('Page.loadEventFired', ok));
-      await send('Page.navigate', { url });
-      await loaded;
-    },
-    async run(code: string) {
-      const res = await send('Runtime.evaluate', { expression: code, awaitPromise: true, returnByValue: true, userGesture: true });
-      return res.result?.exceptionDetails ? 'ERR ' + (res.result.exceptionDetails.exception?.description ?? 'error') : res.result?.result?.value;
-    },
-    close() { ws.close(); proc.kill(); },
-  };
-}
 
 const PRELUDE = `const r = {}, ms = {}, $ = (s) => document.querySelector(s), $$ = (s) => [...document.querySelectorAll(s)], sleep = (n) => new Promise((ok) => setTimeout(ok, n));
   const until = async (fn, n = 4000) => { const end = Date.now() + n; while (!fn() && Date.now() < end) await sleep(30); return !!fn(); };
@@ -184,17 +147,17 @@ const RUN = `
   r.entryThemes = $$('.theme').length; r.prLinks = $$('.prlinks a').length; r.prRows = $$('.prs tbody tr').length;
   r.scoreCol = $$('.prs thead th').some((th) => th.textContent === 'Score'); r.watch = $$('.watch li').length;
   r.pager = $('.pager .prev .label')?.textContent.split(' ')[1];
-  $('.actions .btn').click();
-  r.copied = await until(() => !$('#toast').hidden && (/Link copied/.test($('#toast').textContent) || ($('#copy-url')?.value ?? '') === 'https://claude.ai/artifact/example#2026-10-20'));
+  $('.actions .k-btn').click();
+  r.copied = await until(() => $('#k-toast')?.classList.contains('is-on') && (/Link copied/.test($('#k-toast').textContent) || ($('#k-copy')?.value ?? '') === 'https://claude.ai/artifact/example#2026-10-20'));
   ms.back = await go('');
   r.backToFeed = $$('.feed .entry').length === 3;
   await go('#2026-01-01');
   r.missing = /There is no entry for 2026-01-01/.test($('#app').textContent);
   await go('');
-  $('#sound').click();
-  r.soundOff = $('#sound-label').textContent; r.muted = localStorage.getItem('changelog-muted');`;
+  $('[data-k-sound]').click();
+  r.soundOff = $('[data-k-sound]').getAttribute('aria-pressed'); r.muted = localStorage.getItem('kit:sound');`;
 
-const tab = await browser(join(tmp, 'profile'));
+const tab = await browser(join(tmp, 'profile'), { warnings: true });
 try {
   await tab.open('file://' + join(tmp, 'changelog.preview.html'));
   const raw = await tab.run(`(async () => { ${PRELUDE} ${RUN}; return JSON.stringify({ r, ms }); })()`);

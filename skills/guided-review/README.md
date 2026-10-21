@@ -20,9 +20,10 @@ them:
   menu of them, a stack drawn from its base up, each with its branches, size and review progress; `[` and `]` move
   between them.
 
-The page opens at once: Inter and JetBrains Mono are inline, the runtime is one small bundled script, and the
-libraries are preloaded with their whole import graphs. Quiet UI sounds (the same earshot kit as
-[thinkr](../thinkr)) confirm a mark; the speaker button mutes them.
+The page opens at once: Geist and Geist Mono are inline, the runtime is one small bundled script, and the libraries
+are preloaded with their whole import graphs. It shares its look, its quiet UI sounds and its bar with
+[thinkr](../thinkr) and [changelog](../changelog) through the [kit](../../kit): a sound confirms a mark, and the
+speaker button mutes them.
 
 ## Install
 
@@ -65,17 +66,17 @@ Run these in this folder, after `bun install`:
 | `bun run typecheck` | `tsc` over the runtime and the scripts |
 | `bun run example` | Builds the demo into `examples/demo.preview.html`, and the two stacked demo pull requests into `examples/stack.preview.html` |
 | `bun scripts/build.ts --refresh` | Moves @pierre/diffs, @pierre/trees and mermaid (for the preview) to their newest release that is at least 14 days old (the artifact rule); `--major` crosses a major version |
-| `bun scripts/fonts.ts` | Re-downloads Inter and JetBrains Mono (Latin) and their license into `runtime/fonts/` |
 
 ```
 SKILL.md                          what Claude reads first
 references/                       guide-format.md, writing.md
 examples/                         demo.guide.json, demo-43.guide.json, and demo/ (the demo's base, its head and the PR stacked on it)
-runtime/                          TypeScript runtime, CSS, fonts, library pins, sound kit
-scripts/                          gather.ts, build.ts, shot.ts (used by the skill); test.ts, demo.ts, fonts.ts (maintenance)
+runtime/                          TypeScript runtime, CSS, library pins
+kit/                              link to the shared kit: tokens, fonts, sounds, UI parts, build helpers
+scripts/                          gather.ts, build.ts, shot.ts (used by the skill); test.ts, demo.ts (maintenance)
 package.json, bun.lock            dev dependencies (TypeScript, Bun's types)
 ```
 
 The page layout comes from the guided review in [haaku-co/corpus-christi](https://github.com/haaku-co/corpus-christi).
-Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`: Inter and
-JetBrains Mono (SIL OFL 1.1) and earshot (MIT).
+Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`: Geist
+(SIL OFL 1.1) and earshot (MIT).

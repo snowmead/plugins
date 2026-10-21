@@ -2,7 +2,10 @@
    changed within a line, light and dark themes. The folds between hunks and the moved-code chips are ours, slotted
    in. A card renders when it comes near the screen, so a long guide opens at once. */
 import type { DiffFile, DiffStyle, Hunk, Move, PageChapter, PierreAnnotation, PierreFileDiff, PierreFileDiffMeta, PierreHunkSeparator } from './types';
-import { $, $$, CHEVRON, D, esc, onTheme, split, stat, store, themeType } from './dom';
+import { $, $$, esc, store } from '../kit/web/dom';
+import { ICON } from '../kit/web/icons';
+import { onTheme, themeType } from '../kit/web/theme';
+import { D, split, stat } from './dom';
 import { libs } from './libs';
 import type { Ctx } from './ctx';
 
@@ -273,7 +276,7 @@ export function card(ctx: Ctx, f: DiffFile, hunkIds: number[] | null, chapter: s
   }
   const gen = f.kind === 'generated' ? '<div class="gen-note">Generated file. It starts folded; the change comes from the source files in this pull request.</div>' : '';
   el.innerHTML =
-    `<header><button type="button" class="gr-fold" aria-label="Fold ${esc(name)}" aria-expanded="true">${CHEVRON}</button>`
+    `<header><button type="button" class="gr-fold" aria-label="Fold ${esc(name)}" aria-expanded="true">${ICON.down}</button>`
     + `<span class="gr-lang">${esc(chipOf(f))}</span><span class="fname">${esc(name)}</span>`
     + `<span class="fdir" title="${esc(f.path)}">${esc(dir)}${f.oldPath ? ` ← ${esc(f.oldPath)}` : ''}</span>`
     + `<span class="fstat">${part}${word ? `<span class="st">${word}</span>` : ''}${stat(a, d)}</span>`

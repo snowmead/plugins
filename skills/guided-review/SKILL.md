@@ -43,7 +43,8 @@ guided review does that work for them. It is one page, published as a Claude Art
 | `references/guide-format.md` | Every field of `guide.json`. Read it before your first guide. |
 | `references/writing.md` | How to plan chapters and write the text. Read it before your first guide. |
 | `examples/demo.guide.json` | A complete guide for a small pull request (its code is in `examples/demo/`). `examples/demo-43.guide.json` is the pull request stacked on it. |
-| `runtime/` | The page's TypeScript, CSS, fonts, pinned library versions and sounds. `build.ts` inlines all of it. |
+| `runtime/` | The page's TypeScript, CSS and pinned library versions. `build.ts` inlines them with the kit's. |
+| `kit/` | What the guide shares with the other Artifact skills: tokens, fonts, sounds, the bar and buttons, build helpers. |
 
 The skill lives at `${CLAUDE_SKILL_DIR}`; run its scripts by that full path, exactly as written below. The other
 files in `scripts/` maintain the skill; they are not for making guides.

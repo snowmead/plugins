@@ -2,9 +2,10 @@
    optional note; with answer="…" a question becomes a self-check that marks the right options and opens its
    <t-explain>. Answers live in localStorage, and in the page database for plans (feedback.ts). */
 import type { Mode } from './types';
-import { h, ICON, slug, store } from './dom';
+import { h, slug, store } from '../kit/web/dom';
+import { ICON } from '../kit/web/icons';
+import { sound } from '../kit/web/sound';
 import { anim } from './libs';
-import { sound } from './sound';
 
 export type QType = 'single' | 'multi' | 'text';
 export interface Answer { values: string[]; other: string; note: string; text: string; checked?: boolean }
@@ -43,7 +44,7 @@ export function createQuestions(page: HTMLElement, mode: Mode, key: string) {
 
     // header: number, hint, state
     const hint = type === 'text' ? 'Write an answer' : type === 'single' ? 'Choose one' : max ? `Choose up to ${max}` : 'Choose any';
-    const badge = h('span', { class: 't-badge is-muted t-qstate', hidden: quiz });
+    const badge = h('span', { class: 'k-badge is-muted t-qstate', hidden: quiz });
     const head = h('div', { class: 't-qhead', 'data-uncommentable': '' }, h('span', { class: 't-qnum' }, (quiz ? 'Check ' : 'Q') + (qi + 1)), h('span', {}, '·'), h('span', {}, hint), badge);
     q.prepend(head);
     if (prompt) head.after(prompt);
@@ -56,7 +57,7 @@ export function createQuestions(page: HTMLElement, mode: Mode, key: string) {
       const iid = `${id}--${value}`;
       const input = h('input', { type: type === 'single' ? 'radio' : 'checkbox', name: id, value, id: iid, checked: a.values.includes(value) });
       inputs.push(input);
-      const title = h('span', { class: 't-optlabel' }, label, rec === value ? h('span', { class: 't-badge' }, 'Recommended') : null);
+      const title = h('span', { class: 't-optlabel' }, label, rec === value ? h('span', { class: 'k-badge' }, 'Recommended') : null);
       const body = h('span', { class: 't-optbody' }, title, small);
       const ind = h('span', { class: 't-ind ' + (type === 'single' ? 'is-radio' : 'is-check'), html: type === 'single' ? '<i></i>' : ICON.check });
       wrapper.replaceChildren(h('label', { class: 't-opt', for: iid }, input, ind, body));
@@ -95,14 +96,14 @@ export function createQuestions(page: HTMLElement, mode: Mode, key: string) {
     // footer: Check for self-checks, a note for plan questions
     const foot = h('div', { class: 't-qfoot', 'data-uncommentable': '' });
     const verdict = h('span', { class: 't-verdict', 'aria-live': 'polite' });
-    const checkBtn = h('button', { class: 't-btn is-sm', type: 'button' }, 'Check');
+    const checkBtn = h('button', { class: 'k-btn is-sm', type: 'button' }, 'Check');
     if (quiz) {
       checkBtn.addEventListener('click', () => (q.classList.contains('is-checked') ? reset() : check()));
       foot.append(checkBtn, verdict);
     } else if (type !== 'text' && mode === 'plan') {
       const noteBox = h('textarea', { class: 't-field', id: id + '--note', rows: 2, placeholder: 'Why, or anything Claude should know', hidden: !a.note });
       noteBox.value = a.note;
-      const noteBtn = h('button', { class: 't-btn is-ghost is-sm', type: 'button' }, a.note ? 'Note' : 'Add a note');
+      const noteBtn = h('button', { class: 'k-btn is-ghost is-sm', type: 'button' }, a.note ? 'Note' : 'Add a note');
       noteBtn.addEventListener('click', () => {
         noteBox.hidden = !noteBox.hidden;
         if (!noteBox.hidden) { noteBox.focus(); anim(noteBox, { opacity: [0, 1], transform: ['translateY(-4px)', 'translateY(0px)'] }); }

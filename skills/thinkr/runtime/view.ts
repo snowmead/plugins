@@ -5,7 +5,8 @@
      pan    drag with the left or middle button or a finger (vertical page scroll wins until zoomed in), wheel once
            zoomed in, arrow keys
      reset  0, or the reset button; double-click an edge to restore the figure's size */
-import { h, ICON } from './dom';
+import { h } from '../kit/web/dom';
+import { ICON } from '../kit/web/icons';
 
 interface Box { x: number; y: number; w: number; h: number }
 const MIN_K = 0.5, MAX_K = 8, PAD = 12;
@@ -34,9 +35,9 @@ export function panZoom(el: HTMLElement, stage: HTMLElement) {
     if (!touched) { view = { ...fit }; draw(); }
   };
 
-  const zoomOut = h('button', { class: 't-btn is-icon is-sm', type: 'button', 'aria-label': 'Zoom out', title: 'Zoom out (−)', html: ICON.minus, onclick: () => zoomBy(1 / 1.5) });
-  const zoomIn = h('button', { class: 't-btn is-icon is-sm', type: 'button', 'aria-label': 'Zoom in', title: 'Zoom in (+)', html: ICON.plus, onclick: () => zoomBy(1.5) });
-  const level = h('button', { class: 't-btn is-sm t-zoom-level', type: 'button', 'aria-label': 'Reset view', title: 'Reset view (0)', onclick: () => reset() }, '100%');
+  const zoomOut = h('button', { class: 'k-btn is-icon is-sm', type: 'button', 'aria-label': 'Zoom out', title: 'Zoom out (−)', html: ICON.minus, onclick: () => zoomBy(1 / 1.5) });
+  const zoomIn = h('button', { class: 'k-btn is-icon is-sm', type: 'button', 'aria-label': 'Zoom in', title: 'Zoom in (+)', html: ICON.plus, onclick: () => zoomBy(1.5) });
+  const level = h('button', { class: 'k-btn is-sm t-zoom-level', type: 'button', 'aria-label': 'Reset view', title: 'Reset view (0)', onclick: () => reset() }, '100%');
   stage.append(h('div', { class: 't-zoombar', 'data-uncommentable': '' }, zoomOut, level, zoomIn));
 
   function draw() {

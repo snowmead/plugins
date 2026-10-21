@@ -21,8 +21,9 @@ narrow a run.
 /snowmead:changelog dry-run    # write it and show me; save and post nothing
 ```
 
-The page is a quiet feed of entries on a date rail, in Geist, with six soft UI sounds (earshot) that wait for your
-first click. It carries its fonts and sounds inline and reads its entries live.
+The page is a quiet feed of entries on a date rail, in Geist, with soft UI sounds (earshot) that wait for your first
+click. It shares its look, its sounds and its bar with [thinkr](../thinkr) and [guided-review](../guided-review)
+through the [kit](../../kit), carries its fonts and sounds inline, and reads its entries live.
 
 ## Install
 
@@ -64,7 +65,8 @@ Run these in this folder, after `bun install`:
 SKILL.md                          what Claude reads first
 references/                       writing.md, format.md
 examples/                         entry.ts, stats.json, changelog.json (a made-up "Relay" day)
-runtime/                          TypeScript runtime, CSS, fonts, sounds
+runtime/                          TypeScript runtime, CSS
+kit/                              link to the shared kit: tokens, fonts, sounds, UI parts, build helpers
 scripts/                          gather.ts, entry.ts, scenes.ts, build.ts, shot.ts (used by the skill); test.ts
 package.json, bun.lock            dev dependencies (TypeScript, Bun's types)
 ```

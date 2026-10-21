@@ -49,7 +49,8 @@ morning. The session it runs in needs `gh`, the repository's checkout, and a Sla
 | `examples/entry.ts` | A complete entry. Copy it for each run. |
 | `references/writing.md` | How to write an entry, and the prompt for the digest workers. Read it before your first entry. |
 | `references/format.md` | The config, `stats.json`, the entry document and the scene builder, field by field |
-| `runtime/` | The page's TypeScript, CSS, fonts and sounds. `build.ts` inlines all of it. |
+| `runtime/` | The page's TypeScript and CSS. `build.ts` inlines them with the kit's. |
+| `kit/` | What the page shares with the other Artifact skills: tokens, fonts, sounds, the bar and buttons, build helpers. |
 
 The skill lives at `${CLAUDE_SKILL_DIR}`; run its scripts by that full path, exactly as written below. **Before the
 first run**, check `bun --version` and `gh auth status`. When Bun is missing, stop and ask the user to install it
@@ -120,10 +121,10 @@ Edit `runtime/`, run `bun run test` in this skill's folder, build with `--entrie
 
 The page keeps these promises:
 
-- No sound plays before the reader's first click or key press. One switch mutes; the choice stays in the browser.
-  Sounds pause while the tab is hidden.
-- Sounds play on opening an entry, going back, the switch, copying a link, and once for an entry newer than the last
-  one this browser saw. Scrolling, loading and plain links stay silent.
+- No sound plays before the reader's first click or key press. The speaker button mutes; the choice stays in the
+  browser. Sounds pause while the tab is hidden.
+- Sounds play on opening an entry, going back, the speaker button, copying a link, and once for an entry newer than
+  the last one this browser saw. Scrolling, loading and plain links stay silent.
 - Hover ticks play only with a mouse or trackpad, at most one every 80 ms, 12 dB under the other sounds.
 
 ## Rules

@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["runtime/**/*.ts", "scripts/**/*.ts"]
+  "include": ["runtime/**/*.ts", "scripts/**/*.ts", "kit/**/*.ts"]
 }

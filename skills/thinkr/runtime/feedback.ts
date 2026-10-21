@@ -4,9 +4,10 @@
    with Send to Claude, which wakes the session. Where a viewer cannot send, the summary is copied for the chat. */
 import type { CanSendToClaude, CapabilityMap, CommentsCap, DocRef } from './types';
 import type { Question } from './questions';
-import { copyText, h, say, store } from './dom';
+import { copyText, h, store } from '../kit/web/dom';
+import { sound } from '../kit/web/sound';
+import { toast } from '../kit/web/toast';
 import { anim } from './libs';
-import { sound } from './sound';
 
 const MAX_BYTES = 3900; // a comment holds 4 KiB
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -30,19 +31,19 @@ export function createDock({ page, version, key, questions, onChange, jump }: Do
   const progress = h('button', { class: 't-progress', type: 'button', title: 'Go to the next open question' },
     h('span', { class: 't-meter' }, fill), h('span', {}, count, h('span', { class: 't-plabel' }, ' answered')));
   progress.addEventListener('click', () => { const q = open()[0]; if (q) jump(q.el); });
-  const sendBtn = h('button', { class: 't-btn is-sm', type: 'button', 'aria-expanded': 'false', 'aria-controls': 't-composer' }, 'Send feedback');
-  const approveBtn = h('button', { class: 't-btn is-sm is-primary', type: 'button', 'aria-expanded': 'false', 'aria-controls': 't-composer' }, 'Approve plan');
+  const sendBtn = h('button', { class: 'k-btn is-sm', type: 'button', 'aria-expanded': 'false', 'aria-controls': 't-composer' }, 'Send feedback');
+  const approveBtn = h('button', { class: 'k-btn is-sm is-primary', type: 'button', 'aria-expanded': 'false', 'aria-controls': 't-composer' }, 'Approve plan');
 
   // ---------------------------------------------------------------- panel
   const heading = h('b');
   const meta = h('span', { class: 't-composer-meta' });
   const warnText = h('span');
-  const warnJump = h('button', { class: 't-btn is-ghost is-sm', type: 'button' }, 'Show me');
+  const warnJump = h('button', { class: 'k-btn is-ghost is-sm', type: 'button' }, 'Show me');
   const warn = h('p', { class: 't-composer-warn', hidden: true }, warnText, warnJump);
   const box = h('textarea', { class: 't-field', id: 't-composer-text', rows: 3, maxlength: 2000, placeholder: 'Anything else Claude should know? Optional.' });
   box.value = message;
-  const cancel = h('button', { class: 't-btn is-ghost is-sm', type: 'button' }, 'Cancel');
-  const submit = h('button', { class: 't-btn is-primary is-sm', type: 'submit' }, 'Submit');
+  const cancel = h('button', { class: 'k-btn is-ghost is-sm', type: 'button' }, 'Cancel');
+  const submit = h('button', { class: 'k-btn is-primary is-sm', type: 'submit' }, 'Submit');
   const hint = h('span', { class: 't-composer-hint' }, h('kbd', {}, MAC ? '⌘' : 'Ctrl'), h('kbd', {}, '↵'));
   const form = h('form', { class: 't-composer', id: 't-composer', 'aria-label': 'Send to Claude' },
     h('div', { class: 't-composer-head' }, heading, meta), warn, box, h('div', { class: 't-composer-foot' }, hint, cancel, submit));
@@ -141,7 +142,7 @@ export function createDock({ page, version, key, questions, onChange, jump }: Do
   };
   const sent = (msg: string) => {
     sound.play('send');
-    say(msg);
+    toast(msg);
     message = '';
     box.value = '';
     store.set(draftKey, '');
@@ -155,11 +156,11 @@ export function createDock({ page, version, key, questions, onChange, jump }: Do
     const now = new Date().toISOString();
     const extra = { sentAt: now, ...(approved ? { approved: { version, at: now } } : {}) };
     const draft = message;
-    const reopen = (msg: string) => { show(approved); box.value = draft; say(msg); };
+    const reopen = (msg: string) => { show(approved); box.value = draft; toast(msg); };
     hide();
     if (canSend === 'available' && comments) {
       const c = comments;
-      say(approved ? 'Approving…' : 'Sending…');
+      toast(approved ? 'Approving…' : 'Sending…');
       try {
         await Promise.all([write(extra), c.anchorFor(page.querySelector('h1') ?? page).then((anchor) => c.sendToClaude({ anchor, text }))]);
         return sent(approved ? 'Approved. Claude will reply in the comment thread.' : 'Sent. Claude will reply in the comment thread.');

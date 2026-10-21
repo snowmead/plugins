@@ -44,9 +44,9 @@ Five semantic colors: `c1` blue, `c2` amber, `c3` green, `c4` pink, `c5` violet.
 same meaning everywhere: `<span class="c1">learning rate</span>` in text, `var(--c1)` in SVG, `\col{1}{\eta}` in math,
 `fig.color('c1')` in a shader. Never let color be the only signal.
 
-Tokens for page styles and SVG: `--bg`, `--fg`, `--card`, `--muted`, `--muted-fg`, `--border`, `--primary`,
-`--primary-fg`, `--ok`, `--bad`, `--c1`…`--c5`, `--font`, `--mono`, `--radius`. Both themes are handled; never write
-a literal color.
+Tokens for page styles and SVG: `--bg`, `--fg`, `--fg-2`, `--muted-fg`, `--faint`, `--card`, `--muted`, `--border`,
+`--border-strong`, `--primary`, `--primary-fg`, `--ok`, `--bad`, `--c1`…`--c5`, `--font`, `--mono`, `--radius`. Both
+themes are handled; never write a literal color.
 
 ## Questions
 

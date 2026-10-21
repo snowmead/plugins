@@ -1,5 +1,6 @@
 /* Shared types: diff.json (gather.ts writes it), guide.json (the agent writes it), the data build.ts embeds in the
    page, and the slice of @pierre/diffs, @pierre/trees and mermaid the runtime calls. */
+import type { ThemeType } from '../kit/web/types';
 
 // ---------------------------------------------------------------- diff.json
 export type Kind = 'core' | 'docs' | 'database' | 'tests' | 'generated';
@@ -108,13 +109,10 @@ export interface PagePr {
 export interface PageData {
   libs: Record<'diffs' | 'trees', string>;
   diffStyle: DiffStyle;
-  sounds: Record<string, { uri: string; db: number }>;
   prs: PagePr[];
 }
-export type SoundName = 'select' | 'deselect' | 'nav' | 'toggle' | 'reveal';
 
 // ---------------------------------------------------------------- the library slices the runtime uses
-export type ThemeType = 'light' | 'dark' | 'system';
 export interface PierreHunkSeparator { hunkIndex: number; lines: number; lineCountKnown?: boolean; expandable?: boolean }
 export interface PierreAnnotation<T> { side: 'additions' | 'deletions'; lineNumber: number; metadata: T }
 export interface PierreFileDiffMeta { isPartial: boolean }
@@ -148,8 +146,4 @@ export interface PierreTrees {
     onSelectionChange?: (paths: string[]) => void;
     unsafeCSS?: string;
   }) => PierreFileTree;
-}
-
-declare global {
-  interface Window { webkitAudioContext?: typeof AudioContext }
 }

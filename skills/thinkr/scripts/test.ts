@@ -3,14 +3,13 @@
    reader would see after each action. Run it after changing anything in runtime/.
 
      bun scripts/test.ts        # needs Chrome; set CHROME when it is not in a usual place */
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { browser, findChrome } from '../kit/build/chrome';
 
 const ROOT = join(import.meta.dir, '..');
-const chrome = [process.env.CHROME, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', Bun.which('google-chrome'), Bun.which('chromium')]
-  .find((p) => p && existsSync(p));
-if (!chrome) { console.log('No Chrome found. Set CHROME=/path/to/chrome.'); process.exit(1); }
+findChrome();
 
 // Each case runs in the page; `r` collects facts, `expect` lists what they must be, and `budget` caps timings
 // in ms: t(fn) times the synchronous work a click or input does before the browser can paint the result. An
@@ -52,7 +51,7 @@ const cases: Record<string, { run: string; expect: Record<string, unknown>; budg
 
       // the send panel
       const form = $('#t-composer');
-      ms.panel = t(() => $('.t-dock > .t-btn.is-primary').click());
+      ms.panel = t(() => $('.t-dock > .k-btn.is-primary').click());
       r.panel = form.classList.contains('is-open') && $('.t-composer-head b').textContent;
       r.panelWarn = !$('.t-composer-warn').hidden && $('.t-composer-warn span').textContent;
       const box = $('#t-composer-text');
@@ -60,7 +59,7 @@ const cases: Record<string, { run: string; expect: Record<string, unknown>; budg
       r.draft = JSON.parse(localStorage.getItem('thinkr:api-rate-limits:plan:message'));
       form.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       r.escCloses = !form.classList.contains('is-open');
-      $('.t-dock > .t-btn:not(.is-primary)').click();
+      $('.t-dock > .k-btn:not(.is-primary)').click();
       r.sendPanel = form.classList.contains('is-open') && $('.t-composer-head b').textContent;
       r.sendNoWarn = $('.t-composer-warn').hidden;
       r.draftKept = box.value;
@@ -125,46 +124,6 @@ const cases: Record<string, { run: string; expect: Record<string, unknown>; budg
     expect: { checkDisabled: true, explainHidden: true, wrong: true, explainShown: true, verdict: 'Correct', noOther: true, output: '0.24', math: true, code: true, motion: true },
   },
 };
-
-// ---------------------------------------------------------------- a minimal DevTools protocol driver
-// Real time, not --virtual-time-budget: under virtual time the clock stops during synchronous code (timings read
-// 0) and animation frames never fire.
-async function browser(profile: string) {
-  const proc = Bun.spawn([chrome!, '--headless=new', '--remote-debugging-port=0', '--window-size=1440,900', '--no-first-run',
-    '--no-default-browser-check', `--user-data-dir=${profile}`, 'about:blank'], { stderr: 'ignore', stdout: 'ignore' });
-  const portFile = join(profile, 'DevToolsActivePort');
-  for (let i = 0; i < 100 && !existsSync(portFile); i++) await Bun.sleep(50);
-  const port = (await Bun.file(portFile).text()).split('\n')[0];
-  const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json() as { type: string; webSocketDebuggerUrl: string }[];
-  const ws = new WebSocket(targets.find((t) => t.type === 'page')!.webSocketDebuggerUrl);
-  await new Promise((ok) => ws.addEventListener('open', ok, { once: true }));
-  let id = 0;
-  const waiting = new Map<number, (v: any) => void>();
-  const events = new Map<string, () => void>();
-  const errors: string[] = []; // any exception or console.error on the page fails the test
-  ws.addEventListener('message', (e) => {
-    const msg = JSON.parse(String(e.data));
-    if (msg.id) return waiting.get(msg.id)?.(msg);
-    if (msg.method === 'Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails.exception?.description ?? msg.params.exceptionDetails.text);
-    if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') errors.push(msg.params.args.map((a: any) => a.value ?? a.description).join(' '));
-    events.get(msg.method)?.();
-  });
-  const send = (method: string, params: object = {}) => new Promise<any>((ok) => { waiting.set(++id, ok); ws.send(JSON.stringify({ id, method, params })); });
-  await Promise.all([send('Page.enable'), send('Runtime.enable')]);
-  return {
-    errors,
-    async open(url: string) {
-      const loaded = new Promise<void>((ok) => events.set('Page.loadEventFired', ok));
-      await send('Page.navigate', { url });
-      await loaded;
-    },
-    async run(code: string) {
-      const res = await send('Runtime.evaluate', { expression: code, awaitPromise: true, returnByValue: true, userGesture: true });
-      return res.result?.exceptionDetails ? 'ERR ' + (res.result.exceptionDetails.exception?.description ?? 'error') : res.result?.result?.value;
-    },
-    close() { ws.close(); proc.kill(); },
-  };
-}
 
 const tmp = mkdtempSync(join(tmpdir(), 'thinkr-test-'));
 let failed = 0;

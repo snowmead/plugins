@@ -1,9 +1,11 @@
-/* thinkr runtime entry. build.ts bundles this folder with Bun.build and inlines it after
-   window.THINKR = { libs, sounds }. It turns the authored <t-page> into the finished page. */
+/* thinkr runtime entry. build.ts bundles this folder (and the kit it imports) with Bun.build and inlines it after
+   window.THINKR = { libs, use } and the kit's sounds. It turns the authored <t-page> into the finished page. */
 import type { Mode, Thinkr } from './types';
-import { copyText, h, ICON, onScroll, say, slug } from './dom';
+import { barLine, copyText, h, slug } from '../kit/web/dom';
+import { ICON, soundButton } from '../kit/web/icons';
+import { bindSoundButton, sound } from '../kit/web/sound';
+import { toast } from '../kit/web/toast';
 import { load, motionReady, warm } from './libs';
-import { sound } from './sound';
 import { createFigures, tokens } from './figure';
 import { createQuestions } from './questions';
 import { createDock } from './feedback';
@@ -21,23 +23,18 @@ function boot(page: HTMLElement) {
   const kind = mode === 'plan' ? 'Plan' : 'Explainer';
 
   // ---------------------------------------------------------------- frame: bar, layout, eyebrow
-  const soundBtn = h('button', { class: 't-btn is-ghost is-icon', type: 'button', 'aria-label': 'Sound', 'aria-pressed': String(sound.on), html: sound.on ? ICON.sound : ICON.mute });
-  soundBtn.addEventListener('click', () => {
-    sound.toggle();
-    soundBtn.innerHTML = sound.on ? ICON.sound : ICON.mute;
-    soundBtn.setAttribute('aria-pressed', String(sound.on));
-  });
-  const bar = h('div', { class: 't-bar', 'data-uncommentable': '' },
-    h('div', { class: 't-bar-title' }, h('span', { class: 't-badge is-muted' }, kind), h('span', {}, title)),
-    h('div', { class: 't-bar-end' }, soundBtn));
+  const end = h('div', { class: 't-bar-end', html: soundButton() });
+  bindSoundButton(end.firstElementChild as HTMLElement);
+  const bar = h('div', { class: 'k-bar t-bar', 'data-uncommentable': '' },
+    h('div', { class: 't-bar-title' }, h('span', { class: 'k-badge is-muted' }, kind), h('span', {}, title)), end);
   const layout = h('div', { class: 't-layout' });
   page.before(bar, layout);
   layout.append(page);
-  onScroll(() => bar.classList.toggle('is-scrolled', scrollY > (h1 ? h1.offsetTop + h1.offsetHeight - 52 : 8)));
+  barLine(bar, () => (h1 ? h1.offsetTop + h1.offsetHeight - 52 : 8));
 
   const header = page.querySelector('header');
   if (header && !header.querySelector('.t-eyebrow'))
-    header.prepend(h('div', { class: 't-eyebrow' }, h('span', { class: 't-badge' }, kind), h('span', {}, 'Version ' + version)));
+    header.prepend(h('div', { class: 't-eyebrow' }, h('span', { class: 'k-badge' }, kind), h('span', {}, 'Version ' + version)));
 
   // ---------------------------------------------------------------- content: callouts, tables, code, links
   // (code is highlighted and math rendered by build.ts, so nothing here waits on a library)
@@ -58,8 +55,8 @@ function boot(page: HTMLElement) {
     const pre = code.parentElement!;
     const wrap = h('div', { class: 't-code' });
     pre.before(wrap);
-    const copy = h('button', { class: 't-btn is-ghost is-icon is-sm t-copy', type: 'button', 'aria-label': 'Copy code', html: ICON.copy, 'data-uncommentable': '' });
-    copy.addEventListener('click', () => copyText(code.textContent ?? '').then(() => { say('Copied'); sound.play('select'); }, () => say('Copy failed. Select the code instead.')));
+    const copy = h('button', { class: 'k-btn is-ghost is-icon is-sm t-copy', type: 'button', 'aria-label': 'Copy code', html: ICON.copy, 'data-uncommentable': '' });
+    copy.addEventListener('click', () => copyText(code.textContent ?? '').then(() => { toast('Copied'); sound.play('select'); }, () => toast('Copy failed. Select the code instead.')));
     const name = pre.dataset.title, src = pre.dataset.href;
     if (name) wrap.append(h('div', { class: 't-code-head' }, src ? h('a', { href: src, class: 't-ext' }, name) : name, copy));
     else wrap.append(copy);

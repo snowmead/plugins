@@ -2,7 +2,8 @@
    title's menu. Each keeps its own panel (header, guide, diff, footer), its files, its review marks and its file tree,
    and every element id inside its panel starts with its prefix ("pr42-"), so two guides' chapter ids never meet. */
 import type { DiffFile, PagePr, PierreFileTree } from './types';
-import { D, store } from './dom';
+import { store } from '../kit/web/dom';
+import { D } from './dom';
 
 export type Marks = { c: Record<string, 1>; f: Record<string, 1> };
 export interface Ctx {

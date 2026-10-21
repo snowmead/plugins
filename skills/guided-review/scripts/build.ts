@@ -15,88 +15,17 @@
    least 14 days old (the artifact rule). A refresh runs on its own when libs.json is more than 7 days old, and is
    skipped quietly when offline. Speed: fonts are inline, the runtime is bundled and minified, and every library the
    page uses is preloaded from the head with its whole import graph, so nothing waits on a request chain. Flows are
-   mermaid blocks, which the artifact viewer draws itself; only the preview loads mermaid. */
+   mermaid blocks, which the artifact viewer draws itself; only the preview loads mermaid.
+
+   The fonts, the shared stylesheet, the sounds, the speaker button and the library pinning come from the kit
+   (kit/build/). */
 import { dirname, join, resolve } from 'node:path';
 import type { BeforeAfter, Chapter, Diff, DiffFile, Guide, Kind, PageData, PagePr, Stack, StateTable, Text } from '../runtime/types';
+import { ICON, bundle, preview, soundButton, soundScript, styles } from '../kit/build/page';
+import { libs, preloads } from '../kit/build/libs';
 
 const ROOT = join(import.meta.dir, '..');
 const RT = join(ROOT, 'runtime');
-const LIBS = join(RT, 'libs.json');
-const DAY = 86_400_000;
-
-// ---------------------------------------------------------------- libraries
-type Lib = { pkg: string; version: string; url: string; modules?: string[] };
-type LibFile = { note: string; checked: string; libs: Record<string, Lib> };
-
-/** Semver order, prereleases included: 1.0.0-beta.2 < 1.0.0-beta.10 < 1.0.0-rc.1 < 1.0.0 < 1.0.1. */
-function compare(a: string, b: string): number {
-  const split = (v: string) => { const i = v.indexOf('-'); return i < 0 ? [v, ''] : [v.slice(0, i), v.slice(i + 1)]; };
-  const [am, ap] = split(a), [bm, bp] = split(b);
-  const x = am.split('.').map(Number), y = bm.split('.').map(Number);
-  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
-  if (ap === bp) return 0;
-  if (!ap || !bp) return ap ? -1 : 1;
-  const p = ap.split('.'), q = bp.split('.');
-  for (let i = 0; i < Math.max(p.length, q.length); i++) {
-    if (p[i] === undefined || q[i] === undefined) return p[i] === undefined ? -1 : 1;
-    const [pn, qn] = [/^\d+$/.test(p[i]), /^\d+$/.test(q[i])];
-    if (pn && qn && +p[i] !== +q[i]) return +p[i] - +q[i];
-    if (pn !== qn) return pn ? -1 : 1;
-    if (p[i] !== q[i]) return p[i] < q[i] ? -1 : 1;
-  }
-  return 0;
-}
-
-async function refresh(major: boolean) {
-  const data: LibFile = await Bun.file(LIBS).json();
-  const cutoff = Date.now() - 14 * DAY;
-  const changed: string[] = [];
-  await Promise.all(Object.entries(data.libs).map(async ([name, lib]) => {
-    let meta: { time?: Record<string, string> };
-    try {
-      meta = await (await fetch(`https://registry.npmjs.org/${lib.pkg}`, { signal: AbortSignal.timeout(8000) })).json();
-    } catch (e) {
-      console.log(`  libs: ${name} not checked (${(e as Error).name}); keeping ${lib.version}`);
-      return;
-    }
-    // Stable releases of the same major; a prerelease pin also takes newer prereleases of its own version.
-    const main = lib.version.split('-')[0], pre = lib.version.includes('-');
-    let best: string | null = null;
-    for (const [v, t] of Object.entries(meta.time ?? {})) {
-      if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(v) || Date.parse(t) > cutoff) continue;
-      if (!major && v.split('.')[0] !== main.split('.')[0]) continue;
-      if (v.includes('-') && !(pre && v.split('-')[0] === main)) continue;
-      if (!best || compare(v, best) > 0) best = v;
-    }
-    if (best && compare(best, lib.version) > 0) { changed.push(`${name} ${lib.version} -> ${best}`); lib.version = best; }
-    lib.modules = await graph(lib.url.replace('{v}', lib.version)).catch(() => lib.modules ?? []);
-  }));
-  data.checked = new Date().toISOString().slice(0, 10);
-  await Bun.write(LIBS, JSON.stringify(data, null, 1) + '\n');
-  console.log('  libs: ' + (changed.length ? changed.join(', ') : 'up to date'));
-}
-
-/** Every module an ES module on jsDelivr imports statically, transitively, so a page can preload them in one round. */
-async function graph(entry: string): Promise<string[]> {
-  const seen = new Set([entry]), queue = [entry];
-  while (queue.length) {
-    const url = queue.shift()!;
-    const src = await (await fetch(url, { signal: AbortSignal.timeout(8000) })).text();
-    for (const [, spec] of src.matchAll(/(?:\bfrom|\bimport)\s*["']([^"']+)["']/g)) {
-      if (!spec.startsWith('/npm/') && !spec.startsWith('./') && !spec.startsWith('../')) continue;
-      const next = new URL(spec, url).href;
-      if (!seen.has(next)) { seen.add(next); queue.push(next); }
-    }
-  }
-  return [...seen];
-}
-
-async function libs(force: boolean, major: boolean) {
-  let data: LibFile = await Bun.file(LIBS).json();
-  const stale = Date.now() - Date.parse(data.checked) > 7 * DAY || Object.values(data.libs).some((l) => !l.modules?.length);
-  if (force || stale) { await refresh(major); data = await Bun.file(LIBS).json(); }
-  return Object.fromEntries(Object.entries(data.libs).map(([k, l]) => [k, { url: l.url.replace('{v}', l.version), modules: l.modules ?? [] }]));
-}
 
 const argv = Bun.argv.slice(2);
 /** --name=value or --name value. */
@@ -106,7 +35,7 @@ const opt = (name: string, fallback?: string) => {
   return argv[i].includes('=') ? argv[i].slice(name.length + 3) : (argv[i + 1] ?? fallback);
 };
 const flag = (f: string) => argv.includes(`--${f}`);
-const libmap = await libs(flag('refresh'), flag('major'));
+const libmap = await libs(join(RT, 'libs.json'), { force: flag('refresh'), major: flag('major') });
 if (!opt('guide') && !opt('stack')) {
   if (flag('refresh')) process.exit(0);
   console.log('usage: bun scripts/build.ts --diff=diff.json --guide=guide.json [--out=guide] [--check] [--repo=<checkout>]');
@@ -144,7 +73,7 @@ const chip = (path: string) => {
   const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
   return ext && ext.length <= 4 ? ext : 'txt';
 };
-const CHEV = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const CHEV = ICON.down;
 // The new, changed and removed node styles, in colors that read on both themes.
 const FLOW_CLASSES = [
   'classDef new stroke:#22a35a,stroke-width:2px;',
@@ -421,7 +350,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
 
   const links = (guide.links ?? []).map((l, i) => {
     if (!/^https:\/\//.test(l.href ?? '')) { err(`links[${i}]: href must start with https://.`); return ''; }
-    return `<a class="gr-btn" href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label)}</a>`;
+    return `<a class="k-btn is-sm" href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label)}</a>`;
   }).join('');
   const total = diff.files.reduce((s, f) => [s[0] + f.add, s[1] + f.del], [0, 0]);
   const headShort = diff.head.slice(0, 7);
@@ -456,7 +385,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     diffView: `<div class="gr-view gr-diff" hidden><aside class="gr-tree"><h3>${diff.files.length} files</h3><div class="gr-tree-host"></div></aside><div class="gr-diff-cards"></div></div>`,
     footer: `<footer class="gr-foot"><span>Guided review of ${ofWhat} at ${headShort}, ${diff.base.slice(0, 7)}..${headShort}</span><span>${keys}</span></footer>`,
     links: (links ? `<span class="gr-links">${links}</span>` : '')
-      + (pr.url ? `<a class="gr-btn primary" href="${esc(pr.url)}" target="_blank" rel="noopener"><span>Open ${num}<span class="long"> on GitHub</span></span><span aria-hidden="true">↗</span></a>` : ''),
+      + (pr.url ? `<a class="k-btn is-sm is-primary" href="${esc(pr.url)}" target="_blank" rel="noopener"><span>Open ${num}<span class="long"> on GitHub</span></span><span aria-hidden="true">↗</span></a>` : ''),
     data: {
       id, prefix: P, key: `gr:${pr.number ?? branch ?? diff.head}`, number: pr.number ?? null, title: pr.title,
       chapters: chapters.map((c, i) => ({ id: c.id, title: c.title, files: sel[i] ?? [] })), files: diff.files,
@@ -501,16 +430,13 @@ function picker(self: Built, i: number) {
 }
 
 const PR_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm0 2.122a2.25 2.25 0 1 0-1.5 0v5.256a2.25 2.25 0 1 0 1.5 0V5.372ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM11.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm.75-1.372V6.25A2.25 2.25 0 0 0 9.75 4H8.56l.97-.97a.75.75 0 0 0-1.06-1.06L6.22 4.22a.75.75 0 0 0 0 1.06l2.25 2.25a.75.75 0 0 0 1.06-1.06l-.97-.97h1.19a.75.75 0 0 1 .75.75v4.378a2.25 2.25 0 1 0 1.5 0Z"/></svg>';
-const SOUND_ICON = '<svg class="on" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 6h2l3-2.5v9L4.5 10h-2z"/><path d="M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6.3 6.3 0 0 1 0 9"/></svg>'
-  + '<svg class="off" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 6h2l3-2.5v9L4.5 10h-2z"/><path d="m10.5 6 4 4M14.5 6l-4 4"/></svg>';
-
 // Each pull request's parts carry data-pr, and only the chosen one's show: its crumbs, its progress and links in the
 // bar, and its panel (header, guide, diff, footer). The tabs, the layout switch and the sound stay.
 const hide = (i: number) => (i ? ' hidden' : '');
 const markup = prs.map((p, i) => `<div class="gr-wrap gr-crumbs" data-pr="${p.id}"${hide(i)}>${PR_ICON}<span>${p.crumbs}</div>`).join('\n') + `
-<div class="gr-bar"><div class="gr-wrap">
-<div class="gr-tabs" role="tablist"><button type="button" class="gr-tab" role="tab" data-view="guide" aria-selected="true">Guide</button><button type="button" class="gr-tab" role="tab" data-view="diff" aria-selected="false">Diff</button></div>
-<span class="gr-spacer"></span>${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span><button type="button" class="gr-icon" id="gr-sound" aria-label="Sound" aria-pressed="true" title="Sound">${SOUND_ICON}</button>${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
+<div class="k-bar gr-bar"><div class="gr-wrap">
+<div class="k-seg is-sm gr-tabs" role="tablist"><button type="button" class="gr-tab" role="tab" data-view="guide" aria-selected="true">Guide</button><button type="button" class="gr-tab" role="tab" data-view="diff" aria-selected="false">Diff</button></div>
+<span class="gr-spacer"></span>${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span>${soundButton('k-btn is-ghost is-icon is-sm')}${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
 </div></div>
 <div class="gr-wrap">
 ${prs.map((p, i) => `<div class="gr-pr" id="${multi ? p.id : 'gr-pr'}" data-pr="${p.id}"${hide(i)}>
@@ -527,30 +453,12 @@ ${p.footer}
 <nav class="gr-rail" aria-label="Chapters"></nav>`;
 
 // ---------------------------------------------------------------- pack
-async function fontFaces() {
-  const { faces } = await Bun.file(join(RT, 'fonts', 'fonts.json')).json() as { faces: { family: string; weight: string; range: string; file: string }[] };
-  const css = await Promise.all(faces.map(async (f) => {
-    const b64 = Buffer.from(await Bun.file(join(RT, 'fonts', f.file)).arrayBuffer()).toString('base64');
-    return `@font-face{font-family:'${f.family}';font-style:normal;font-weight:${f.weight};font-display:swap;src:url(data:font/woff2;base64,${b64}) format('woff2');unicode-range:${f.range}}`;
-  }));
-  return css.join('\n') + '\n';
-}
-async function runtime() {
-  const out = await Bun.build({ entrypoints: [join(RT, 'index.ts')], target: 'browser', format: 'iife', minify: true });
-  if (!out.success) { for (const log of out.logs) console.log('  error ' + log); process.exit(1); }
-  return (await out.outputs[0].text()).replaceAll('</script', '<\\/script');
-}
-
-const hints = ['diffs', 'trees'].flatMap((k) => (libmap[k].modules.length ? libmap[k].modules : [libmap[k].url]))
-  .map((m) => `<link rel="modulepreload" href="${m}" crossorigin>`).join('\n');
-const { sounds } = await Bun.file(join(RT, 'sounds.json')).json() as { sounds: Record<string, { uri: string; db: number }> };
 const data: PageData = {
   libs: { diffs: libmap.diffs.url, trees: libmap.trees.url },
   diffStyle,
-  sounds: Object.fromEntries(['select', 'deselect', 'nav', 'toggle', 'reveal'].map((k) => [k, { uri: sounds[k].uri, db: sounds[k].db }])),
   prs: prs.map((p) => p.data),
 };
-const [css, fonts, js] = await Promise.all([Bun.file(join(RT, 'guide.css')).text(), fontFaces(), runtime()]);
+const [css, sounds, js] = await Promise.all([styles(join(RT, 'guide.css')), soundScript(['select', 'deselect', 'nav', 'toggle', 'reveal']), bundle(join(RT, 'index.ts'))]);
 // The title first (the viewer reads it from the first 8 KB), then preloads so the libraries download while the page
 // parses; the data and the runtime go after the markup they fill.
 const one = prs[0];
@@ -558,16 +466,14 @@ const nums = prs.filter((p) => p.number != null).map((p) => `#${p.number}`);
 const name = multi
   ? stack?.name ?? (nums.length === prs.length ? `Guided review ${nums[0]}–${nums.at(-1)}` : `Review of ${prs.length} pull requests`)
   : one.name ?? (one.number != null ? `Guided review #${one.number}` : `Review of ${one.branch ?? inputs[0].diff.head.slice(0, 7)}`);
-const page = `<title>${esc(name)}</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n${hints}\n`
-  + `<style>\n${fonts}${css}</style>\n${markup}\n`
+const page = `<title>${esc(name)}</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n${preloads(['diffs', 'trees'], libmap)}\n`
+  + `<style>\n${css}</style>\n${markup}\n`
   + `<script type="application/json" id="gr-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>\n`
-  + `<script>\n${js}</script>\n`;
+  + `${sounds}<script>\n${js}</script>\n`;
 await Bun.write(`${stem}.artifact.html`, page);
 // The preview has no artifact viewer to draw the flows, so it loads mermaid itself.
 const mermaid = flows ? `<script type="module">import mermaid from '${libmap.mermaid.url}';
-mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'neutral', fontFamily: 'JetBrains Mono, monospace' });
+mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'neutral', fontFamily: 'Geist Mono, monospace' });
 await mermaid.run({ querySelector: 'pre.mermaid', suppressErrors: true });</script>\n` : '';
-await Bun.write(`${stem}.preview.html`,
-  '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>\n'
-  + page + mermaid + '</body></html>\n');
+await Bun.write(`${stem}.preview.html`, preview(page, '', mermaid));
 console.log(`ok    ${warns.length} warning(s), ${Math.round(page.length / 1024)} KB\n      publish: ${stem}.artifact.html\n      preview: ${stem}.preview.html`);

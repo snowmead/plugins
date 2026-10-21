@@ -4,12 +4,13 @@
    Code renders with @pierre/diffs and the Diff tab's tree with @pierre/trees, both imported from the pinned jsDelivr
    URLs in the data. */
 import type { DiffStyle } from './types';
-import { $$, T0 } from './dom';
+import { $$ } from '../kit/web/dom';
+import { sound } from '../kit/web/sound';
+import { T0 } from './dom';
 import { cards, setDiffStyle, setFold, startDiffStyle, STEP } from './cards';
 import { type Ctx, active, byId, byOwnId, ctxOf, ctxs, diffOf } from './ctx';
 import { markChapter, markFile, progress, saveMarks } from './marks';
 import { choose, current, go, jump, onScroll, pin, show, step, toCard, view } from './nav';
-import { sound } from './sound';
 
 /** Mark a chapter from a click or a key, with its sound; the last chapter reviewed sounds its own. */
 function reviewChapter(c: Ctx, id: string, on: boolean) {
@@ -47,7 +48,6 @@ document.addEventListener('click', (e) => {
   const c = ctxOf(t) ?? active();
   if (t.classList.contains('gr-pick-btn')) { setList(t, t.getAttribute('aria-expanded') !== 'true'); return; }
   if (t.dataset.pick) { pick(byId(t.dataset.pick)); return; }
-  if (t.id === 'gr-sound') { sound.toggle(); return; }
   if (t.dataset.diffStyle) { if (setDiffStyle(t.dataset.diffStyle as DiffStyle)) sound.play('toggle'); return; }
   if (t.classList.contains('gr-tab')) {
     if (t.dataset.view !== view()) sound.play('toggle');
@@ -122,7 +122,6 @@ function start() {
   const rest = c.pr.prefix && hash.startsWith(c.pr.prefix) ? hash.slice(c.pr.prefix.length) : hash;
   for (const x of ctxs) progress(x);
   choose(c);
-  sound.show();
   startDiffStyle();
   if (rest === 'diff') show('diff');
   else if (rest && byOwnId(c, rest) && !byOwnId(c, rest)!.classList.contains('gr-pr')) pin(byOwnId(c, rest)!);
