@@ -69,7 +69,7 @@ Run these in this folder, after `bun install`:
 
 ```
 SKILL.md                          what Claude reads first
-references/                       guide-format.md, writing.md
+references/                       guide-format.md, writing.md, stack.md
 examples/                         demo.guide.json, demo-43.guide.json, and demo/ (the demo's base, its head and the PR stacked on it)
 runtime/                          TypeScript runtime, CSS, library pins
 kit/                              link to the shared kit: tokens, sounds, UI parts, build helpers

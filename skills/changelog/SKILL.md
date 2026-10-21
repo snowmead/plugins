@@ -3,7 +3,7 @@ name: changelog
 description: Writes a changelog entry for a repository. It gathers the pull requests merged since the last entry, or in the last N days, writes them up as features with detail, animated scenes and PR links, saves the entry to a Claude Artifact changelog page, and posts a summary to Slack. Runs the same whether a person asks or a scheduled routine fires. Use when asked to run or write the changelog or a brief, to say what shipped or merged since the last entry or in the last N days, to set the changelog up for a repository, or to change its page.
 argument-hint: "[days] [no-slack] [dry-run]"
 license: Apache-2.0. Complete terms in LICENSE.txt
-compatibility: Claude Code, or another agent with a shell that can publish claude.ai Artifacts and use their database. Needs Bun 1.2 or newer and the GitHub CLI (gh, logged in); a Slack connector to post; Chrome is optional, for screenshots.
+compatibility: Claude Code, or another agent with a shell that can publish claude.ai Artifacts and use their database. Needs Bun 1.2 or newer, jq, and the GitHub CLI (gh, logged in); a Slack connector to post; Chrome is optional, for screenshots.
 metadata:
   repository: https://github.com/snowmead/plugins
 allowed-tools: Bash(bun ${CLAUDE_SKILL_DIR}/scripts/gather.ts *) Bash(bun ${CLAUDE_SKILL_DIR}/scripts/entry.ts *) Bash(bun ${CLAUDE_SKILL_DIR}/scripts/build.ts *) Bash(bun ${CLAUDE_SKILL_DIR}/scripts/shot.ts *)
@@ -31,8 +31,8 @@ A run takes up to three options, from the arguments or the request's words:
 **A run never stops to ask.** It goes the same way when a person asks in the chat and when a routine or cron fires
 it, so it can run unattended. The Slack channel in the config is the standing go-ahead to post there; the options are
 how a person narrows a run. If something fails, stop, post nothing, and report what failed. The one exception is
-setup: when the repository has no config and a person asked in the chat, set it up with them first (below). An
-unattended run with no config stops and reports that setup is needed.
+setup: when the repository has no config and a person asked in the chat, set it up with them first
+([page.md](references/page.md)). An unattended run with no config stops and reports that setup is needed.
 
 To schedule it, make a routine or cron job whose prompt runs this skill, such as `/snowmead:changelog 1` each weekday
 morning. The session it runs in needs `gh`, the repository's checkout, and a Slack connector for the post.
@@ -49,11 +49,10 @@ morning. The session it runs in needs `gh`, the repository's checkout, and a Sla
 | `examples/entry.ts` | A complete entry. Copy it for each run. |
 | `references/writing.md` | How to write an entry, and the prompt for the digest workers. Read it before your first entry. |
 | `references/format.md` | The config, `stats.json`, the entry document and the scene builder, field by field |
-| `runtime/` | The page's TypeScript and CSS. `build.ts` bundles them with the kit's. |
-| `kit/` | What the page shares with the other Artifact skills: tokens, the font link, sounds, the bar and buttons, build helpers. |
+| `references/page.md` | Setting the changelog up for a repository, and changing the page. Read it only for those. |
 
 The skill lives at `${CLAUDE_SKILL_DIR}`; run its scripts by that full path, exactly as written below. **Before the
-first run**, check `bun --version` and `gh auth status`. When Bun is missing, stop and ask the user to install it
+first run**, check `bun --version`, `jq --version` and `gh auth status`. When Bun is missing, stop and ask the user to install it
 (`curl -fsSL https://bun.sh/install | bash`, or `brew install oven-sh/bun/bun`); do not install it yourself.
 
 ## Run
@@ -62,9 +61,11 @@ Work in a folder of your own, such as `<scratchpad>/changelog/<date>/`. Run the 
 checkout: they read `.claude/changelog.json` at its top (or pass `--config <path>`).
 
 1. **Find the window.** Write down the time now, in UTC: the window ends there, so a PR that merges during the run
-   waits for the next one. With days, the window starts N days before. Otherwise `ArtifactData query` the page (its
-   link is `page` in the config) on collection `entries`, `order_by date desc`, `limit 1`: the window starts at that
-   entry's `window_end`. With no entries yet, use 7 days and say so in the report.
+   waits for the next one. Then `ArtifactData query` the page (its link is `page` in the config) on collection
+   `entries`, `order_by date desc`, `limit 1`, with `out_dir` set to `<work>/last`, so the newest entry is saved to a
+   file instead of read in. The result lists its `version`; take the rest with
+   `jq '{date, window_start, window_end}' <work>/last/entries/*.json`. With days, the window starts N days before;
+   otherwise at that entry's `window_end`, or, with no entries yet, 7 days before (say so in the report).
    A date has one entry. When the window ends on the newest entry's date (in the config's time zone), this run
    replaces that entry: without days, its window starts at the old entry's `window_start`, so it still covers every
    PR since then. The post says it replaces the earlier one.
@@ -81,12 +82,14 @@ checkout: they read `.claude/changelog.json` at its top (or pass `--config <path
 5. **Check and build.** `bun ${CLAUDE_SKILL_DIR}/scripts/entry.ts <work>/entry.ts <work>/stats.json <work>` writes
    `<work>/<date>.json` and `<work>/slack.md`, or prints what to fix. Fix every `error`; read every `warn`.
 6. **Look**, on a first run or with new kinds of scenes: `ArtifactData list` the entries with `out_dir` set to
-   `<work>/entries`, copy `<date>.json` there, then
+   `<work>` (it saves them in `<work>/entries/`), copy `<date>.json` there, then
    `bun ${CLAUDE_SKILL_DIR}/scripts/build.ts --out <work>/changelog --entries <work>/entries` and
    `bun ${CLAUDE_SKILL_DIR}/scripts/shot.ts '<work>/changelog.preview.html#<date>' <work>/shots`. Read the PNGs: no
    overlap, nothing clipped at phone width. One pass. A dry run stops after this step.
 7. **Save.** `ArtifactData set`, collection `entries`, doc id `<date>`, `file_path <work>/<date>.json`. A new document
-   takes no `if_version`; to replace one, `get` it and pass its `version` as `if_version`. Read it back with `get`.
+   takes no `if_version`; to replace the newest entry, pass the `version` step 1's query listed. Read it back to a
+   file, not into the chat: `get` with `out_dir` set to `<work>/saved`, then check
+   `[ "$(jq -S . <work>/saved/entries/<date>.json)" = "$(jq -S . <work>/<date>.json)" ]`.
 8. **Post**, unless `no-slack` or the config has no `slack`: send the text of `<work>/slack.md` to the config's
    `slack.channel` with the Slack connector's send-message tool (`slack_send_message` in Anthropic's Slack
    connector). Only after the save reads back. With no Slack tool in the session, post nothing and say so.
@@ -95,37 +98,10 @@ checkout: they read `.claude/changelog.json` at its top (or pass `--config <path
 
 The entry's `window_end` is where the next run starts, so a run records nothing else.
 
-## Set up
+## Set up, or change the page
 
-Once per repository, in the chat with the person who wants it.
-
-1. **Config.** Write `.claude/changelog.json` at the checkout's top ([format.md](references/format.md#config)): the
-   product's `name`; `repo` from `git remote get-url origin`; `timezone`, the team's IANA zone (ask; the machine's is
-   `bun -e 'console.log(Intl.DateTimeFormat().resolvedOptions().timeZone)'`); `slack.channel`, the channel ID to post
-   in (find it with the Slack connector's channel search, or `null` for no post); and `workflows`, the file names in
-   `.github/workflows/` of the CI and review workflows to count, if there are any.
-2. **Page.** `bun ${CLAUDE_SKILL_DIR}/scripts/build.ts --out <work>/changelog`, then publish
-   `<work>/changelog.artifact.html` with the Artifact tool: `icon` `changelog`, a one-sentence `description`, `files`
-   the map the build printed, and `capabilities` `{"db": {"rules": [{"path": "", "read": "view", "write":
-   "admin"}]}}` (everyone the page is shared with reads; only its editors write). Load the `artifact-design` and
-   `artifact-capabilities` skills first when the session has them; their contract wins where this file differs.
-3. **Link.** Put the page's link in the config as `page`, rebuild, and publish the same file again with the new
-   `files` map (leave `capabilities` out so the database stays): copied entry links now carry the page's own address.
-4. Ask the user to commit `.claude/changelog.json`, so every run and every teammate finds the same page. Then run.
-
-## Change the page
-
-Edit `runtime/`, run `bun run test` in this skill's folder, build with `--entries` and look at the shots. Then
-`read` the artifact at the config's `page` and publish the built file with the Artifact tool, that `url` and the
-`files` map the build printed. Leave `capabilities` out so the database and its rules stay.
-
-The page keeps these promises:
-
-- No sound plays before the reader's first click or key press. The speaker button mutes; the choice stays in the
-  browser. Sounds pause while the tab is hidden.
-- A sound only answers what the reader just did: opening an entry, going back, copying a link, the speaker button.
-  Hovering, scrolling, loading, the first click and a new entry stay silent, as on thinkr's and guided-review's pages.
-- The sounds are the kit's short ticks at the kit's levels. Do not add louder or longer ones for this page.
+Setting the changelog up for a repository (once, in the chat with the person who wants it) and changing the page
+itself are in [page.md](references/page.md). Read it only for those.
 
 ## Rules
 

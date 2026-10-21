@@ -47,6 +47,25 @@ Ask in plain words. The skill triggers on planning and explaining:
 Claude writes the page, checks it, publishes it, and gives you the link. On a plan page, answer the questions and
 submit; Claude reads your answers and messages, updates the page, and asks for a go before it builds.
 
+### On the page
+
+Every page gives its reader these, with nothing for Claude to write:
+
+- A sticky bar with the page name once they scroll, and a sound toggle. Sounds play after their first click.
+- "On this page" on wide screens: sections, with their questions one notch to the right and a dot that fills when a
+  question is answered. The highlight slides along the rail; a click glides to the entry.
+- In a plan, the dock at the bottom: the answered count (click it to go to the next open question), **Send feedback**
+  and **Approve plan**. Either button opens a panel above the dock with an optional message ("Anything else Claude
+  should know?") and **Submit** (⌘↵). Approving with open questions says how many are open, with a link to the first.
+- In a plan with `<t-amends>`, **Changes**: versions that fold, newest first, each change a one-line row with its
+  label; left of the page on wide screens, behind a Changes button in the bar on narrower ones. The current version
+  and any with news start open. Opening a row shows where it came from (Q and A for an answer, the quote for a
+  comment) and why, lights its changes (added words underlined, removed words struck through, removed blocks shown)
+  and glides to the first; the bar then shows where they are (2 / 3) with previous, next and close (Esc). One row is
+  open at a time; clicking it again closes it. Rows newer than the reader's last visit get a dot, and their count
+  shows on the Changes button.
+- Claude's own comment button (from the artifact viewer) works on any paragraph, figure, question or code line.
+
 ## Maintain
 
 Run these in this folder, after `bun install`:
@@ -64,7 +83,7 @@ ticks and clicks under 100 ms, matched in loudness. UI sound should confirm, nev
 
 ```
 SKILL.md                          what Claude reads first
-references/                       authoring.md, figures.md, loop.md
+references/                       authoring.md, figures.md, plan.md, vgpu.md
 templates/                        plan.html, explain.html (working examples)
 runtime/                          TypeScript runtime, CSS, library pins
 kit/                              link to the shared kit: tokens, sounds, UI parts, build helpers

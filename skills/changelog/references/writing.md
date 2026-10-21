@@ -17,9 +17,10 @@ Start one worker for each three PRs, all at once, with the Agent tool and `model
 >
 > 1. If the description or a review gives the change a score out of 5 and a one-line verdict, copy both verbatim.
 >    Otherwise write "no score".
-> 2. Write a faithful digest. Keep every number and named UI element exactly as the PR states them. Cover the problem
->    before, what changed (what a user sees now), API and data changes, migrations and setup steps after pulling, docs,
->    tests, proof (screenshots, videos), and follow-ups. Write "not stated" for anything the PR does not say.
+> 2. Write a faithful digest of at most 200 words. Keep every number and named UI element exactly as the PR states
+>    them. Cover what the PR says about the problem before, what changed (what a user sees now), API and data changes,
+>    migrations and setup steps after pulling, docs, tests, proof (screenshots, videos), and follow-ups. Leave out a
+>    topic the PR does not mention; never fill one in.
 >
 > Write all digests to `<work>/digest-<letter>.md`, one `## #<n> <title>` section per PR with its author, dates, size,
 > score and verdict, then the digest. Reply with the file path and one line per PR.

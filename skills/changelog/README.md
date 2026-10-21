@@ -40,7 +40,8 @@ agents, or as a plain skill: `npx skills add snowmead/plugins --skill changelog`
 
 ### Requirements
 
-- [Bun](https://bun.sh) 1.2 or newer, and the [GitHub CLI](https://cli.github.com) logged in (`gh auth status`).
+- [Bun](https://bun.sh) 1.2 or newer, [jq](https://jqlang.org), and the [GitHub CLI](https://cli.github.com) logged in
+  (`gh auth status`).
 - Claude's Artifact tool and its database, so runs happen in Claude Code or another Claude client that has them.
 - A Slack connector in the session, to post. Without one, a run saves the entry and says it did not post.
 - Optional: Google Chrome, for the screenshot check (`scripts/shot.ts`).
@@ -64,7 +65,7 @@ Run these in this folder, after `bun install`:
 
 ```
 SKILL.md                          what Claude reads first
-references/                       writing.md, format.md
+references/                       writing.md, format.md, page.md
 examples/                         entry.ts, stats.json, changelog.json (a made-up "Relay" day)
 runtime/                          TypeScript runtime, CSS
 kit/                              link to the shared kit: tokens, sounds, UI parts, build helpers
