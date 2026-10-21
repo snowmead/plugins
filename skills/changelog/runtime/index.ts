@@ -1,32 +1,20 @@
 /* The changelog page. It reads its entries live from its own database (collection "entries", one document per date),
    so a run adds an entry without republishing the page, and open views show it at once. The hash picks the view:
-   empty for the feed, a date for that entry. build.ts bundles this after the page's markup and its config. */
+   empty for the feed, a date for that entry. build.ts bundles this after the page's markup and its config.
+
+   Like thinkr and guided-review, it plays a sound only to answer what the reader just did: a view changing, a link
+   copied, the speaker button. Hovering, the first click and a new entry stay silent. */
 import type { Db, Entry } from './types';
-import { barLine, h, store } from '../kit/web/dom';
-import { afterFirstGesture, hoverTicks, sound } from '../kit/web/sound';
+import { barLine, h } from '../kit/web/dom';
+import { sound } from '../kit/web/sound';
 import { CFG, T0 } from './dom';
 import { viewOpened } from './scene';
 import { entryView, feedView } from './views';
 
-const SEEN_KEY = 'changelog-seen';
 const app = document.getElementById('app')!;
 let entries: Entry[] | null = null;
 let view: string | null = null;
 let feedScroll = 0;
-
-// The new-entry sound rings once, after the first gesture, when an entry is newer than the last one this browser saw.
-const newEntry = {
-  gestured: false, done: false,
-  check() {
-    if (this.done || !this.gestured || !entries) return;
-    this.done = true;
-    const newest = entries[0]?.date;
-    if (!newest) return;
-    const seen = store.get<string>(SEEN_KEY);
-    if (!seen || seen < newest) sound.play('reveal');
-    store.set(SEEN_KEY, newest);
-  },
-};
 
 function route(fromHashChange: boolean) {
   if (!entries) return;
@@ -57,8 +45,6 @@ function unavailable() {
 }
 const valid = (d: unknown): d is Entry => !!d && typeof (d as Entry).date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test((d as Entry).date);
 
-afterFirstGesture(() => { newEntry.gestured = true; newEntry.check(); });
-hoverTicks();
 barLine(document.querySelector('.k-bar')!);
 document.querySelectorAll('[data-name]').forEach((el) => { el.textContent = CFG.name; });
 performance.measure('changelog:boot', { start: T0, end: performance.now() });
@@ -75,6 +61,5 @@ performance.measure('changelog:boot', { start: T0, end: performance.now() });
     route(false);
     if (first) performance.measure('changelog:render', { start: t, end: performance.now() });
     if (!first) scrollTo(0, y);
-    newEntry.check();
-  }, () => { if (!entries) unavailable(); });
+  },() => { if (!entries) unavailable(); });
 })();

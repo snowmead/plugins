@@ -129,6 +129,7 @@ const expect: Record<string, unknown> = {
   title: 'Relay Changelog', entries: 3, dots: 1, lead: true, shipped: 2, brand: 'Relay',
   entryThemes: 2, prLinks: 2, prRows: 2, scoreCol: true, watch: 2, pager: 'Older', backToFeed: true, missing: true,
   copied: true, stripped: true, soundOff: 'false', muted: 'false', narrowFeed: true, narrowEntry: true,
+  unasked: '', openSound: 'nav',
 };
 
 const PRELUDE = `const r = {}, ms = {}, $ = (s) => document.querySelector(s), $$ = (s) => [...document.querySelectorAll(s)], sleep = (n) => new Promise((ok) => setTimeout(ok, n));
@@ -143,7 +144,15 @@ const RUN = `
   r.lead = !!$('#e-2026-10-20 figure.scene svg'); r.shipped = $$('#e-2026-10-20 .shipped li').length;
   r.stripped = !window.__pwned && !$('#e-2026-10-10 svg script') && !$('#e-2026-10-10 svg a') && !$('#e-2026-10-10 svg image') && !$('#e-2026-10-10 svg').hasAttribute('onload') && !!$('#e-2026-10-10 svg circle');
 
+  // Sounds only answer what the reader did: the first click and a mouse over the links play nothing, opening an entry does.
+  const heard = []; addEventListener('kit:sound', (e) => heard.push(e.detail));
+  document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  await sleep(300);
+  for (const a of $$('a, button')) { a.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' })); await sleep(90); }
+  r.unasked = heard.join(' ');
+
   ms.open = await go('#2026-10-20');
+  r.openSound = heard.at(-1);
   r.entryThemes = $$('.theme').length; r.prLinks = $$('.prlinks a').length; r.prRows = $$('.prs tbody tr').length;
   r.scoreCol = $$('.prs thead th').some((th) => th.textContent === 'Score'); r.watch = $$('.watch li').length;
   r.pager = $('.pager .prev .label')?.textContent.split(' ')[1];

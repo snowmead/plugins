@@ -123,9 +123,9 @@ The page keeps these promises:
 
 - No sound plays before the reader's first click or key press. The speaker button mutes; the choice stays in the
   browser. Sounds pause while the tab is hidden.
-- Sounds play on opening an entry, going back, the speaker button, copying a link, and once for an entry newer than
-  the last one this browser saw. Scrolling, loading and plain links stay silent.
-- Hover ticks play only with a mouse or trackpad, at most one every 80 ms, 12 dB under the other sounds.
+- A sound only answers what the reader just did: opening an entry, going back, copying a link, the speaker button.
+  Hovering, scrolling, loading, the first click and a new entry stay silent, as on thinkr's and guided-review's pages.
+- The sounds are the kit's short ticks at the kit's levels. Do not add louder or longer ones for this page.
 
 ## Rules
 

@@ -22,7 +22,7 @@ function rail(e: Entry, newest: boolean, full: boolean) {
 }
 
 function copyButton(date: string) {
-  const b = h('button', { class: 'k-btn is-sm', type: 'button', 'data-hover': true, html: ICON.link + 'Copy link' });
+  const b = h('button', { class: 'k-btn is-sm', type: 'button', html: ICON.link + 'Copy link' });
   b.addEventListener('click', () => {
     const url = linkFor(date);
     const done = () => { sound.play('select'); toast('Link copied'); };
@@ -45,14 +45,14 @@ export function feedView(entries: Entry[]): Node[] {
     list.append(h('li', { class: 'entry', id: 'e-' + e.date },
       rail(e, i === 0, false),
       h('article', { class: 'body' },
-        h('h2', { class: 'title' }, h('a', { href: '#' + e.date, 'data-hover': true, text: e.title || fmtDate(e.date) })),
+        h('h2', { class: 'title' }, h('a', { href: '#' + e.date, text: e.title || fmtDate(e.date) })),
         numsLine(e),
         h('p', { class: 'summary', text: e.summary || '' }),
         lead ? scene(lead.scene) : null,
         themes.length ? h('p', { class: 'label shipped-h', text: 'Shipped' }) : null,
         themes.length ? shipped : null,
         h('div', { class: 'actions' },
-          h('a', { class: 'more', href: '#' + e.date, 'data-hover': true }, 'Read the entry', h('span', { 'aria-hidden': 'true', text: '→' })),
+          h('a', { class: 'more', href: '#' + e.date }, 'Read the entry', h('span', { 'aria-hidden': 'true', text: '→' })),
           copyButton(e.date)))));
   });
   return [intro(), list];
@@ -79,7 +79,7 @@ function prTable(e: Entry) {
 
 export function entryView(entries: Entry[], date: string): Node[] {
   const i = entries.findIndex((e) => e.date === date);
-  const back = h('nav', { class: 'crumbs' }, h('a', { class: 'back', href: '#', 'data-hover': true }, h('span', { 'aria-hidden': 'true', text: '←' }), 'Changelog'));
+  const back = h('nav', { class: 'crumbs' }, h('a', { class: 'back', href: '#' }, h('span', { 'aria-hidden': 'true', text: '←' }), 'Changelog'));
   if (i < 0) return [back, h('p', { class: 'note', text: `There is no entry for ${date} in the changelog.` })];
   const e = entries[i];
   const body = h('article', { class: 'body' },
@@ -100,8 +100,8 @@ export function entryView(entries: Entry[], date: string): Node[] {
   const older = entries[i + 1], newer = entries[i - 1];
   if (older || newer) {
     body.append(h('nav', { class: 'pager', 'aria-label': 'Other entries' },
-      older ? h('a', { href: '#' + older.date, class: 'prev', 'data-hover': true }, h('span', { class: 'label', text: '← Older · ' + fmtDate(older.date) }), h('span', { class: 't', text: older.title })) : null,
-      newer ? h('a', { href: '#' + newer.date, class: 'next', 'data-hover': true }, h('span', { class: 'label', text: 'Newer · ' + fmtDate(newer.date) + ' →' }), h('span', { class: 't', text: newer.title })) : null));
+      older ? h('a', { href: '#' + older.date, class: 'prev' }, h('span', { class: 'label', text: '← Older · ' + fmtDate(older.date) }), h('span', { class: 't', text: older.title })) : null,
+      newer ? h('a', { href: '#' + newer.date, class: 'next' }, h('span', { class: 'label', text: 'Newer · ' + fmtDate(newer.date) + ' →' }), h('span', { class: 't', text: newer.title })) : null));
   }
   return [back, h('div', { class: 'entry single' }, rail(e, i === 0, true), body)];
 }

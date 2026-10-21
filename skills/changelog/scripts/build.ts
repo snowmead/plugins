@@ -25,7 +25,7 @@ const { config, errors } = await loadConfig(opt(argv, 'config'));
 if (!config) { for (const e of errors) console.log(`error ${e}`); process.exit(1); }
 
 const cfg: PageConfig = { name: config.name, url: config.page ?? '' };
-const [css, sounds, js] = await Promise.all([styles(join(RT, 'changelog.css')), soundScript(['nav', 'reveal', 'select', 'toggle', 'hover']), bundle(join(RT, 'index.ts'))]);
+const [css, sounds, js] = await Promise.all([styles(join(RT, 'changelog.css')), soundScript(['nav', 'select', 'toggle']), bundle(join(RT, 'index.ts'))]);
 const name = esc(config.name);
 // The title first (the viewer reads it from the first 8 KB, before the inline fonts), then the styles and markup; the
 // config and the script go after the markup they fill.
@@ -35,7 +35,7 @@ const page = `<title>${name} Changelog</title>
 ${css}</style>
 <header class="k-bar bar">
   <div class="bar-in">
-    <a class="brand" href="#" data-hover>
+    <a class="brand" href="#">
       <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="1" width="18" height="18" rx="5" fill="currentColor"/><path d="M6 10.5h3l1.5-4 2 7 1.5-3h0" fill="none" stroke="var(--bg)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span data-name>${name}</span><span class="sep">/</span><span class="sub">Changelog</span>
     </a>
