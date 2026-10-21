@@ -307,7 +307,7 @@ const STACK_RUN = `
   r.arrowMoves = document.activeElement?.dataset.pick;
   ms.pick = t(() => document.activeElement.click());
   r.picked = vis('.gr-pr')[0]?.dataset.pr; r.closed = vis('.gr-picklist').length === 0;
-  r.followers = [vis('.gr-crumbs .t')[0]?.textContent, vis('.gr-bar .k-btn.is-primary')[0]?.textContent.trim(), vis('.gr-progress')[0]?.textContent].join(' | ');
+  r.followers = [vis('.gr-head .t')[0]?.textContent, vis('.gr-bar .k-btn.is-primary')[0]?.textContent.trim(), vis('.gr-progress')[0]?.textContent].join(' | ');
   r.rail = [...document.querySelectorAll('.gr-rail button')].map((b) => b.dataset.target).join(' ');
   await until(() => vis('.gr-file diffs-container').length);
   ms.back = t(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: '[', bubbles: true })));

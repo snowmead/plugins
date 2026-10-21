@@ -88,7 +88,7 @@ interface Built {
   id: string; prefix: string; number: number | null; title: string; url: string | null; name?: string;
   base: string; branch: string | null; add: number; del: number; files: number; flows: number;
   errors: string[]; warns: string[]; report: string[];
-  crumbs: string; meta: string; sections: string; diffView: string; footer: string; links: string; data: PagePr;
+  meta: string; sections: string; diffView: string; footer: string; links: string; data: PagePr;
 }
 
 function buildPr(guide: Guide, diff: Diff, index: number): Built {
@@ -382,7 +382,6 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     id, prefix: P, number: pr.number ?? null, title: pr.title, url: pr.url ?? null, name: guide.name,
     base, branch, add: total[0], del: total[1], files: diff.files.length, flows,
     errors: errors.map((e) => tag + e), warns: warns.map((w) => tag + w), report,
-    crumbs: `${pr.number != null ? 'Pull requests' : 'Changes'}</span><span>›</span><span class="t">${esc(pr.title)}</span>${statHtml(total[0], total[1])}`,
     meta, sections: sections.join('\n'),
     diffView: `<div class="gr-view gr-diff" hidden><aside class="gr-tree"><h3>${diff.files.length} files</h3><div class="gr-tree-host"></div></aside><div class="gr-diff-cards"></div></div>`,
     footer: `<footer class="gr-foot"><span>Guided review of ${ofWhat} at ${headShort}, ${diff.base.slice(0, 7)}..${headShort}</span><span>${keys}</span></footer>`,
@@ -431,12 +430,10 @@ function picker(self: Built, i: number) {
     + `<div class="gr-pick-head"><span>${stacked ? `Stack of ${prs.length}, from its base` : `${prs.length} pull requests`}</span><span><kbd>[</kbd> <kbd>]</kbd></span></div>${items}</div></div>`;
 }
 
-const PR_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm0 2.122a2.25 2.25 0 1 0-1.5 0v5.256a2.25 2.25 0 1 0 1.5 0V5.372ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM11.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm.75-1.372V6.25A2.25 2.25 0 0 0 9.75 4H8.56l.97-.97a.75.75 0 0 0-1.06-1.06L6.22 4.22a.75.75 0 0 0 0 1.06l2.25 2.25a.75.75 0 0 0 1.06-1.06l-.97-.97h1.19a.75.75 0 0 1 .75.75v4.378a2.25 2.25 0 1 0 1.5 0Z"/></svg>';
-// Each pull request's parts carry data-pr, and only the chosen one's show: its crumbs, its progress and links in the
-// bar, and its panel (header, guide, diff, footer). The tabs, the layout switch and the sound stay.
+// Each pull request's parts carry data-pr, and only the chosen one's show: its progress and links in the bar, and its
+// panel (header, guide, diff, footer). The tabs, the layout switch and the sound stay.
 const hide = (i: number) => (i ? ' hidden' : '');
-const markup = prs.map((p, i) => `<div class="gr-wrap gr-crumbs" data-pr="${p.id}"${hide(i)}>${PR_ICON}<span>${p.crumbs}</div>`).join('\n') + `
-<div class="k-bar gr-bar"><div class="gr-wrap">
+const markup = `<div class="k-bar gr-bar"><div class="gr-wrap">
 <div class="k-seg is-sm gr-tabs" role="tablist"><button type="button" class="gr-tab" role="tab" data-view="guide" aria-selected="true">Guide</button><button type="button" class="gr-tab" role="tab" data-view="diff" aria-selected="false">Diff</button></div>
 <span class="gr-spacer"></span>${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span>${soundButton('k-btn is-ghost is-icon is-sm')}${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
 </div></div>

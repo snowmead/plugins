@@ -38,7 +38,7 @@ export function show(v: View) {
   $('.gr-rail')?.toggleAttribute('hidden', v !== 'guide');
   if (v === 'diff') renderDiff(c);
 }
-/** Put a pull request on screen: its crumbs, bar items and panel show, the others hide. */
+/** Put a pull request on screen: its bar items and panel show, the others hide. */
 export function choose(c: Ctx) {
   const was = active();
   setActive(c);

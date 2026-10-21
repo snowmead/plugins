@@ -38,10 +38,6 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 }
 
 /* ---------- bar ---------- */
-.gr-crumbs > span:not(.t) { white-space: nowrap; }
-.gr-crumbs { display: flex; align-items: center; gap: 8px; padding-block: 14px 0; color: var(--muted-fg); font-size: 13px; min-width: 0; }
-.gr-crumbs .t { color: var(--fg); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.gr-crumbs svg { flex: none; color: var(--add-fg); }
 /* the kit's bar (.k-bar), its width held to the page's by .gr-wrap; the tabs and the layout switch are the kit's
    segmented control, the links and the speaker its buttons */
 .gr-bar { padding-inline: 0; }
@@ -54,7 +50,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .gr-progress b { color: var(--fg); font-weight: 500; }
 
 /* ---------- several pull requests ---------- */
-/* Each pull request's crumbs, bar items and panel carry data-pr; only the chosen one's show. */
+/* Each pull request's bar items and panel carry data-pr; only the chosen one's show. */
 .gr-barlinks { display: flex; gap: 8px; align-items: center; min-width: 0; }
 
 /* the title as a menu of the page's pull requests */
