@@ -8,7 +8,7 @@
    2. page: builds the demo (scripts/demo.ts) and drives it in headless Chrome over DevTools: what the reader sees
       after each action, no console errors, and timing budgets (boot ≤ 30 ms, each interaction ≤ 12 ms, a redraw of
       the cards on screen ≤ one frame). */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Diff, DiffFile, Guide } from '../runtime/types';
@@ -126,12 +126,17 @@ const guideFor = (body: string, chapters?: Guide['chapters']): Guide => ({
     ...later,
   ],
 });
+/** A built page and the data file it loads from <stem>.files/. */
+function page(stem: string) {
+  const dir = join(tmp, `${stem}.files`), data = readdirSync(dir).find((f) => f.startsWith('data.'))!;
+  return { html: readFileSync(join(tmp, `${stem}.artifact.html`), 'utf8'), data: readFileSync(join(dir, data), 'utf8') };
+}
 function build(guide: unknown) {
   const guidePath = join(tmp, 'guide.json');
   writeFileSync(guidePath, JSON.stringify(guide));
   rmSync(join(tmp, 'guide.artifact.html'), { force: true });
   const r = bun('build.ts', [`--diff=${diffPath}`, `--guide=${guidePath}`]);
-  return { ...r, html: r.status === 0 ? readFileSync(join(tmp, 'guide.artifact.html'), 'utf8') : '' };
+  return { ...r, ...(r.status === 0 ? page('guide') : { html: '', data: '' }) };
 }
 
 const built = build(guideFor('See [the readme](ref:README.md:3), [the old file](ref:src/old.rs:2) and **`x10`** in `handlers[i](ctx)`.'));
@@ -143,17 +148,20 @@ check('a deleted file jumps to its old side', /data-ref="src\/old\.rs" data-line
 check('code inside bold stays code', built.html.includes('<b><code>x10</code></b>'));
 check('code that looks like a link stays code', built.html.includes('<code>handlers[i](ctx)</code>'));
 check('the title is escaped', built.html.includes('<h1>Scratch &lt;change&gt; &amp; &quot;more&quot;</h1>'));
-// The diff's own `</script>` line stays inside the data block.
-const data = built.html.match(/<script type="application\/json" id="gr-data">([^<]*)<\/script>/)?.[1];
-check('the data block ends at its own closing tag', !!data && JSON.parse(data).prs[0].files.find((f: DiffFile) => f.path === 'tests/a_test.rs').new.includes('// </script><img src=x onerror=alert(1)>'));
-check('fonts are inline and nothing blocks the first paint', built.html.includes('font/woff2;base64') && !/<link[^>]+rel="stylesheet"/.test(built.html));
+// The diff's own `</script>` line reaches the page as text, from the data file.
+const data = /^window\.GR_DATA = (.*);\n$/s.exec(built.data)?.[1];
+check('the data file holds the diff as it is', !!data && JSON.parse(data).prs[0].files.find((f: DiffFile) => f.path === 'tests/a_test.rs').new.includes('// </script><img src=x onerror=alert(1)>'));
+// A read of the published page returns at most 50,000 characters, so the page holds only its markup.
+check('the page holds only its markup; Geist, styles, runtime and data load beside it', built.html.includes('fonts.googleapis.com/css2?family=Geist')
+  && !built.html.includes('base64') && !built.html.includes('<style')
+  && ['guided-review.css', 'data.js', 'guided-review.js'].every((f) => new RegExp(`(href|src)="guide\\.files/${f.replace(/\.(\w+)$/, '\\.[0-9a-f]{8}\\.$1')}"`).test(built.html)));
 check('the libraries are preloaded at exact versions', /<link rel="modulepreload" href="https:\/\/cdn\.jsdelivr\.net\/npm\/@pierre\/diffs@\d+\.\d+\.\d+[^"]*"/.test(built.html));
 check('the published page loads no mermaid; the viewer draws flows', !built.html.includes('mermaid@'));
 check('the title comes first, as a short name', built.html.startsWith('<title>Guided review #1</title>'));
 
 const branchOnly = build({ ...guideFor('One.'), pr: { title: 'A branch with no pull request' } });
 const splitGuide = build({ ...guideFor('One.'), diffStyle: 'split' });
-check('a guide can start in split', splitGuide.status === 0 && splitGuide.html.includes('"diffStyle":"split"') && splitGuide.html.includes('data-diff-style="split" aria-pressed="true"'), splitGuide.log);
+check('a guide can start in split', splitGuide.status === 0 && splitGuide.data.includes('"diffStyle":"split"') && splitGuide.html.includes('data-diff-style="split" aria-pressed="true"'), splitGuide.log);
 check('a branch with no pull request builds', branchOnly.status === 0 && !branchOnly.html.includes('Open #') && branchOnly.html.startsWith('<title>Review of pr</title>'), branchOnly.log);
 const named = build({ ...guideFor('One.'), name: 'Scratch values review' });
 check('a guide names its page', named.html.startsWith('<title>Scratch values review</title>'), named.log);
@@ -188,7 +196,7 @@ function buildStack(guides: unknown[]) {
   writeFileSync(stackPath, JSON.stringify({ prs }));
   rmSync(join(tmp, 'stack.artifact.html'), { force: true });
   const r = bun('build.ts', [`--stack=${stackPath}`]);
-  return { ...r, html: r.status === 0 ? readFileSync(join(tmp, 'stack.artifact.html'), 'utf8') : '' };
+  return { ...r, ...(r.status === 0 ? page('stack') : { html: '', data: '' }) };
 }
 const second = { ...guideFor('Two.'), pr: { number: 2, title: 'The same change, again', url: 'https://github.com/example/scratch/pull/2' } };
 const pair = buildStack([guideFor('One.'), second]);
@@ -196,7 +204,7 @@ check('a stack of two pull requests builds', pair.status === 0, pair.log);
 check('each pull request gets its own panel and ids', pair.html.includes('id="pr1-c-one"') && pair.html.includes('id="pr2-c-one"') && pair.html.includes('id="pr1-overview"'));
 check('the title becomes a menu of them', (pair.html.match(/class="gr-pick-item"/g) ?? []).length === 4 && pair.html.includes('2 pull requests'));
 check('a stack page is named by its pull requests', pair.html.startsWith('<title>Guided review #1–#2</title>'));
-check('the page data lists both', !!pair.html.match(/"prs":\[\{"id":"pr1"/) && pair.html.includes('"id":"pr2"'));
+check('the page data lists both', !!pair.data.match(/"prs":\[\{"id":"pr1"/) && pair.data.includes('"id":"pr2"'));
 const twice = buildStack([guideFor('One.'), guideFor('One.')]);
 check('build refuses a stack that lists a pull request twice', twice.status === 1 && /lists #1 2 times/.test(twice.log), twice.log);
 const tagged = buildStack([guideFor('One.'), { ...second, chapters: second.chapters.slice(1) }]);

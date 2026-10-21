@@ -8,6 +8,7 @@ wins where this file differs. Then publish `<name>.artifact.html` with the Artif
 | Field | Plan | Explainer |
 |---|---|---|
 | `file_path` | `<name>.artifact.html`, the same path every round so the link stays | same |
+| `files` | The map the build printed, on every publish | same |
 | `icon` (first publish only) | `plan` | `book` |
 | `description` | One sentence for the gallery card | same |
 | `capabilities` (first publish only) | below | leave out |
@@ -75,7 +76,7 @@ to see the changed words. That list, not the comment thread, is where the explan
 2. Add this version's `<t-amend>` entries at the top of `<t-amends>`.
 3. Rebuild with the build command from SKILL.md (step 3 of the workflow), and fix any error. Its `changes:` line says
    what it found since the last version; give every change it warns about an entry, or widen an entry's `at=`.
-4. Publish the same `file_path`. Leave out `icon` and `capabilities`.
+4. Publish the same `file_path` with the `files` map the build printed. Leave out `icon` and `capabilities`.
 5. Reply in each thread sent to you (`ArtifactComments` `reply`), in one line that points at the change: "v4: limits
    now count per org too, under Changes." After a page send: "v4 is up with 3 changes, under Changes." Do not retell
    the change in the thread.

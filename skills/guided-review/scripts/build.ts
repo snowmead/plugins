@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-/* Check guides against their diffs, then pack the guided review into one file for the Artifact tool.
+/* Check guides against their diffs, then pack the guided review for the Artifact tool.
 
      bun scripts/build.ts --diff=<work>/diff.json --guide=<work>/guide.json [--out=<work>/guide] [--repo=<checkout>]
      bun scripts/build.ts --stack=<work>/stack.json [--out=<work>/stack] [--repo=<checkout>]
@@ -8,20 +8,22 @@
 
    One guide makes a page about one pull request. A stack.json lists several guides with their diffs, a stack from its
    base up or any set to review together; their page's title becomes a menu of them. Writes <out>.artifact.html
-   (publish it) and <out>.preview.html (a full document to open locally); <out> defaults to the guide's or the
-   stack's path without .json. Exit code 1 when a guide has errors; warnings do not stop the build.
+   (publish it, with the `files` map the build prints), the stylesheet, runtime and data it loads in <out>.files/,
+   and <out>.preview.html (a full document to open locally); <out> defaults to the guide's or the stack's path
+   without .json. Exit code 1 when a guide has errors; warnings do not stop the build.
 
    Libraries (@pierre/diffs, @pierre/trees, and mermaid for the preview) resolve to the newest release that is at
    least 14 days old (the artifact rule). A refresh runs on its own when libs.json is more than 7 days old, and is
-   skipped quietly when offline. Speed: fonts are inline, the runtime is bundled and minified, and every library the
-   page uses is preloaded from the head with its whole import graph, so nothing waits on a request chain. Flows are
-   mermaid blocks, which the artifact viewer draws itself; only the preview loads mermaid.
+   skipped quietly when offline. Size: the page holds only its markup; the stylesheet, the runtime (with its sounds)
+   and the data are files beside it, and Geist comes from Google Fonts. Speed: the runtime is bundled and minified,
+   and every library the page uses is preloaded from the head with its whole import graph, so nothing waits on a
+   request chain. Flows are mermaid blocks, which the artifact viewer draws itself; only the preview loads mermaid.
 
-   The fonts, the shared stylesheet, the sounds, the speaker button and the library pinning come from the kit
+   The font link, the shared stylesheet, the sounds, the speaker button and the library pinning come from the kit
    (kit/build/). */
 import { dirname, join, resolve } from 'node:path';
 import type { BeforeAfter, Chapter, Diff, DiffFile, Guide, Kind, PageData, PagePr, Stack, StateTable, Text } from '../runtime/types';
-import { ICON, bundle, preview, soundButton, soundScript, styles } from '../kit/build/page';
+import { FONTS, ICON, assets, preview, publishLines, runtime, soundButton, styles } from '../kit/build/page';
 import { libs, preloads } from '../kit/build/libs';
 
 const ROOT = join(import.meta.dir, '..');
@@ -458,7 +460,8 @@ const data: PageData = {
   diffStyle,
   prs: prs.map((p) => p.data),
 };
-const [css, sounds, js] = await Promise.all([styles(join(RT, 'guide.css')), soundScript(['select', 'deselect', 'nav', 'toggle', 'reveal']), bundle(join(RT, 'index.ts'))]);
+const [css, js] = await Promise.all([styles(join(RT, 'guide.css')), runtime(join(RT, 'index.ts'), ['select', 'deselect', 'nav', 'toggle', 'reveal'])]);
+const { at, files } = await assets(stem, { 'guided-review.css': css, 'data.js': `window.GR_DATA = ${JSON.stringify(data)};\n`, 'guided-review.js': js });
 // The title first (the viewer reads it from the first 8 KB), then preloads so the libraries download while the page
 // parses; the data and the runtime go after the markup they fill.
 const one = prs[0];
@@ -466,14 +469,13 @@ const nums = prs.filter((p) => p.number != null).map((p) => `#${p.number}`);
 const name = multi
   ? stack?.name ?? (nums.length === prs.length ? `Guided review ${nums[0]}–${nums.at(-1)}` : `Review of ${prs.length} pull requests`)
   : one.name ?? (one.number != null ? `Guided review #${one.number}` : `Review of ${one.branch ?? inputs[0].diff.head.slice(0, 7)}`);
-const page = `<title>${esc(name)}</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n${preloads(['diffs', 'trees'], libmap)}\n`
-  + `<style>\n${css}</style>\n${markup}\n`
-  + `<script type="application/json" id="gr-data">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>\n`
-  + `${sounds}<script>\n${js}</script>\n`;
+const page = `<title>${esc(name)}</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n${preloads(['diffs', 'trees'], libmap)}\n${FONTS}\n`
+  + `<link rel="stylesheet" href="${at['guided-review.css']}">\n${markup}\n`
+  + `<script src="${at['data.js']}"></script>\n<script src="${at['guided-review.js']}"></script>\n`;
 await Bun.write(`${stem}.artifact.html`, page);
 // The preview has no artifact viewer to draw the flows, so it loads mermaid itself.
 const mermaid = flows ? `<script type="module">import mermaid from '${libmap.mermaid.url}';
 mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'neutral', fontFamily: 'Geist Mono, monospace' });
 await mermaid.run({ querySelector: 'pre.mermaid', suppressErrors: true });</script>\n` : '';
 await Bun.write(`${stem}.preview.html`, preview(page, '', mermaid));
-console.log(`ok    ${warns.length} warning(s), ${Math.round(page.length / 1024)} KB\n      publish: ${stem}.artifact.html\n      preview: ${stem}.preview.html`);
+console.log(`ok    ${warns.length} warning(s), ${Math.round(page.length / 1024)} KB\n${publishLines(stem, files)}\n      preview: ${stem}.preview.html`);

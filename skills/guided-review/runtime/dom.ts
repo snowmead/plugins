@@ -3,7 +3,7 @@ import type { PageData } from './types';
 
 /** When the runtime started, for the boot timing the tests read (performance measure "gr:boot"). */
 export const T0 = performance.now();
-export const D: PageData = JSON.parse(document.getElementById('gr-data')!.textContent!);
+export const D: PageData = window.GR_DATA!;
 
 /** Split a path into its file name and the folder before it. */
 export const split = (path: string): [string, string] => { const name = path.split('/').pop()!; return [name, path.slice(0, path.length - name.length)]; };

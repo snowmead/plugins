@@ -18,7 +18,7 @@ export type ThemeType = 'light' | 'dark' | 'system';
 
 declare global {
   interface Window {
-    /** What the build hands the kit's runtime (kit/build/page.ts soundScript). */
+    /** What the build hands the kit's runtime (kit/build/page.ts runtime). */
     KIT?: { sounds: Sounds };
     webkitAudioContext?: typeof AudioContext;
   }

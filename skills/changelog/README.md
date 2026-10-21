@@ -23,7 +23,8 @@ narrow a run.
 
 The page is a quiet feed of entries on a date rail, in Geist, with soft UI sounds (earshot) that wait for your first
 click. It shares its look, its sounds and its bar with [thinkr](../thinkr) and [guided-review](../guided-review)
-through the [kit](../../kit), carries its fonts and sounds inline, and reads its entries live.
+through the [kit](../../kit), publishes its styles and script beside a small page, loads
+Geist from Google Fonts, and reads its entries live.
 
 ## Install
 
@@ -66,10 +67,10 @@ SKILL.md                          what Claude reads first
 references/                       writing.md, format.md
 examples/                         entry.ts, stats.json, changelog.json (a made-up "Relay" day)
 runtime/                          TypeScript runtime, CSS
-kit/                              link to the shared kit: tokens, fonts, sounds, UI parts, build helpers
+kit/                              link to the shared kit: tokens, sounds, UI parts, build helpers
 scripts/                          gather.ts, entry.ts, scenes.ts, build.ts, shot.ts (used by the skill); test.ts
 package.json, bun.lock            dev dependencies (TypeScript, Bun's types)
 ```
 
-Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`: Geist fonts
-(SIL OFL 1.1) and earshot (MIT).
+Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`: earshot
+(MIT).

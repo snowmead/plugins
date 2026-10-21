@@ -44,13 +44,13 @@ morning. The session it runs in needs `gh`, the repository's checkout, and a Sla
 | `scripts/gather.ts` | Reads the merged PRs in a window with `gh`: `stats.json` (sizes, hours open, CI and review runs) and `prs/<n>.md` (each PR's description, comments and reviews) |
 | `scripts/entry.ts` | Turns the run's entry and `stats.json` into the database document and the Slack post; stops on anything the page cannot show |
 | `scripts/scenes.ts` | The scene builder an entry draws its animated SVGs with |
-| `scripts/build.ts` | Builds the page into one file to publish, and a preview with local entries |
+| `scripts/build.ts` | Builds the page to publish, its stylesheet and script in `<out>.files/`, and a preview with local entries |
 | `scripts/shot.ts` | Screenshots the preview at desktop and phone width, light and dark |
 | `examples/entry.ts` | A complete entry. Copy it for each run. |
 | `references/writing.md` | How to write an entry, and the prompt for the digest workers. Read it before your first entry. |
 | `references/format.md` | The config, `stats.json`, the entry document and the scene builder, field by field |
-| `runtime/` | The page's TypeScript and CSS. `build.ts` inlines them with the kit's. |
-| `kit/` | What the page shares with the other Artifact skills: tokens, fonts, sounds, the bar and buttons, build helpers. |
+| `runtime/` | The page's TypeScript and CSS. `build.ts` bundles them with the kit's. |
+| `kit/` | What the page shares with the other Artifact skills: tokens, the font link, sounds, the bar and buttons, build helpers. |
 
 The skill lives at `${CLAUDE_SKILL_DIR}`; run its scripts by that full path, exactly as written below. **Before the
 first run**, check `bun --version` and `gh auth status`. When Bun is missing, stop and ask the user to install it
@@ -105,19 +105,19 @@ Once per repository, in the chat with the person who wants it.
    in (find it with the Slack connector's channel search, or `null` for no post); and `workflows`, the file names in
    `.github/workflows/` of the CI and review workflows to count, if there are any.
 2. **Page.** `bun ${CLAUDE_SKILL_DIR}/scripts/build.ts --out <work>/changelog`, then publish
-   `<work>/changelog.artifact.html` with the Artifact tool: `icon` `changelog`, a one-sentence `description`, and
-   `capabilities` `{"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}}` (everyone the page is shared
-   with reads; only its editors write). Load the `artifact-design` and `artifact-capabilities` skills first when the
-   session has them; their contract wins where this file differs.
-3. **Link.** Put the page's link in the config as `page`, rebuild, and publish the same file again (leave
-   `capabilities` out so the database stays): copied entry links now carry the page's own address.
+   `<work>/changelog.artifact.html` with the Artifact tool: `icon` `changelog`, a one-sentence `description`, `files`
+   the map the build printed, and `capabilities` `{"db": {"rules": [{"path": "", "read": "view", "write":
+   "admin"}]}}` (everyone the page is shared with reads; only its editors write). Load the `artifact-design` and
+   `artifact-capabilities` skills first when the session has them; their contract wins where this file differs.
+3. **Link.** Put the page's link in the config as `page`, rebuild, and publish the same file again with the new
+   `files` map (leave `capabilities` out so the database stays): copied entry links now carry the page's own address.
 4. Ask the user to commit `.claude/changelog.json`, so every run and every teammate finds the same page. Then run.
 
 ## Change the page
 
 Edit `runtime/`, run `bun run test` in this skill's folder, build with `--entries` and look at the shots. Then
-`read` the artifact at the config's `page` and publish the built file with the Artifact tool and that `url`. Leave
-`capabilities` out so the database and its rules stay.
+`read` the artifact at the config's `page` and publish the built file with the Artifact tool, that `url` and the
+`files` map the build printed. Leave `capabilities` out so the database and its rules stay.
 
 The page keeps these promises:
 

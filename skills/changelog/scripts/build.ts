@@ -1,16 +1,16 @@
 #!/usr/bin/env bun
-/* Build the changelog page into one file for the Artifact tool.
+/* Build the changelog page for the Artifact tool.
 
      bun scripts/build.ts --out <work>/changelog [--config <path>] [--entries <dir>]
 
-   Writes <out>.artifact.html (publish it; it reads its entries from its own database) and <out>.preview.html (a full
-   document to open locally, where a stand-in database serves the <date>.json files in --entries, or none). The page
-   carries its fonts, sounds and script inline, so it paints at once and loads nothing. The fonts, the shared
+   Writes <out>.artifact.html (publish it, with the `files` map the build prints; it reads its entries from its own
+   database), the stylesheet and script it loads in <out>.files/, and <out>.preview.html (a full document to open
+   locally, where a stand-in database serves the <date>.json files in --entries, or none). The font link, the shared
    stylesheet, the sounds and the speaker button come from the kit (kit/build/). */
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Entry, PageConfig } from '../runtime/types';
-import { bundle, esc, json, preview, soundButton, soundScript, styles } from '../kit/build/page';
+import { FONTS, assets, esc, json, preview, publishLines, runtime, soundButton, styles } from '../kit/build/page';
 import { loadConfig, opt } from './lib';
 
 const ROOT = join(import.meta.dir, '..');
@@ -25,14 +25,15 @@ const { config, errors } = await loadConfig(opt(argv, 'config'));
 if (!config) { for (const e of errors) console.log(`error ${e}`); process.exit(1); }
 
 const cfg: PageConfig = { name: config.name, url: config.page ?? '' };
-const [css, sounds, js] = await Promise.all([styles(join(RT, 'changelog.css')), soundScript(['nav', 'select', 'toggle']), bundle(join(RT, 'index.ts'))]);
+const [css, js] = await Promise.all([styles(join(RT, 'changelog.css')), runtime(join(RT, 'index.ts'), ['nav', 'select', 'toggle'])]);
+const { at, files } = await assets(stem, { 'changelog.css': css, 'changelog.js': js });
 const name = esc(config.name);
-// The title first (the viewer reads it from the first 8 KB, before the inline fonts), then the styles and markup; the
-// config and the script go after the markup they fill.
+// The title first (the viewer reads it from the first 8 KB), then the styles and markup; the config and the script go
+// after the markup they fill.
 const page = `<title>${name} Changelog</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<style>
-${css}</style>
+${FONTS}
+<link rel="stylesheet" href="${at['changelog.css']}">
 <header class="k-bar bar">
   <div class="bar-in">
     <a class="brand" href="#">
@@ -56,8 +57,7 @@ ${css}</style>
 </main>
 <footer class="gutter"><div>Each entry is written by a changelog run from the repository's merged pull requests. Sounds are made with earshot and play after your first click.</div></footer>
 <script>window.CHANGELOG = ${json(cfg)};</script>
-${sounds}<script>
-${js}</script>
+<script src="${at['changelog.js']}"></script>
 `;
 
 // The preview's stand-in for the artifact database: the entries in --entries, read live like the real one.
@@ -71,4 +71,4 @@ window.claude = { use: async (name) => name !== 'db' ? null : ({ collection: () 
 await Bun.write(`${stem}.artifact.html`, page);
 await Bun.write(`${stem}.preview.html`, preview(page, fake));
 console.log(`ok    ${name} Changelog, ${Math.round(page.length / 1024)} KB${config.page ? '' : ' (no page link yet: copied links point at the open page)'}`);
-console.log(`      publish: ${stem}.artifact.html\n      preview: ${stem}.preview.html (${entries.length} entr${entries.length === 1 ? 'y' : 'ies'})`);
+console.log(`${publishLines(stem, files)}\n      preview: ${stem}.preview.html (${entries.length} entr${entries.length === 1 ? 'y' : 'ies'})`);

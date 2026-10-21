@@ -1,20 +1,22 @@
 #!/usr/bin/env bun
-/* Check a thinkr page and pack it into one file for the Artifact tool.
+/* Check a thinkr page and pack it for the Artifact tool.
 
-     bun scripts/build.ts page.html            # check, then write page.artifact.html and page.preview.html
+     bun scripts/build.ts page.html            # check, then write page.artifact.html, page.files/ and page.preview.html
      bun scripts/build.ts page.html --refresh  # also refresh runtime/libs.json from npm first
      bun scripts/build.ts --refresh [--major]  # refresh libs only
 
    Libraries resolve to the newest stable release that is at least 14 days old (the artifact rule). A refresh
    runs on its own when libs.json is more than 7 days old, and is skipped quietly when offline.
 
-   Speed: the page carries its fonts inline, math and code highlighting are rendered here (no MathJax or
-   highlight.js in the page), and every library the page uses is preloaded from the head, its whole import
-   graph at once, so nothing waits on a request chain. Needs `bun install` in this skill's directory.
+   Size: the page holds only its content. The stylesheet and the runtime (with its sounds) are files published
+   beside it (page.files/, passed to the Artifact tool as `files`), and Geist comes from Google Fonts.
+   Speed: math and code highlighting are rendered here (no MathJax or highlight.js in the page), and every
+   library the page uses is preloaded from the head, its whole import graph at once, so nothing waits on a
+   request chain. Needs `bun install` in this skill's directory.
 
-   The fonts, the shared stylesheet, the sounds and the library pinning come from the kit (kit/build/). */
+   The font link, the shared stylesheet, the sounds and the library pinning come from the kit (kit/build/). */
 import { join } from 'node:path';
-import { bundle, preview, soundScript, styles } from '../kit/build/page';
+import { FONTS, assets, preview, publishLines, runtime, styles } from '../kit/build/page';
 import { type LibMap, libs, preloads } from '../kit/build/libs';
 import { type Node, parse } from './tree';
 import { type History, KINDS, track } from './changes';
@@ -212,21 +214,23 @@ function transpile(scripts: string) {
   });
 }
 
-async function pack(src: string, libmap: LibMap) {
+async function pack(src: string, stem: string, libmap: LibMap) {
   const title = /<title>[\s\S]*?<\/title>/.exec(src)![0];
   const body = src.replace(title, '').trim();
   const at = body.search(/<script\b/);
   const scripts = at >= 0 ? transpile(body.slice(at)) : '';
   const math = await renderMath(await highlight(at >= 0 ? body.slice(0, at) : body));
   const use = used(scripts, libmap);
-  const [css, sounds, js] = await Promise.all([styles(join(RT, 'thinkr.css')), soundScript(['nav', 'step', 'select', 'deselect', 'reveal', 'toggle', 'send']), bundle(join(RT, 'index.ts'))]);
+  const [css, js] = await Promise.all([styles(join(RT, 'thinkr.css')), runtime(join(RT, 'index.ts'), ['nav', 'step', 'select', 'deselect', 'reveal', 'toggle', 'send'])]);
+  const { at: href, files } = await assets(stem, { 'thinkr.css': css, 'thinkr.js': js });
   // title first (the viewer reads it from the first 8 KB), then preloads so libraries download while the page
   // parses; the runtime goes after the content and before page scripts, so they can call thinkr.figure()
-  return `${title}\n<meta name="claude:viewport-fit-sides" content="cover">\n${preloads(use, libmap)}\n`
-    + `<style>\n${css}${math.css}</style>\n`
+  const html = `${title}\n<meta name="claude:viewport-fit-sides" content="cover">\n${preloads(use, libmap)}\n${FONTS}\n`
+    + `<link rel="stylesheet" href="${href['thinkr.css']}">\n` + (math.css ? `<style>\n${math.css}</style>\n` : '')
     + math.html.trimEnd() + '\n'
-    + `<script>window.THINKR = ${JSON.stringify({ libs: libmap, use })};</script>\n${sounds}<script>\n${js}</script>\n`
+    + `<script>window.THINKR = ${JSON.stringify({ libs: libmap, use })};</script>\n<script src="${href['thinkr.js']}"></script>\n`
     + scripts;
+  return { html, files };
 }
 
 const argv = Bun.argv.slice(2);
@@ -252,10 +256,10 @@ for (const w of warns) console.log('  warn  ' + w);
 for (const e of errors) console.log('  error ' + e);
 if (errors.length) { console.log(`${errors.length} error(s). Nothing written.`); process.exit(1); }
 
-const out = await pack(changes?.html ?? src, libmap);
+const { html: out, files } = await pack(changes?.html ?? src, stem, libmap);
 await Bun.write(`${stem}.artifact.html`, out);
 await Bun.write(`${stem}.preview.html`, preview(out));
 if (changes) await Bun.write(historyFile, JSON.stringify(changes.history));
 console.log(`ok    ${mode} page, ${warns.length} warning(s), ${Math.round(out.length / 1024)} KB`
   + (changes ? `\n      changes: ${changes.summary}` : '')
-  + `\n      publish: ${stem}.artifact.html\n      preview: ${stem}.preview.html`);
+  + `\n${publishLines(stem, files)}\n      preview: ${stem}.preview.html`);

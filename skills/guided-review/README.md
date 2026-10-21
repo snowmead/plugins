@@ -20,10 +20,10 @@ them:
   menu of them, a stack drawn from its base up, each with its branches, size and review progress; `[` and `]` move
   between them.
 
-The page opens at once: Geist and Geist Mono are inline, the runtime is one small bundled script, and the libraries
-are preloaded with their whole import graphs. It shares its look, its quiet UI sounds and its bar with
-[thinkr](../thinkr) and [changelog](../changelog) through the [kit](../../kit): a sound confirms a mark, and the
-speaker button mutes them.
+The page holds only its markup: its styles, its data and one small bundled runtime are files published beside it,
+Geist and Geist Mono load from Google Fonts, and the libraries are preloaded with their whole import graphs. It
+shares its look, its quiet UI sounds and its bar with [thinkr](../thinkr) and [changelog](../changelog) through the
+[kit](../../kit): a sound confirms a mark, and the speaker button mutes them.
 
 ## Install
 
@@ -72,11 +72,11 @@ SKILL.md                          what Claude reads first
 references/                       guide-format.md, writing.md
 examples/                         demo.guide.json, demo-43.guide.json, and demo/ (the demo's base, its head and the PR stacked on it)
 runtime/                          TypeScript runtime, CSS, library pins
-kit/                              link to the shared kit: tokens, fonts, sounds, UI parts, build helpers
+kit/                              link to the shared kit: tokens, sounds, UI parts, build helpers
 scripts/                          gather.ts, build.ts, shot.ts (used by the skill); test.ts, demo.ts (maintenance)
 package.json, bun.lock            dev dependencies (TypeScript, Bun's types)
 ```
 
 The page layout comes from the guided review in [haaku-co/corpus-christi](https://github.com/haaku-co/corpus-christi).
-Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`: Geist
-(SIL OFL 1.1) and earshot (MIT).
+Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`:
+earshot (MIT).

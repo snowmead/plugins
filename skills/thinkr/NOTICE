@@ -4,10 +4,6 @@ Licensed under the Apache License, Version 2.0 (LICENSE.txt).
 
 This product includes third-party material, under its own license:
 
-- Geist and Geist Mono fonts (kit/fonts/*.woff2)
-  Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font)
-  SIL Open Font License, Version 1.1 (kit/fonts/OFL.txt)
-
 - UI sounds (kit/sounds.json), rendered with earshot
   Copyright (c) 2026 Leon Lin (https://github.com/Leonxlnx/earshot)
   MIT License
@@ -15,4 +11,5 @@ This product includes third-party material, under its own license:
 Not included, but used:
 
 - At build time, installed from npm: MathJax (mathjax-full, Apache-2.0) and highlight.js (BSD-3-Clause).
-- When a page is viewed, loaded from cdn.jsdelivr.net: motion (MIT), vgpu (MIT), d3 (ISC), Observable Plot (ISC).
+- When a page is viewed, loaded from cdn.jsdelivr.net: motion (MIT), vgpu (MIT), d3 (ISC), Observable Plot (ISC);
+  from Google Fonts: Geist and Geist Mono (SIL Open Font License 1.1).

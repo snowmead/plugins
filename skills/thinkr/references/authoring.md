@@ -13,7 +13,8 @@
 <script type="ts"> /* figure code, see figures.md */ </script>
 ```
 
-`build.ts` adds the fonts, CSS, runtime, sounds and library URLs. Each `h2` becomes an entry in "On this page".
+`build.ts` adds the font link, the CSS and runtime (files published beside the page), the sounds and the library
+URLs. Each `h2` becomes an entry in "On this page".
 
 ## The page
 

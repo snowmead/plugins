@@ -93,7 +93,7 @@ export interface Stack {
   prs: { guide: string; diff: string }[];
 }
 
-// ---------------------------------------------------------------- the page's data (#gr-data)
+// ---------------------------------------------------------------- the page's data (window.GR_DATA)
 export interface PageChapter { id: string; title: string; files: { path: string; hunks: number[] | null }[] }
 export interface PagePr {
   /** The PR's panel id ("pr42"), and the prefix of every element id inside it: "pr42-", or "" on a page with one PR. */
@@ -110,6 +110,13 @@ export interface PageData {
   libs: Record<'diffs' | 'trees', string>;
   diffStyle: DiffStyle;
   prs: PagePr[];
+}
+
+declare global {
+  interface Window {
+    /** Set by the page's data file, which loads before the runtime. */
+    GR_DATA?: PageData;
+  }
 }
 
 // ---------------------------------------------------------------- the library slices the runtime uses

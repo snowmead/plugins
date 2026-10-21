@@ -38,13 +38,13 @@ guided review does that work for them. It is one page, published as a Claude Art
 | Path | What it is |
 |---|---|
 | `scripts/gather.ts` | Reads the diff from git into `diff.json`, and prints an outline of every file and hunk, numbered. |
-| `scripts/build.ts` | Checks each `guide.json` against its `diff.json`, then packs the page (one pull request, or a `stack.json` of several) into one file to publish. |
+| `scripts/build.ts` | Checks each `guide.json` against its `diff.json`, then packs the page (one pull request, or a `stack.json` of several) to publish, with its stylesheet, runtime and data in `<out>.files/`. |
 | `scripts/shot.ts` | Screenshots a built guide at desktop and phone width, light and dark. |
 | `references/guide-format.md` | Every field of `guide.json`. Read it before your first guide. |
 | `references/writing.md` | How to plan chapters and write the text. Read it before your first guide. |
 | `examples/demo.guide.json` | A complete guide for a small pull request (its code is in `examples/demo/`). `examples/demo-43.guide.json` is the pull request stacked on it. |
-| `runtime/` | The page's TypeScript, CSS and pinned library versions. `build.ts` inlines them with the kit's. |
-| `kit/` | What the guide shares with the other Artifact skills: tokens, fonts, sounds, the bar and buttons, build helpers. |
+| `runtime/` | The page's TypeScript, CSS and pinned library versions. `build.ts` bundles them with the kit's. |
+| `kit/` | What the guide shares with the other Artifact skills: tokens, the font link, sounds, the bar and buttons, build helpers. |
 
 The skill lives at `${CLAUDE_SKILL_DIR}`; run its scripts by that full path, exactly as written below. The other
 files in `scripts/` maintain the skill; they are not for making guides.
@@ -77,23 +77,23 @@ request: rebuilding from the same `guide.json` and publishing the same file keep
    Put the pull request's video, if it has one, in `links`. Leave `diffStyle` out (unified) unless the user asks
    for split, or most changes rewrite lines in place.
 4. **Build and check.** Run it in the checkout, or pass the checkout with `--repo`: refs to files the pull request
-   does not change are checked there.
-   ```sh
-   bun ${CLAUDE_SKILL_DIR}/scripts/build.ts --diff=<work>/diff.json --guide=<work>/guide.json
-   ```
-   Fix every `error`: a file or hunk in no chapter, a ref that names no line, a core chapter after a tests chapter.
-   Read every `warn` and fix the ones that are right: long chapters, a long before / after, a hunk shown twice. It
-   writes `<work>/guide.artifact.html` (to publish) and `<work>/guide.preview.html` (to open locally). Library
-   versions refresh on their own once a week to the newest release that is at least 14 days old (the artifact rule).
+   does not change are checked there. ```sh bun ${CLAUDE_SKILL_DIR}/scripts/build.ts --diff=<work>/diff.json
+   --guide=<work>/guide.json ``` Fix every `error`: a file or hunk in no chapter, a ref that names no line, a core
+   chapter after a tests chapter. Read every `warn` and fix the ones that are right: long chapters, a long before /
+   after, a hunk shown twice. It writes `<work>/guide.artifact.html` (to publish), `<work>/guide.files/` (its
+   stylesheet, runtime and data, published with it) and `<work>/guide.preview.html` (to open locally), and prints the
+   `files` map to publish with. Library versions refresh on their own once a week to the newest release that is at
+   least 14 days old (the artifact rule).
 5. **Look** on the first build: `bun ${CLAUDE_SKILL_DIR}/scripts/shot.ts <work>/guide.preview.html <work>/shots`,
    then read the PNGs. Check that nothing overlaps, no row is cut off, and the page does not scroll sideways at
    phone width. With a browser you can drive, click a few before / after refs and check that each lands on the line
    it names. One pass, not a loop.
-6. **Publish** `<work>/guide.artifact.html` with the Artifact tool: `icon` `review`, `description` the pull
-   request's title. Load the `artifact-design` skill first when the session has it; its page contract wins where
-   this file differs. The page needs no capabilities. To update it later, publish the same file path again in the
-   same session, or pass the artifact's `url` from another session (read it first, as the Artifact tool requires).
-   With no way to publish, hand over `guide.preview.html`: it is the full document.
+6. **Publish** `<work>/guide.artifact.html` with the Artifact tool: `icon` `review`, `description` the pull request's
+   title, and `files` the map the build printed (on every publish: the data is in it). Load the `artifact-design`
+   skill first when the session has it; its page contract wins where this file differs. The page needs no
+   capabilities. To update it later, publish the same file path again in the same session, or pass the artifact's
+   `url` from another session (read it first, as the Artifact tool requires). With no way to publish, hand over
+   `guide.preview.html`: it is the full document.
 7. **Tell the user** the link in one or two sentences, and the head commit it was written for. Post the link on the
    pull request only when the user asks you to.
 8. **Rebuild for a new head** when the pull request moves on: gather again, update the chapters the new commits
@@ -112,8 +112,8 @@ page for all of them.
    and the pull requests in order, a stack from its base up, each as `{ "guide": "pr-140/guide.json", "diff":
    "pr-140/diff.json" }`.
 4. **Build** in a checkout that has every head: `bun ${CLAUDE_SKILL_DIR}/scripts/build.ts --stack=<work>/stack.json`.
-   Errors and warnings name their pull request. It writes `<work>/stack.artifact.html` and
-   `<work>/stack.preview.html`.
+   Errors and warnings name their pull request. It writes `<work>/stack.artifact.html`,
+   `<work>/stack.files/` and `<work>/stack.preview.html`, and prints the `files` map.
 5. **Publish** `<work>/stack.artifact.html` once, as above, with the stack's `name` as the `description`. When any
    pull request moves on, update its guide, rebuild and publish the same file: the link stays. A pull request that
    merged can stay in the stack, or leave it.

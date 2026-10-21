@@ -1,6 +1,6 @@
 /* The guided review page: code cards, review marks, jumps, the chapter rail and keys, for one pull request or several.
    With several, the title is a menu of them (a stack from its base up, or any set to review together), and the page
-   shows one at a time. build.ts bundles this into one script after the page's markup and its JSON data (#gr-data).
+   shows one at a time. build.ts bundles this into one script, loaded after the page's markup and its data file (window.GR_DATA).
    Code renders with @pierre/diffs and the Diff tab's tree with @pierre/trees, both imported from the pinned jsDelivr
    URLs in the data. */
 import type { DiffStyle } from './types';

@@ -13,8 +13,9 @@ Artifact.
 
 It looks like shadcn/ui's default theme in Geist: one reading column, an "On this page" rail that lists the
 questions, motion that stays out of the way, and quiet UI sounds made with
-[earshot](https://github.com/Leonxlnx/earshot). Pages open instantly: fonts are built in, math and code are
-rendered ahead of time, and libraries are preloaded.
+[earshot](https://github.com/Leonxlnx/earshot). Pages stay small and open fast: math and code are rendered
+ahead of time, libraries are preloaded, the styles and runtime are files published beside the page, and Geist loads
+from Google Fonts.
 
 ## Install
 
@@ -57,7 +58,7 @@ Run these in this folder, after `bun install`:
 | `bun run examples` | Builds `templates/plan.html` and `templates/explain.html` |
 | `bun scripts/build.ts --refresh` | Moves motion, vgpu, d3 and Plot to their newest release that is at least 14 days old (the artifact rule); `--major` crosses a major version |
 
-The look, the fonts, the sounds, the bar and buttons, and the build and test helpers come from the shared
+The look, the font link, the sounds, the bar and buttons, and the build and test helpers come from the shared
 [kit](../../kit), linked here as `kit/`; its README says how to change them. Sounds stay in one family: short, crisp
 ticks and clicks under 100 ms, matched in loudness. UI sound should confirm, never alarm.
 
@@ -66,10 +67,10 @@ SKILL.md                          what Claude reads first
 references/                       authoring.md, figures.md, loop.md
 templates/                        plan.html, explain.html (working examples)
 runtime/                          TypeScript runtime, CSS, library pins
-kit/                              link to the shared kit: tokens, fonts, sounds, UI parts, build helpers
+kit/                              link to the shared kit: tokens, sounds, UI parts, build helpers
 scripts/                          build.ts with changes.ts and tree.ts, shot.ts (used by the skill); test.ts (maintenance)
 package.json, bun.lock            build dependencies; the first build installs them
 ```
 
-Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`: Geist fonts
-(SIL OFL 1.1) and earshot (MIT).
+Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`: earshot
+(MIT).
