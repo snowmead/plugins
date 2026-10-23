@@ -330,6 +330,7 @@ fn remove(path: &Path) -> io::Result<()> {
 mod tests {
     use super::{
         Protect,
+        check_relative,
         configures, //
     };
     use crate::{
@@ -393,6 +394,10 @@ mod tests {
             (".gitignore", "head-ignore"),
             ("src/.gitattributes", "* -diff\n"),
             ("docs/.rgignore", "*\n"),
+            // Files that configure Claude Code or git, or run on a commit.
+            (".claude.json", "head"),
+            (".gitmodules", "head"),
+            (".husky/pre-commit", "head"),
         ]);
         let action = tempfile::tempdir().expect("the action");
         fs::create_dir_all(action.path().join("workflows")).expect("workflows");
@@ -480,10 +485,13 @@ mod tests {
         .collect();
         let replaced = [
             ".agents/skills/x/SKILL.md",
+            ".claude.json",
             ".claude/hooks/run.sh",
             ".claude/review.json",
             ".claude/settings.json",
             ".gitignore",
+            ".gitmodules",
+            ".husky/pre-commit",
             ".mcp.json",
             "AGENTS.md",
             "REVIEW.md",
@@ -671,6 +679,20 @@ mod tests {
             ("src/a.rs", false),
         ] {
             assert_eq!(configures(name.as_bytes()), configures_it, "{name}");
+        }
+    }
+
+    #[test]
+    fn the_rules_and_settings_inputs_stay_inside_the_repository() {
+        for path in ["../x", "/etc/x", "a//b", "./x", "a/..", ""] {
+            let error = check_relative("rules", path).expect_err(path).to_string();
+            assert!(
+                error.contains("is not a path inside the repository"),
+                "{path}: {error}"
+            );
+        }
+        for path in ["REVIEW.md", "docs/review/rules.md", ".claude/review.json"] {
+            assert!(check_relative("config", path).is_ok(), "{path}");
         }
     }
 }

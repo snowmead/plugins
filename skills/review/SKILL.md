@@ -35,7 +35,7 @@ your task needs before you change anything.
   `REVIEW_CONFIG=<repo>/.claude/review.json node --test '${CLAUDE_SKILL_DIR}/workflows/tests/*.test.mjs'`.
 - **Sweep, eval or tune.** README.md, "Sweeps" and "Tuning": call the Workflow tool with
   `scriptPath: ${CLAUDE_SKILL_DIR}/workflows/pr-review.js` (or `review-tuning.js`) and the args shown there, from the
-  repository's root.
+  repository's root. Tuning also takes `engine: ${CLAUDE_SKILL_DIR}/workflows/pr-review.js`.
 - **Change the review itself.** Run the checks in README.md, "Development", from this folder, and bump the plugin's
   version.
 

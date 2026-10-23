@@ -764,6 +764,11 @@ test('tuning opens a pull request for new cases, or when the eval scores better 
   }
 })
 
+test('tuning needs the path of the review workflow', async () => {
+  const args = { repo: 'o/r', since: '2026-10-05', until: '2026-10-12', out_dir: 'o' }
+  await assert.rejects(run('review-tuning.js', args, (label) => assert.fail(label)), /needs args \{repo, since, until, out_dir, engine\}/)
+})
+
 test('tuning stops with the settings message when its settings file holds no object', async () => {
   const args = { repo: 'o/r', since: '2026-10-05', until: '2026-10-12', out_dir: 'o', rules: 'RULES.md', engine: 'engine/pr-review.js' }
   const answer = (label) => (label === 'load settings' ? { text: 'null' } : assert.fail(label))

@@ -60,10 +60,13 @@ impl<'a> Git<'a> {
     /// against the working tree), renames as a deletion and an addition.
     /// Each name is the path itself: git separates them with NUL and quotes
     /// none. A name that is not UTF-8 is an error: the review's agents get the
-    /// names as JSON, and leaving the file out would hide it from them.
+    /// names as JSON, and leaving the file out would hide it from them. The
+    /// `--` keeps a revision a revision when the pull request adds a file of
+    /// that name.
     pub(crate) fn names(&self, range: &[&str]) -> Result<Vec<String>, Error> {
         let mut args = vec!["diff", "--no-renames", "--name-only", "-z"];
         args.extend_from_slice(range);
+        args.push("--");
         self.output(&args)?
             .split(|byte| *byte == 0)
             .filter(|name| !name.is_empty())
@@ -120,6 +123,19 @@ mod tests {
         );
         std::fs::write(repo.file("src/a.rs"), "changed").expect("a change");
         assert_eq!(git.names(&["HEAD"]).expect("the names"), ["src/a.rs"]);
+    }
+
+    #[test]
+    fn a_file_named_like_a_revision_stays_a_name() {
+        let repo = Repo::new();
+        let base = repo.commit(&[("src/a.rs", "a")]);
+        let head = repo.commit(&[("HEAD", "a file named HEAD")]);
+        let git = Git::new(repo.path());
+        std::fs::write(repo.file("HEAD"), "changed").expect("a change");
+        assert_eq!(git.names(&["HEAD"]).expect("the names"), ["HEAD"]);
+        std::fs::write(repo.file(&base), "named after a commit").expect("a file");
+        repo.git(&["add", "-A"]);
+        assert_eq!(git.names(&[&base, &head]).expect("the names"), ["HEAD"]);
     }
 
     #[test]

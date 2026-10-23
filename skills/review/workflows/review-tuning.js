@@ -21,17 +21,18 @@ export const meta = {
 //   rules          the review rules (default REVIEW.md)
 //   evals          the eval set (default .claude/review-evals.json)
 //   config_file    the review's settings (default .claude/review.json)
-//   engine         the review workflow (default claude-review/workflows/pr-review.js)
+//   engine         the review workflow's path, pr-review.js beside this file (required:
+//                  a workflow cannot find its own directory)
 //   reviewer       the login the review posts as (default github-actions)
 //   skip_eval      true to stop after the draft
 
 const A = args || {}
-if (!A.repo || !A.since || !A.until || !A.out_dir) throw new Error('review-tuning needs args {repo, since, until, out_dir}')
+if (!A.repo || !A.since || !A.until || !A.out_dir || !A.engine) throw new Error('review-tuning needs args {repo, since, until, out_dir, engine}')
 const REPO = A.repo
 const RULES = A.rules || 'REVIEW.md'
 const EVALS = A.evals || '.claude/review-evals.json'
 const CONFIG_FILE = A.config_file || '.claude/review.json'
-const PR_REVIEW = A.engine || 'claude-review/workflows/pr-review.js'
+const PR_REVIEW = A.engine
 const REVIEWER = A.reviewer || 'github-actions'
 
 // The settings, read once and passed to every run of the review workflow, so

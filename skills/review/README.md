@@ -222,7 +222,8 @@ match a path in any case.
 | `enabled` | `false` turns a default segment off. |
 
 The default segments are bugs (code, two passes), security (code and the
-`design` class: instruction files, `docs/`, `.claude/`, `.agents/`; keeps
+`design` class: instruction files, the rules (`REVIEW.md`), `docs/`,
+`.claude/`, `.agents/`; keeps
 unverified findings), tests (code), design (code and `design`), and docs
 (every file, every push).
 
@@ -313,9 +314,10 @@ args: {"mode": "sweep", "repo": "owner/name", "config_file": ".claude/review.jso
 outcomes: how authors handled this reviewer's findings, and what other
 reviewers found that it missed. It drafts a change to the rules and the eval
 set, within what the rules' Tuning section allows, and returns a decision for
-the routine that runs it; args `{repo, since, until, out_dir}`, plus `rules`,
-`evals`, `config_file`, `engine` (the review workflow's path, `pr-review.js`),
-and `reviewer` when they differ from the defaults.
+the routine that runs it; args `{repo, since, until, out_dir, engine}`, where
+`engine` is the path of the review workflow, `pr-review.js` beside it, plus
+`rules`, `evals`, `config_file`, and `reviewer` when they differ from the
+defaults.
 
 The routine opens a pull request with the draft when it only adds eval cases,
 or when the eval set scores better with the change: more of the cases that
@@ -344,13 +346,18 @@ args: {"mode": "eval", "repo": "owner/name", "config_file": ".claude/review.json
 
 ```sh
 cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
-RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --document-private-items
 node --test 'workflows/tests/*.test.mjs'
+cargo deny --locked check advisories sources
 ```
 
 Run these here: the directory is its own Cargo workspace on its own toolchain.
+`cargo deny` checks the locked crates against RustSec advisories, with
+[deny.toml](deny.toml). In a repository that runs this directory's review
+job, as this one does, also run that job's test from the repository's root:
+`node --test '.github/tests/*.test.mjs'`.
 The workflow tests run the workflows with stub agents
 ([workflows/tests](workflows/tests)); `REVIEW_CONFIG=<settings file>` also
 checks that file's examples. The Rust tests run the workflow under Node too,
