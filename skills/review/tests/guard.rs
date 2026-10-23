@@ -112,6 +112,9 @@ fn refuses_options_and_paths_that_reach_a_file() {
         &["log", "-1", "--output", "f"],
         &["show", "--outp=f", "HEAD"],
         &["diff", "--no-index", "/etc/hostname", "README.md"],
+        // git takes no abbreviation of --no-index (--no-inde could be
+        // --no-indent-heuristic), and a path outside is refused anyway.
+        &["diff", "--no-inde", "/etc/hostname", "README.md"],
         &["blame", "--contents", "/etc/hostname", "README.md"],
         &["blame", "--cont=/etc/hostname", "README.md"],
         &["blame", "--ignore-revs-file", "/etc/hostname", "README.md"],
