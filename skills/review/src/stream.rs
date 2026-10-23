@@ -1,6 +1,7 @@
-//! The Claude Code session's events, as `--output-format stream-json` writes
-//! them: one JSON object per line. Lines that are not a JSON object, such as a
-//! hook's output, are skipped.
+//! The engine's events, one JSON object per line, in the shapes Claude Code's
+//! `--output-format stream-json` gives them: an `init` event, rate limit and
+//! refused tool call events, one `agent` event per agent, and a last `result`.
+//! Lines that are not a JSON object are skipped.
 
 use crate::{
     actions::Runner,
@@ -13,7 +14,7 @@ use std::{
     path::PathBuf, //
 };
 
-/// The session's events, in order.
+/// The engine's events, in order.
 pub(crate) struct Events {
     /// The events.
     events: Vec<Value>,
@@ -25,7 +26,7 @@ impl Events {
         runner.trusted_dir().join("stream.jsonl")
     }
 
-    /// The session's events; `None` when the session never started.
+    /// The engine's events; `None` when the engine never started.
     pub(crate) fn load(runner: &Runner) -> Result<Option<Self>, Error> {
         let path = Self::path(runner);
         match fs::read(&path) {
@@ -56,12 +57,8 @@ impl Events {
         })
     }
 
-    /// The session's first `init` event, which lists its tools and MCP servers.
-    pub(crate) fn init(&self) -> Option<&Value> {
-        self.of("system", Some("init")).next()
-    }
-
-    /// The last `result` event: how the session's last turn ended.
+    /// The last `result` event: how the review ended, its usage, and the
+    /// status of each MCP server the agents had.
     pub(crate) fn last_result(&self) -> Option<&Value> {
         self.of("result", None).last()
     }

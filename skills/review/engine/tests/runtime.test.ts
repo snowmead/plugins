@@ -57,11 +57,12 @@ test('an agent reads, and only the tuning draft writes', () => {
   expect(kb.allowed.some((t) => t.includes('write'))).toBe(false)
 })
 
-test("the runtime hands the agent those tools and that environment, and an agent after a stop doesn't run", async () => {
+test("the runtime hands the agent those tools and that environment, notes its servers, and an agent after a stop doesn't run", async () => {
   const seen: Options[] = []
   const query = ((q: { options: Options }) => {
     seen.push(q.options)
     return (async function* () {
+      yield { type: 'system', subtype: 'init', mcp_servers: [{ name: 'review', status: 'connected' }, { name: 'greptile', status: 'failed' }] }
       yield { type: 'result', subtype: 'success', num_turns: 1, total_cost_usd: 0, modelUsage: {}, structured_output: { ok: true } }
     })()
   }) as never
@@ -76,6 +77,7 @@ test("the runtime hands the agent those tools and that environment, and an agent
     expect(seen[0]!.env!.GH_TOKEN).toBeUndefined()
     expect(seen[0]!.permissionMode).toBe('dontAsk')
     expect(seen[0]!.settingSources).toEqual([])
+    expect(rt.servers).toEqual({ review: 'connected', greptile: 'failed' })
     stop.abort()
     expect(await rt.agent({ ...CALL, label: 'b' })).toBeNull()
     expect(seen.length).toBe(1)

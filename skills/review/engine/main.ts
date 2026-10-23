@@ -220,6 +220,7 @@ async function main() {
     is_error: Boolean(error || result.error),
     terminal_reason: abort.signal.aborted ? 'stopped' : undefined,
     api_error_status: rt.limit.refused ? 429 : undefined,
+    mcp_servers: Object.entries(rt.servers).map(([name, status]) => ({ name, status })),
     total_cost_usd: totalCost,
     modelUsage: Object.fromEntries(
       Object.entries(rt.models).map(([m, u]) => [

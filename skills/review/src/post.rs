@@ -212,7 +212,7 @@ pub(crate) struct Post<'a> {
     pub(crate) repo: &'a Repository,
     /// The job's secrets, which no posted text may hold.
     pub(crate) secrets: &'a [String],
-    /// Whether the job has a Greptile key, so the session should have reached
+    /// Whether the job has a Greptile key, so the agents should have reached
     /// Greptile.
     pub(crate) greptile: bool,
     /// The GitHub server's address (`GITHUB_SERVER_URL`), for the link to the
@@ -370,9 +370,9 @@ impl Post<'_> {
         Ok(())
     }
 
-    /// Warns when the job has a Greptile key but the session did not connect
-    /// to Greptile: the summary says the review did not read the knowledge
-    /// base, and a key that no longer connects is a fault in the job.
+    /// Warns when the job has a Greptile key but no agent connected to
+    /// Greptile: the summary says the review did not read the knowledge base,
+    /// and a key that no longer connects is a fault in the job.
     fn check_greptile(&self) -> Result<(), Error> {
         if !self.greptile {
             return Ok(());
@@ -380,8 +380,8 @@ impl Post<'_> {
         let events = Events::load(self.runner)?;
         let status = events
             .as_ref()
-            .and_then(Events::init)
-            .and_then(|init| init["mcp_servers"].as_array())
+            .and_then(Events::last_result)
+            .and_then(|result| result["mcp_servers"].as_array())
             .and_then(|servers| servers.iter().find(|server| server["name"] == "greptile"))
             .and_then(|server| server["status"].as_str());
         if status != Some("connected") {
@@ -999,7 +999,7 @@ mod tests {
     }
 
     /// Runs the step over `review`; with `greptile`, the job has a Greptile
-    /// key and the session reported that status for Greptile's server.
+    /// key and the engine reported that status for Greptile's server.
     fn post(
         review: &Value,
         github: &FakeGitHub,
@@ -1023,8 +1023,8 @@ mod tests {
         }
         .save(&test.runner)
         .expect("the threads");
-        let init = json!({"type": "system", "subtype": "init", "mcp_servers": [{"name": "greptile", "status": greptile.unwrap_or("failed")}]});
-        fs::write(Events::path(&test.runner), format!("{init}\n")).expect("the events");
+        let result = json!({"type": "result", "mcp_servers": [{"name": "greptile", "status": greptile.unwrap_or("failed")}]});
+        fs::write(Events::path(&test.runner), format!("{result}\n")).expect("the events");
         let secrets = [SECRET.to_owned(), String::new(), "short".into()];
         let step = Post {
             runner: &test.runner,
@@ -1848,7 +1848,7 @@ mod tests {
                 Some("Greptile's MCP server did not connect: failed."),
             ),
             (Some("connected"), None),
-            // Without a key, the session never starts the server.
+            // Without a key, no agent starts the server.
             (None, None),
         ] {
             let (test, result) = post(&review(json!([]), json!([])), &github(|_| None), greptile);

@@ -130,6 +130,8 @@ export interface SdkRuntime extends Runtime {
   models: Record<string, { input: number; output: number; cache_read: number; cache_write: number; cost: number }>
   /** The last rate limit event, and whether an agent was refused for the usage limit. */
   limit: { info: Record<string, unknown> | null; refused: boolean }
+  /** Each MCP server's status as the agents' sessions started: connected when any agent connected to it. */
+  servers: Record<string, string>
 }
 
 export function sdkRuntime(o: SdkRuntimeOptions): SdkRuntime {
@@ -202,6 +204,7 @@ export function sdkRuntime(o: SdkRuntimeOptions): SdkRuntime {
     usage: [],
     models: {},
     limit: { info: null, refused: false },
+    servers: {},
     knowledgeBase: Boolean(knowledgeBase),
     log: o.log ?? ((m) => console.error(m)),
     async agent(call: AgentCall) {
@@ -266,6 +269,9 @@ export function sdkRuntime(o: SdkRuntimeOptions): SdkRuntime {
         if (abort.signal.aborted) throw new Error('stopped')
         for await (const m of run({ prompt: call.prompt, options }) as AsyncIterable<SDKMessage>) {
           if (m.type === 'stream_event' || m.type === 'assistant') prime()
+          if (m.type === 'system' && m.subtype === 'init') {
+            for (const s of m.mcp_servers) if (rt.servers[s.name] !== 'connected') rt.servers[s.name] = s.status
+          }
           if (m.type === 'rate_limit_event') {
             rt.limit.info = m.rate_limit_info as Record<string, unknown>
             emit({ type: 'rate_limit_event', rate_limit_info: m.rate_limit_info })

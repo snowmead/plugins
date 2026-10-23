@@ -3,10 +3,11 @@
 //! commands that become annotations.
 //!
 //! The review directory holds what the review's agents read (the rules, the
-//! workflow, the pull request, and its threads); the session gets it with
-//! `--add-dir`. The trusted directory holds what only the job reads and writes
-//! (the args, the session's events, the threads the job may reply on, and the
-//! git the agents run), outside every directory the agents can reach.
+//! settings, the pull request, and its threads); the engine gets it with
+//! `--read-dir`. The trusted directory holds what only the job reads and writes
+//! (the args, the engine's events and record, the threads the job may reply
+//! on, and the git the agents run), outside every directory the agents can
+//! reach.
 
 use crate::error::Error;
 use std::{
