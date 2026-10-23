@@ -18,6 +18,7 @@
 // checks that code can (the files changed, the diffs, the cases added or
 // changed), so agents read and judge only what needs reading and judging.
 
+import { posix } from 'node:path'
 import { type Args, type AgentCall, type Io, type Runtime, parallel, review } from './review.ts'
 import { parseRules } from './rules.ts'
 import type { Schema } from './schemas.ts'
@@ -51,7 +52,9 @@ export async function tune(args: Args, rt: Runtime, io: TuningIo, engine: Engine
   const EVALS: string = A.evals || '.claude/review-evals.json'
   const CONFIG_FILE: string = A.config_file || '.claude/review.json'
   const REVIEWER: string = A.reviewer || 'github-actions'
-  const OUT: string = String(A.out_dir).replace(/\/$/, '')
+  // As git names paths: relative, without `./` or a trailing `/`.
+  const OUT: string = posix.normalize(String(A.out_dir)).replace(/\/$/, '')
+  if (OUT === '.' || OUT.startsWith('/') || OUT === '..' || OUT.startsWith('../')) throw new Error('out_dir must be a directory inside the repository, relative to it')
 
   // The settings, read once and passed to every run of the review.
   const text = io.read(CONFIG_FILE)
@@ -299,11 +302,14 @@ Return done=true once both files are written.`,
   // What code can check, it checks: the files the routine changed, and the
   // cases it changed or removed. The guard agent judges the rest from the
   // diffs computed here, not from any agent's account of them.
+  // git names each path from the top of the work tree, and out_dir is
+  // relative to the directory the routine runs in.
+  const own = `${((await io.git(['rev-parse', '--show-prefix'])) || '').trim()}${OUT}`
   const status = ((await io.git(['status', '--porcelain', '--untracked-files=all'])) || '')
     .split('\n')
     .filter(Boolean)
     .map((l) => l.slice(3))
-    .filter((path) => path !== OUT && !path.startsWith(`${OUT}/`))
+    .filter((path) => path !== own && !path.startsWith(`${own}/`))
   const violations = status.map((path) => `changed outside ${OUT}: ${path}`)
   const byId = new Map(candidate.map((x) => [x.id, x]))
   for (const x of original) {

@@ -38,6 +38,12 @@ export function mermaid(diagram: string | undefined): string {
   return source && !source.includes('```') ? source : ''
 }
 
+/** A code fence longer than any run of backticks in `text`, so no line of the text ends the block early. */
+export function fence(text: string): string {
+  const longest = Math.max(0, ...(text.match(/`+/g) || []).map((run) => run.length))
+  return '`'.repeat(Math.max(3, longest + 1))
+}
+
 /** Lines joined, with no two blank lines in a row and none at either end. */
 export function lines(parts: string[]): string {
   return parts
@@ -57,8 +63,12 @@ export function commentBody(p: Finding, meta: unknown, elsewhere?: string): stri
   parts.push(p.body)
   if (p.places && p.places.length) parts.push('', 'The same problem is also at:', ...p.places.map((x) => `- \`${x}\``))
   if (p.rule) parts.push('', `Rule: ${p.rule}`)
-  if (p.suggestion && elsewhere) parts.push('', 'Suggested text for that line:', '```', p.suggestion.replace(/\n$/, ''), '```')
-  else if (p.suggestion) parts.push('', '```suggestion', p.suggestion.replace(/\n$/, ''), '```')
+  if (p.suggestion) {
+    const text = p.suggestion.replace(/\n$/, '')
+    const f = fence(text)
+    if (elsewhere) parts.push('', 'Suggested text for that line:', f, text, f)
+    else parts.push('', `${f}suggestion`, text, f)
+  }
   parts.push('', '<details><summary>Why this was flagged</summary>', '', p.trace, '', '</details>')
   // Escaped so no text in the marker can end the HTML comment early.
   parts.push('', `<!-- claude-review ${JSON.stringify(meta).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')} -->`)

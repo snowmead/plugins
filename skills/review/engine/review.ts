@@ -10,7 +10,7 @@
 // agents connect. The settings say which files are which, which segments a
 // repository adds, and which model and effort each stage runs on.
 //
-// Args (README.md, "Engine args"), as the action's prepare step writes them:
+// Args, as the action's prepare step (src/prepare.rs) writes them:
 //   pr             pull request number (required in review mode)
 //   repo           owner/name, for links in the summary
 //   config         the settings, as the action passes them
@@ -560,13 +560,17 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
         tools: 'read',
       })
       if (!answer) return null
-      // The engine knows each thread's place, title, and severity from its first comment.
-      return answer.threads.flatMap((s) => {
-        const t = own.find((x) => x.id === s.id)
-        if (!t) return []
+      // Each open thread is followed once, whatever the answer repeats or
+      // names besides; one it leaves out stays open. The engine knows each
+      // thread's place, title, and severity from its first comment.
+      const told = new Map(answer.threads.map((s) => [s.id, s]))
+      const left = own.filter((t) => !told.has(t.id)).map((t) => t.id)
+      if (left.length) rt.log(`${tag}follow-up: no answer for ${left.join(', ')}, kept open`)
+      return own.map((t) => {
+        const s: ThreadState = told.get(t.id) ?? { id: t.id, state: 'open', holds: false }
         const first = commentsOf(t)[0]!
         const said = firstComment(first.body || '')
-        return [{ ...s, url: first.url, title: said.title, severity: said.severity, path: said.path || t.path, line: s.line || said.line || t.line || undefined }]
+        return { ...s, url: first.url, title: said.title, severity: said.severity, path: said.path || t.path, line: s.line || said.line || t.line || undefined }
       })
     }
 

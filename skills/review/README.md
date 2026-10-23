@@ -358,16 +358,18 @@ it. Its args are `{repo, since, until, out_dir}`, plus `rules`, `evals`,
 
 ```sh
 bun --no-env-file --cwd <skill> engine/main.ts tune --repo "$PWD" --repo-name owner/name \
-  --since 2026-10-05 --until 2026-10-12 --out-dir .tuning --out tuning.json
+  --since 2026-10-05 --until 2026-10-12 --out-dir .tuning --out .tuning/tuning.json
 ```
 
 The engine reads GitHub with the token in `GH_TOKEN` or `GITHUB_TOKEN`, or
 `gh`'s: it lists the merged pull requests and writes each eval case's pull
 request file itself, and its agents read one route of the repository at a
 time through a tool that only reads. Only the draft agent writes, and only
-inside `out_dir`. The guard checks in code what code can (the files changed
-outside `out_dir`, an eval case changed or removed, the cases added) and an
-agent judges the rules' diff against the Tuning section.
+inside `out_dir`, a directory of the repository. The guard checks in code
+what code can (the files changed outside `out_dir`, an eval case changed or
+removed, the cases added) and an agent judges the rules' diff against the
+Tuning section. Keep `--out` inside `out_dir` too, or a result left from an
+earlier run counts as a file changed outside it.
 
 The routine opens a pull request with the draft when it only adds eval cases,
 or when the eval set scores better with the change: more of the cases that

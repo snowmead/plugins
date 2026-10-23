@@ -63,7 +63,14 @@ test("the runtime hands the agent those tools and that environment, notes its se
     seen.push(q.options)
     return (async function* () {
       yield { type: 'system', subtype: 'init', mcp_servers: [{ name: 'review', status: 'connected' }, { name: 'greptile', status: 'failed' }] }
-      yield { type: 'result', subtype: 'success', num_turns: 1, total_cost_usd: 0, modelUsage: {}, structured_output: { ok: true } }
+      yield {
+        type: 'result',
+        subtype: 'success',
+        num_turns: 2,
+        total_cost_usd: 0.5,
+        modelUsage: { m: { inputTokens: 10, outputTokens: 20, cacheReadInputTokens: 30, cacheCreationInputTokens: 40, costUSD: 0.5 } },
+        structured_output: { ok: true },
+      }
     })()
   }) as never
   const saved = process.env.GH_TOKEN
@@ -77,13 +84,19 @@ test("the runtime hands the agent those tools and that environment, notes its se
     expect(seen[0]!.env!.GH_TOKEN).toBeUndefined()
     expect(seen[0]!.permissionMode).toBe('dontAsk')
     expect(seen[0]!.settingSources).toEqual([])
+    // No MCP server but the engine's own, no directory beyond the checkout, and no saved session.
+    expect(seen[0]!.strictMcpConfig).toBe(true)
+    expect(Object.keys(seen[0]!.mcpServers!)).toEqual(['review'])
+    expect(seen[0]!.additionalDirectories).toEqual([])
+    expect(seen[0]!.persistSession).toBe(false)
+    expect(rt.models).toEqual({ m: { input: 10, output: 20, cache_read: 30, cache_write: 40, cost: 0.5 } })
     expect(rt.servers).toEqual({ review: 'connected', greptile: 'failed' })
     stop.abort()
     expect(await rt.agent({ ...CALL, label: 'b' })).toBeNull()
     expect(seen.length).toBe(1)
-    expect((rt.usage as AgentUsage[]).map((u) => [u.label, u.status])).toEqual([
-      ['a', 'ok'],
-      ['b', 'stopped'],
+    expect((rt.usage as AgentUsage[]).map((u) => [u.label, u.status, u.turns, u.output])).toEqual([
+      ['a', 'ok', 2, 20],
+      ['b', 'stopped', 0, 0],
     ])
   } finally {
     if (saved === undefined) delete process.env.GH_TOKEN

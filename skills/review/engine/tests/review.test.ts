@@ -11,6 +11,7 @@ import { expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { diffText, firstComment } from '../review.ts'
 import { refusal } from '../git.ts'
+import { commentBody, fence } from '../render.ts'
 import { CONFIG, SEGMENTS, SHA, ran, review, run, thread } from './harness.ts'
 
 const BASE = { pr: 5, repo: 'o/r', threads: '/t.json', config: CONFIG, base: SHA('b'), head: SHA('h'), checkout: true }
@@ -352,6 +353,14 @@ test('a finding on a file the pull request does not change goes on its anchor, a
   ])
 })
 
+test("a suggestion that holds a code fence gets a longer fence, so the fence inside doesn't end it", () => {
+  const finding = { path: 'README.md', line: 3, severity: 'nit', title: 't', body: 'b', trace: 't', suggestion: '```sh\nbun install\n```\n' } as const
+  expect(commentBody(finding, {})).toContain('````suggestion\n```sh\nbun install\n```\n````\n')
+  expect(commentBody(finding, {}, '`README.md:3`')).toContain('Suggested text for that line:\n````\n```sh')
+  expect(fence('a ````` b')).toBe('``````')
+  expect(fence('no backticks')).toBe('```')
+})
+
 test('the summary keeps each entry under its id until a fix or an answer, whichever segments run, once each', async () => {
   const entry = (id: string | null, title: string, more = {}) => ({ ...(id ? { id } : {}), severity: 'nit', path: 'src/b.rs', line: 4, title, note: 'n', from: SHA('c'), ...more })
   const { result, prompts } = await run(
@@ -475,6 +484,10 @@ test('the follow-up gets only this reviewer\'s open threads, and the engine read
   expect(rows[1].where).toContain('docs/y.md:9')
   // A thread the agent names that is not one of these gets no reply.
   expect(result.replies).toEqual([])
+  // A thread the answer leaves out stays open, and one it repeats counts once.
+  const left = await run({ ...BASE, reviewer: 'review-bot' }, (label) => (label === 'follow-up' ? { threads: [{ id: 'T4', state: 'open', holds: false }, { id: 'T4', state: 'open', holds: false }] } : review(label)), file)
+  expect(left.result.summary.issues.filter((i: any) => i.note.startsWith('open thread')).map((i: any) => i.title)).toEqual(['leaks the token', 'stale doc'])
+  expect(left.logs).toContain('follow-up: no answer for T1, kept open')
   // Without any such thread, no follow-up agent starts.
   const none = await run({ ...BASE, reviewer: 'review-bot' }, review, threads(thread('T3', { reviewer: 'someone' })))
   expect(none.labels).not.toContain('follow-up')

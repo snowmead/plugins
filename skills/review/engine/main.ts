@@ -75,6 +75,8 @@ const one = (o: Cli['options'], name: string) => (o[name] ? o[name]![o[name]!.le
 
 async function main() {
   const cli = parse(Bun.argv.slice(2))
+  const concurrency = Number(one(cli.options, 'concurrency') || 8)
+  if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error('--concurrency needs a whole number of agents, 1 or more')
   const cwd = resolve(one(cli.options, 'repo') || process.cwd())
   const run = async (args: string[]) => {
     const r = await git(args, cwd)
@@ -178,7 +180,7 @@ async function main() {
     cwd,
     github,
     readDirs: (cli.options['read-dir'] || []).map((d) => resolve(cwd, d)),
-    concurrency: Number(one(cli.options, 'concurrency') || 8),
+    concurrency,
     greptileKey: process.env.GREPTILE_API_KEY || undefined,
     claudePath: process.env.REVIEW_CLAUDE || undefined,
     onEvent: emit,

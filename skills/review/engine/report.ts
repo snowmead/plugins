@@ -1,7 +1,7 @@
 // What a run spent, by stage and by model, and the Markdown report of a local
 // review, which the engine writes where git never tracks it.
 
-import { ICON, NAME } from './render.ts'
+import { fence, ICON, NAME } from './render.ts'
 import type { Finding, Severity } from './schemas.ts'
 import type { AgentUsage, SdkRuntime } from './runtime.ts'
 
@@ -78,7 +78,10 @@ export function localReport(o: {
       out.push(`### \`${f.path}:${f.line}\` ${f.title}`, '', f.body, '')
       if (f.places && f.places.length) out.push('Also at:', ...f.places.map((p) => `- \`${p}\``), '')
       if (f.rule) out.push(`Rule: ${f.rule}`, '')
-      if (f.suggestion) out.push('Suggested:', '```', f.suggestion.replace(/\n$/, ''), '```', '')
+      if (f.suggestion) {
+        const text = f.suggestion.replace(/\n$/, '')
+        out.push('Suggested:', fence(text), text, fence(text), '')
+      }
       out.push('<details><summary>Why this was flagged</summary>', '', f.trace, '', '</details>', '')
     }
   }

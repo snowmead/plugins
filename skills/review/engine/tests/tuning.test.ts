@@ -15,6 +15,7 @@ interface World {
   written: Record<string, string>
   status?: string
   diff?: string
+  prefix?: string
 }
 
 function io(w: World): TuningIo {
@@ -23,6 +24,7 @@ function io(w: World): TuningIo {
     read: (path) => (path in w.written ? w.written[path]! : base.read(path)),
     async git(args) {
       if (args[0] === 'status') return w.status || ''
+      if (args.join(' ') === 'rev-parse --show-prefix') return `${w.prefix || ''}\n`
       return base.git(args)
     },
     async github(route) {
@@ -51,17 +53,20 @@ test('tuning opens a pull request for new cases, or when the eval scores better 
     ['breaks a rule of the loop', { diff: '+t', ok: false }, null, 'rejected'],
     ['changes an existing case', { diff: '+t', edit: true }, null, 'rejected'],
     ['changes a file outside its directory', { diff: '+t', status: ' M src/a.rs\n?? o/REVIEW.candidate.md\n' }, null, 'rejected'],
+    ['writes only in its directory, given as ./o/', { diff: '+t', status: '?? o/REVIEW.candidate.md\n', out: './o/' }, one, 'open-pr'],
+    ['writes only in its directory, from a subdirectory', { diff: '+t', status: '?? sub/o/REVIEW.candidate.md\n', prefix: 'sub/' }, one, 'open-pr'],
     ['finds one more', { diff: '+t' }, one, 'open-pr'],
     ['finds one more with a Learned row', { diff: '+t' }, one, 'open-pr', 'learned-row'],
     ['scores the same', { diff: '+t' }, without, 'no-gain'],
     ['finds two more but breaks a quiet case', { diff: '+t' }, [row('f1', 'find', true), row('f2', 'find', true), row('f3', 'find', true), row('q1', 'quiet', true)], 'no-gain'],
     ['finds one more but scores too few cases', { diff: '+t' }, [row('f1', 'find', true), row('f2', 'find', true), row('f3', 'find', undefined), row('q1', 'quiet', false)], 'inconclusive'],
-  ] as [string, { diff: string; add?: boolean; edit?: boolean; ok?: boolean; status?: string }, ReturnType<typeof row>[] | null, string, string?][]) {
+  ] as [string, { diff: string; add?: boolean; edit?: boolean; ok?: boolean; status?: string; out?: string; prefix?: string }, ReturnType<typeof row>[] | null, string, string?][]) {
     const w: World = {
       files: { 'RULES.md': '# Rules\n\n## Tuning\n\nOnly Learned rows.\n', 'c.json': JSON.stringify({ ...CONFIG, examples: [] }), '.claude/review-evals.json': JSON.stringify({ cases: [CASE('f1')] }) },
       written: {},
       status: change.status,
       diff: change.diff,
+      prefix: change.prefix,
     }
     const calls: Record<string, AgentCall> = {}
     const answer = (call: AgentCall) => {
@@ -92,7 +97,7 @@ test('tuning opens a pull request for new cases, or when the eval scores better 
       return { cases: 4, recall: 0, quiet: 1, found: '', quiet_held: '', unscored: [], dropped: [], rows }
     }
     const rt = { knowledgeBase: false, log: () => {}, agent: async (call: AgentCall) => answer(call) }
-    const result = await tune(ARGS, rt, io(w), engine)
+    const result = await tune({ ...ARGS, out_dir: change.out || 'o' }, rt, io(w), engine)
     expect([name, result.decision]).toEqual([name, decision])
     // Only a rule change is replayed, once without it and once with it.
     expect([name, replays]).toEqual([name, withChange ? 2 : 0])
@@ -105,8 +110,16 @@ test('tuning opens a pull request for new cases, or when the eval scores better 
     if (result.guard) {
       expect(result.guard.cases_added).toBe(change.add ? 1 : 0)
       if (change.edit) expect(result.guard.violations).toContain('changed the eval case f1')
-      if (change.status) expect(result.guard.violations).toEqual(['changed outside o: src/a.rs'])
+      if (change.status) expect(result.guard.violations).toEqual(decision === 'rejected' ? ['changed outside o: src/a.rs'] : [])
     }
+  }
+})
+
+test('tuning refuses an out_dir outside the repository', async () => {
+  const w: World = { files: {}, written: {} }
+  const rt = { knowledgeBase: false, log: () => {}, agent: async (call: AgentCall) => expect.unreachable(call.label) }
+  for (const out_dir of ['/tmp/o', '../o', '.', './']) {
+    await expect(tune({ ...ARGS, out_dir }, rt, io(w))).rejects.toThrow('out_dir must be a directory inside the repository')
   }
 })
 
