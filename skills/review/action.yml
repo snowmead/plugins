@@ -102,6 +102,16 @@ runs:
         rustup toolchain install "$channel" --profile minimal --no-self-update
         cargo +"$channel" build --release --locked --quiet
         echo "CLAUDE_REVIEW=$PWD/target/release/claude-review" >> "$GITHUB_ENV"
+    - name: Find the pull request
+      id: start
+      if: steps.credential.outputs.present == 'true'
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REVIEW_PR: ${{ inputs.pr }}
+        REVIEW_REVIEWER: ${{ inputs.reviewer }}
+      run: '"$CLAUDE_REVIEW" start'
     # Bun runs the review engine (engine/). Its packages, the Agent SDK and the
     # Claude Code it ships, install from the lockfile, without their scripts.
     - name: Install Bun and the engine
@@ -129,16 +139,6 @@ runs:
         bin="$RUNNER_TEMP/bun/bun-linux-$arch"
         "$bin/bun" install --frozen-lockfile --production --ignore-scripts
         echo "$bin" >> "$GITHUB_PATH"
-    - name: Find the pull request
-      id: start
-      if: steps.credential.outputs.present == 'true'
-      shell: bash
-      working-directory: ${{ inputs.path }}
-      env:
-        GH_TOKEN: ${{ inputs.github-token }}
-        REVIEW_PR: ${{ inputs.pr }}
-        REVIEW_REVIEWER: ${{ inputs.reviewer }}
-      run: '"$CLAUDE_REVIEW" start'
     - name: Take the review configuration from the trusted branch
       if: steps.credential.outputs.present == 'true'
       shell: bash

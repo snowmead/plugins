@@ -1,7 +1,9 @@
 //! The start step: which pull request the run reviews, and the last review an
 //! earlier run submitted, whose marker says what this run reviews again. It
-//! runs before any step that can fail, so a run that fails can mark the
-//! summary in the pull request description as not current.
+//! runs as soon as this program is built, before the review's other steps, so
+//! a run that fails after it can mark the summary in the pull request
+//! description as not current. A run that fails before it, in building this
+//! program, fails its check but leaves the summary as it was.
 //!
 //! A pull request event names the pull request. A manual run looks it up by
 //! number, and refuses one from a fork: a manual run holds the secrets, so it

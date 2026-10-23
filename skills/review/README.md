@@ -93,7 +93,7 @@ writes a Markdown report under the git directory (`.git/review/`), where git
 never tracks it. Run it as:
 
 ```sh
-bun install --frozen-lockfile --production --cwd <skill>
+bun install --frozen-lockfile --production --ignore-scripts --cwd <skill>
 bun --no-env-file --cwd <skill> engine/main.ts local --repo "$PWD"
 ```
 
@@ -104,7 +104,8 @@ for. A local review uses the repository's `REVIEW.md` and
 does not; it runs on the Claude account Claude Code is signed in with, or on
 `ANTHROPIC_API_KEY`. Bun always starts in this directory, never in the
 repository under review: Bun runs the `bunfig.toml` and loads the `.env` files
-of the directory it starts in.
+of the directory it starts in. The skill lets Claude Code run these two
+commands, as SKILL.md spells them, without asking; it asks before any other.
 
 ### Resolving threads
 
@@ -197,7 +198,9 @@ of the review's state after it, the review may or may not be posted: the job
 keeps it, the summary warns and keeps its links, the run's summary page holds
 the text of every finding, and the check fails, asking the author to look for
 the review before a re-run. When the review does not finish, the summary says
-so. The run's summary page lists the agents, the minutes, each stage's and
+so, except when the job fails while it builds its program, before it has
+found the pull request: the check fails, and the summary of the last push stays
+as it was. The run's summary page lists the agents, the minutes, each stage's and
 each model's tokens, and what they cost at API prices, which on a subscription is usage, not a
 bill. When the account hits a usage limit, the run says which and when it
 resets.
@@ -316,7 +319,8 @@ A pull request can neither change how its own review runs nor instruct it:
 - Bun starts in the action's own copy, never in the checkout, with
   `--no-env-file`: a pull request's `bunfig.toml` or `.env` would otherwise
   run its code or set the environment of the process that holds the Claude
-  credential.
+  credential. The Claude Code each agent runs, the native program the SDK
+  ships and starts in the checkout, reads neither.
 - The job reads the review from the engine's record, never from an agent's
   answer, and posts it only when the engine ran on the args the job wrote.
   It replies in, and lists for resolving, only its own open threads, listed

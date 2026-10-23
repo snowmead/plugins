@@ -56,7 +56,7 @@ export function stubIo(setup: Setup = {}): Io {
       if (sub === 'cat-file') return ''
       if (sub === 'diff' && rest[0] === '--name-only') {
         const range = rest[rest.length - 1]!
-        return `${((setup.changed && setup.changed[range]) || CHANGED).join('\n')}\n`
+        return `${((setup.changed && setup.changed[range]) || CHANGED).join('\0')}\0`
       }
       if (sub === 'diff') return ''
       return null

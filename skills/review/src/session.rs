@@ -12,7 +12,8 @@
 //! Bun reads a `bunfig.toml`, which can preload a script, and `.env` files from
 //! the directory it starts in, so the engine starts in the action's own copy,
 //! never in the checkout, with `--no-env-file`, and is told where the checkout
-//! is.
+//! is. The Claude Code each agent runs, the native program the SDK ships and
+//! starts in the checkout, reads neither.
 //!
 //! The engine writes its events and its record to the trusted directory, and
 //! its output to a log there, which the report step prints with workflow

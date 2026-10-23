@@ -19,7 +19,7 @@
 // changed), so agents read and judge only what needs reading and judging.
 
 import { posix } from 'node:path'
-import { type Args, type AgentCall, type Io, type Runtime, parallel, review } from './review.ts'
+import { type Args, type AgentCall, type Io, type Runtime, caseProblem, parallel, review } from './review.ts'
 import { parseRules } from './rules.ts'
 import type { Schema } from './schemas.ts'
 import { DEFAULTS, type Stage } from './settings.ts'
@@ -305,11 +305,17 @@ Return done=true once both files are written.`,
   // git names each path from the top of the work tree, and out_dir is
   // relative to the directory the routine runs in.
   const own = `${((await io.git(['rev-parse', '--show-prefix'])) || '').trim()}${OUT}`
-  const status = ((await io.git(['status', '--porcelain', '--untracked-files=all'])) || '')
-    .split('\n')
-    .filter(Boolean)
-    .map((l) => l.slice(3))
-    .filter((path) => path !== own && !path.startsWith(`${own}/`))
+  // -z keeps each path as it is, unquoted; a rename or copy adds the path it
+  // came from as the next field.
+  const fields = ((await io.git(['status', '--porcelain', '-z', '--untracked-files=all'])) || '').split('\0')
+  const touched: string[] = []
+  for (let i = 0; i < fields.length; i++) {
+    const entry = fields[i]!
+    if (!entry) continue
+    touched.push(entry.slice(3))
+    if (/[RC]/.test(entry.slice(0, 2)) && fields[i + 1]) touched.push(fields[++i]!)
+  }
+  const status = touched.filter((path) => path !== own && !path.startsWith(`${own}/`))
   const violations = status.map((path) => `changed outside ${OUT}: ${path}`)
   const byId = new Map(candidate.map((x) => [x.id, x]))
   for (const x of original) {
@@ -319,6 +325,13 @@ Return done=true once both files are written.`,
   }
   const kept = new Set(original.map((x) => x.id))
   const added = candidate.filter((x) => !kept.has(x.id))
+  // The eval reads the file only as a whole, so one case it cannot replay
+  // would fail every later eval: check the shape here, where a change of only
+  // cases goes to the pull request without one.
+  for (const x of added) {
+    const wrong = caseProblem(x, SEGMENTS)
+    if (wrong) violations.push(wrong)
+  }
   const diff = await io.diff(RULES, REVIEW_CANDIDATE)
   const g = await rt.agent({
     label: 'guard',

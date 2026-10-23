@@ -3,7 +3,7 @@ name: review
 description: Reviews code with a pipeline of Claude agents (one per lens, a skeptic that tries to refute each finding, an editor), on the current branch locally or as a GitHub Action that posts one review of inline comments plus a summary in the pull request description. Use when asked to review the current branch or uncommitted changes, to add automated Claude code review to a repository's CI, to write or change its review rules (REVIEW.md) or settings (.claude/review.json), or to run its sweep, eval or tuning modes.
 license: Apache-2.0. Complete terms in LICENSE.txt
 compatibility: Bun 1.4 or later. Locally, a Claude Code sign-in or ANTHROPIC_API_KEY. The action runs on a Linux runner, builds its Rust program with rustup, and installs a pinned Bun.
-allowed-tools: Bash(bun install --frozen-lockfile --production --cwd *), Bash(bun --no-env-file --cwd *)
+allowed-tools: Bash(bun install --frozen-lockfile --production --ignore-scripts --cwd "${CLAUDE_SKILL_DIR}") Bash(bun --no-env-file --cwd "${CLAUDE_SKILL_DIR}" engine/main.ts *)
 metadata:
   repository: https://github.com/snowmead/plugins
 ---
@@ -25,7 +25,7 @@ your task needs before you change anything.
 - **Review the current branch.** From the repository's root, install the engine's packages once, then run it:
 
   ```sh
-  bun install --frozen-lockfile --production --cwd "${CLAUDE_SKILL_DIR}"
+  bun install --frozen-lockfile --production --ignore-scripts --cwd "${CLAUDE_SKILL_DIR}"
   bun --no-env-file --cwd "${CLAUDE_SKILL_DIR}" engine/main.ts local --repo "$PWD"
   ```
 

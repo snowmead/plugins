@@ -1,8 +1,10 @@
 //! The unfinished step: a review that did not finish, or whose summary was
 //! not written, says so at the top of the job's section of the pull request
 //! description, so the pull request does not show an older review as current.
-//! The last submitted review's marker keeps the last complete review's
-//! commit; a pull request without one gets a full review next time.
+//! It needs the start step's pull request, so a run that fails before start
+//! (src/start.rs) writes no notice. The last submitted review's marker keeps
+//! the last complete review's commit; a pull request without one gets a full
+//! review next time.
 
 use crate::{
     error::Error,

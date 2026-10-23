@@ -206,12 +206,53 @@ function filled<T extends Edited>(x: T, byKey: Record<string, object>): T & Part
   return { ...findingOf(first), ...given } as T & Partial<Finding>
 }
 
+/** Control characters git writes as a letter after a backslash in a quoted path. */
+const ESCAPES: Record<string, number> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13 }
+
+/**
+ * A path as git names it, without the quotes and escapes git adds to a path
+ * with a control character, a quote, a backslash or, under the default
+ * core.quotepath, any byte above 0x7f: "caf\303\251.rs" is café.rs.
+ */
+export function unquote(path: string): string {
+  if (path.length < 2 || !path.startsWith('"') || !path.endsWith('"')) return path
+  const inner = path.slice(1, -1)
+  const bytes: number[] = []
+  const utf8 = new TextEncoder()
+  for (let i = 0; i < inner.length; ) {
+    if (inner[i] !== '\\') {
+      const ch = String.fromCodePoint(inner.codePointAt(i)!)
+      bytes.push(...utf8.encode(ch))
+      i += ch.length
+    } else if (/^[0-7]{3}$/.test(inner.slice(i + 1, i + 4))) {
+      bytes.push(parseInt(inner.slice(i + 1, i + 4), 8))
+      i += 4
+    } else {
+      const c = inner[i + 1] ?? ''
+      bytes.push(ESCAPES[c] ?? c.charCodeAt(0))
+      i += 2
+    }
+  }
+  return new TextDecoder().decode(new Uint8Array(bytes))
+}
+
 /** The diff without generated files, in whole files up to MAX_DIFF characters, and the files left out. */
 export function diffText(raw: string, keep: (path: string) => boolean, max = MAX_DIFF): string {
   const files = raw.split(/^(?=diff --git )/m).filter((s) => s.startsWith('diff --git '))
+  // The path after the change. A hunk's lines start with a space, + or -,
+  // so only the header can hold a line that starts "rename to".
   const pathOf = (section: string) => {
-    const m = /^diff --git a\/(.*?) b\/(.*)$/m.exec(section)
-    return m ? m[2]! : section.split('\n')[0]!
+    const moved = /^(?:rename|copy) to (.*)$/m.exec(section)
+    if (moved) return unquote(moved[1]!)
+    const header = section.split('\n')[0]!
+    const quoted = / "b\/((?:[^"\\]|\\.)*)"$/.exec(header)
+    if (quoted) return unquote(`"${quoted[1]!}"`)
+    // Not moved, both sides name the same path, which may hold " b/" itself.
+    const rest = header.slice('diff --git a/'.length)
+    const half = (rest.length - 3) / 2
+    if (Number.isInteger(half) && rest.slice(half, half + 3) === ' b/' && rest.slice(0, half) === rest.slice(half + 3)) return rest.slice(half + 3)
+    const plain = /^diff --git a\/.*? b\/(.*)$/.exec(header)
+    return plain ? plain[1]! : header
   }
   const shown: string[] = []
   const generated: string[] = []
@@ -230,6 +271,16 @@ export function diffText(raw: string, keep: (path: string) => boolean, max = MAX
   if (left.length) notes.push(`Too long to include here, so read these files' hunks with the git tool: ${left.join(', ')}.`)
   if (!files.length) return 'The diff is empty.'
   return [shown.length ? '```diff\n' + shown.join('').trimEnd() + '\n```' : '', notes.join(' ')].filter(Boolean).join('\n\n')
+}
+
+/** Why x is not an eval case that evaluate can replay, or null when it is one. */
+export function caseProblem(x: unknown, segments: string[]): string | null {
+  const c = (x ?? {}) as Record<string, unknown>
+  const commit = (v: unknown) => typeof v === 'string' && /^[0-9a-f]{40}$/.test(v)
+  const ok =
+    typeof c.id === 'string' && Number.isInteger(c.pr) && commit(c.base) && commit(c.head) && segments.includes(c.segment as string) &&
+    ['find', 'quiet'].includes(c.expect as string) && typeof c.path === 'string' && Number.isInteger(c.line) && typeof c.issue === 'string'
+  return ok ? null : `the eval case ${JSON.stringify(c.id)} is not valid: it needs id, pr, base, head, segment (one of ${segments.join(', ')}), expect, path, line, and issue`
 }
 
 /** Text from a pull request file: its title and description. */
@@ -450,7 +501,7 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
     }
     const range = c.worktree ? [base] : [`${base}...${head}`]
     const changed: string[] | null =
-      R.changed || (await io.git(['diff', '--name-only', ...range]))?.split('\n').filter(Boolean) || null
+      R.changed || (await io.git(['diff', '--name-only', '-z', ...range]))?.split('\0').filter(Boolean) || null
     if (!changed) return { error: `git could not list the files that ${range[0]} changes.` }
     // a/ and b/ whatever the user's diff.noprefix or diff.mnemonicPrefix, for diffText.
     const raw = (await io.git(['diff', '--no-color', '--no-ext-diff', '--no-textconv', '--src-prefix=a/', '--dst-prefix=b/', ...range])) ?? ''
@@ -996,10 +1047,8 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
     }
     const names = SEGMENTS.map((s) => s.name)
     for (const x of cases || []) {
-      const ok =
-        x && typeof x.id === 'string' && Number.isInteger(x.pr) && /^[0-9a-f]{40}$/.test(x.base) && /^[0-9a-f]{40}$/.test(x.head) &&
-        names.includes(x.segment) && ['find', 'quiet'].includes(x.expect) && typeof x.path === 'string' && Number.isInteger(x.line) && typeof x.issue === 'string'
-      if (!ok) return { error: `the eval case ${JSON.stringify(x && x.id)} is not valid: it needs id, pr, base, head, segment (one of ${names.join(', ')}), expect, path, line, and issue` }
+      const wrong = caseProblem(x, names)
+      if (wrong) return { error: wrong }
     }
     let list = (cases || []).filter((x) => !A.only || A.only.includes(x.segment) || x.expect === 'quiet')
     // A quiet case checks that the segments under test do not make its wrong

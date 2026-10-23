@@ -9,7 +9,7 @@
 
 import { expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
-import { diffText, firstComment } from '../review.ts'
+import { diffText, firstComment, unquote } from '../review.ts'
 import { refusal } from '../git.ts'
 import { commentBody, fence } from '../render.ts'
 import { CONFIG, SEGMENTS, SHA, ran, review, run, thread } from './harness.ts'
@@ -208,6 +208,15 @@ test('the shared prompts carry the description and the diff without generated fi
   expect(text).not.toContain('+++ b/src/big.rs')
   expect(text).toContain('Generated files, left out: Cargo.lock.')
   expect(text).toContain("read these files' hunks with the git tool: src/big.rs.")
+  // git quotes a path with a byte above 0x7f, a quote, a backslash, or a
+  // control character; a path may hold " b/"; a rename names its new path.
+  const quoted = 'diff --git "a/gen/caf\\303\\251.lock" "b/gen/caf\\303\\251.lock"\n+x\n'
+  const spaced = 'diff --git a/gen/a b/c.lock b/gen/a b/c.lock\n+x\n'
+  const moved = 'diff --git a/old.lock b/gen/new.lock\nsimilarity index 90%\nrename from old.lock\nrename to gen/new.lock\n'
+  const notes = diffText(quoted + spaced + moved + section('src/a.rs', 10), (p) => !p.startsWith('gen/'))
+  expect(notes).toContain('Generated files, left out: gen/café.lock, gen/a b/c.lock, gen/new.lock.')
+  expect(unquote('"a\\tb \\"c\\" \\\\ d\\303\\251"')).toBe('a\tb "c" \\ dé')
+  expect(unquote('src/a.rs')).toBe('src/a.rs')
 })
 
 test('without a brief from the context stage, the changed code still gets a bugs pass and the review is partial', async () => {

@@ -8,7 +8,7 @@ import { type Engine, type TuningIo, tune } from '../tuning.ts'
 import { CONFIG, SEGMENTS, stubIo } from './harness.ts'
 
 const ARGS = { repo: 'o/r', since: '2026-10-05', until: '2026-10-12', out_dir: 'o', rules: 'RULES.md', config_file: 'c.json' }
-const CASE = (id: string, pr = 60) => ({ id, pr, base: 'b'.repeat(40), head: 'h'.repeat(40), segment: 'bugs', expect: 'find', path: 'src/a.rs', line: 3, issue: 'i' })
+const CASE = (id: string, pr = 60) => ({ id, pr, base: 'b'.repeat(40), head: 'c'.repeat(40), segment: 'bugs', expect: 'find', path: 'src/a.rs', line: 3, issue: 'i' })
 
 interface World {
   files: Record<string, string>
@@ -49,18 +49,20 @@ test('tuning opens a pull request for new cases, or when the eval scores better 
   const one = [row('f1', 'find', true), row('f2', 'find', true), row('f3', 'find', false), row('q1', 'quiet', false)]
   for (const [name, change, withChange, decision, kind = 'segment-check'] of [
     ['adds only cases', { diff: '', add: true }, null, 'open-pr'],
+    ['adds a case the eval cannot replay', { diff: '', add: true, bad: true }, null, 'rejected'],
     ['changes nothing', { diff: '' }, null, 'no-change'],
     ['breaks a rule of the loop', { diff: '+t', ok: false }, null, 'rejected'],
     ['changes an existing case', { diff: '+t', edit: true }, null, 'rejected'],
-    ['changes a file outside its directory', { diff: '+t', status: ' M src/a.rs\n?? o/REVIEW.candidate.md\n' }, null, 'rejected'],
-    ['writes only in its directory, given as ./o/', { diff: '+t', status: '?? o/REVIEW.candidate.md\n', out: './o/' }, one, 'open-pr'],
-    ['writes only in its directory, from a subdirectory', { diff: '+t', status: '?? sub/o/REVIEW.candidate.md\n', prefix: 'sub/' }, one, 'open-pr'],
+    ['changes a file outside its directory', { diff: '+t', status: ' M src/a.rs\0?? o/REVIEW.candidate.md\0' }, null, 'rejected'],
+    ['moves a file from outside its directory', { diff: '+t', status: 'R  o/REVIEW.candidate.md\0src/a.rs\0' }, null, 'rejected'],
+    ['writes only in its directory, given as ./o/', { diff: '+t', status: '?? o/REVIEW.candidate.md\0', out: './o/' }, one, 'open-pr'],
+    ['writes only in its directory, from a subdirectory', { diff: '+t', status: '?? sub/o/REVIEW.candidate.md\0', prefix: 'sub/' }, one, 'open-pr'],
     ['finds one more', { diff: '+t' }, one, 'open-pr'],
     ['finds one more with a Learned row', { diff: '+t' }, one, 'open-pr', 'learned-row'],
     ['scores the same', { diff: '+t' }, without, 'no-gain'],
     ['finds two more but breaks a quiet case', { diff: '+t' }, [row('f1', 'find', true), row('f2', 'find', true), row('f3', 'find', true), row('q1', 'quiet', true)], 'no-gain'],
     ['finds one more but scores too few cases', { diff: '+t' }, [row('f1', 'find', true), row('f2', 'find', true), row('f3', 'find', undefined), row('q1', 'quiet', false)], 'inconclusive'],
-  ] as [string, { diff: string; add?: boolean; edit?: boolean; ok?: boolean; status?: string; out?: string; prefix?: string }, ReturnType<typeof row>[] | null, string, string?][]) {
+  ] as [string, { diff: string; add?: boolean; bad?: boolean; edit?: boolean; ok?: boolean; status?: string; out?: string; prefix?: string }, ReturnType<typeof row>[] | null, string, string?][]) {
     const w: World = {
       files: { 'RULES.md': '# Rules\n\n## Tuning\n\nOnly Learned rows.\n', 'c.json': JSON.stringify({ ...CONFIG, examples: [] }), '.claude/review-evals.json': JSON.stringify({ cases: [CASE('f1')] }) },
       written: {},
@@ -75,7 +77,8 @@ test('tuning opens a pull request for new cases, or when the eval scores better 
       if (call.label === 'propose') return { changes: [{ kind, segment: 'bugs', text: 't', evidence: ['u'] }], new_cases: [], affected: ['bugs'], rationale: 'r' }
       if (call.label === 'draft') {
         w.written['o/REVIEW.candidate.md'] = 'candidate'
-        const cases = [change.edit ? { ...CASE('f1'), line: 4 } : CASE('f1'), ...(change.add ? [CASE('f9', 61)] : [])]
+        const added = change.bad ? { ...CASE('f9', 61), base: 'abc1234' } : CASE('f9', 61)
+        const cases = [change.edit ? { ...CASE('f1'), line: 4 } : CASE('f1'), ...(change.add ? [added] : [])]
         w.written['o/review-evals.candidate.json'] = JSON.stringify({ cases })
         return { done: true }
       }
@@ -110,6 +113,7 @@ test('tuning opens a pull request for new cases, or when the eval scores better 
     if (result.guard) {
       expect(result.guard.cases_added).toBe(change.add ? 1 : 0)
       if (change.edit) expect(result.guard.violations).toContain('changed the eval case f1')
+      if (change.bad) expect(result.guard.violations).toEqual([expect.stringContaining('the eval case "f9" is not valid')])
       if (change.status) expect(result.guard.violations).toEqual(decision === 'rejected' ? ['changed outside o: src/a.rs'] : [])
     }
   }
