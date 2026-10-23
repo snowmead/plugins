@@ -487,6 +487,8 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
     let base: string | undefined = R.base
     if (!base && head && prFile && prFile.baseRefName) base = (await io.git(['merge-base', `origin/${prFile.baseRefName}`, head]))?.trim()
     if (!base || !head) return { error: 'The args name no base and head, and the pull request file does not give them.' }
+    // git would read either as an option, such as --output=<file>.
+    if (base.startsWith('-') || head.startsWith('-')) return { error: `The base ${base} and the head ${head} must name commits, not options.` }
     if (!R.worktree && (await io.git(['cat-file', '-e', `${head}^{commit}`])) === null) return { error: `The head ${head} is not in the local clone.` }
     const checkout = R.checkout !== undefined ? Boolean(R.checkout) : (await io.git(['rev-parse', 'HEAD']))?.trim() === head
     const c: Change = {

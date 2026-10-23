@@ -15,3 +15,17 @@ test('a local review refuses every option but its own, before it writes or reads
   }
   expect(existsSync(file)).toBe(false)
 })
+
+test('a local review takes only a commit as its base, never an option for git', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'local-'))
+  const git = (...args: string[]) => Bun.spawnSync(['git', '-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args])
+  git('init', '-q')
+  git('commit', '-q', '--allow-empty', '-m', 'one')
+  const file = join(repo, 'written')
+  for (const base of [`--output=${file}`, 'no-such-branch']) {
+    const p = Bun.spawnSync([process.execPath, '--no-env-file', join(import.meta.dir, '../main.ts'), 'local', '--repo', repo, '--base', base], { stdout: 'pipe', stderr: 'pipe' })
+    expect([base, p.exitCode]).toEqual([base, 1])
+    expect(p.stderr.toString()).toContain(`--base ${base} names no commit`)
+  }
+  expect(existsSync(file)).toBe(false)
+})
