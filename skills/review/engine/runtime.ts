@@ -46,6 +46,8 @@ export interface SdkRuntimeOptions {
   onEvent?: (event: Record<string, unknown>) => void
   log?: (message: string) => void
   signal?: AbortSignal
+  /** The Agent SDK's query; tests pass their own. */
+  query?: typeof query
 }
 
 // Turn limits, well above what a normal agent of each stage takes, so they stop
@@ -57,9 +59,50 @@ const PRIME_WAIT_MS = 30_000
 const GREPTILE = 'https://api.greptile.com/mcp'
 const KNOWLEDGE_TOOLS = ['list_knowledge_bases', 'list_knowledge_base_documents', 'get_knowledge_base_document', 'search_knowledge_base']
 const COMMENT_TOOLS = ['list_merge_request_comments', 'search_greptile_comments']
-// Credentials the agents never get: GitHub's, and Greptile's, which goes in the
-// MCP config instead.
-const WITHHELD = ['GH_TOKEN', 'GITHUB_TOKEN', 'GREPTILE_API_KEY', 'ACTIONS_RUNTIME_TOKEN', 'ACTIONS_ID_TOKEN_REQUEST_TOKEN']
+// The environment the agents' processes get, by name: the system's basics,
+// proxies and certificates, and Claude Code's own settings and credential.
+// Nothing else of the job's reaches them: no GitHub token, no Greptile key
+// (which goes in the MCP config instead), and no other secret.
+const ENV_NAMES = new Set([
+  'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'TZ', 'TERM',
+  'HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY', 'NO_PROXY', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'SSL_CERT_DIR',
+  'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR',
+  'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT',
+  'MAX_THINKING_TOKENS', 'MAX_MCP_OUTPUT_TOKENS', 'MCP_TIMEOUT', 'MCP_TOOL_TIMEOUT', 'API_TIMEOUT_MS', 'USE_BUILTIN_RIPGREP',
+])
+const ENV_PREFIXES = ['LC_', 'ANTHROPIC_', 'CLAUDE_', 'DISABLE_']
+// A cloud provider's credentials, only when Claude Code is set to use it.
+const PROVIDERS: [string, RegExp][] = [
+  ['CLAUDE_CODE_USE_BEDROCK', /^AWS_/],
+  ['CLAUDE_CODE_USE_VERTEX', /^(GOOGLE_APPLICATION_CREDENTIALS|GOOGLE_CLOUD_PROJECT|CLOUD_ML_REGION|VERTEX_REGION_)/],
+]
+
+/** The agents' environment from `source`: only the names above. */
+export function agentEnv(source: Record<string, string | undefined>): Record<string, string> {
+  const truthy = (v?: string) => Boolean(v && v !== '0' && v.toLowerCase() !== 'false')
+  const providers = PROVIDERS.filter(([flag]) => truthy(source[flag])).map(([, names]) => names)
+  const env: Record<string, string> = {}
+  for (const [name, value] of Object.entries(source)) {
+    if (value === undefined) continue
+    const upper = name.toUpperCase()
+    if (ENV_NAMES.has(upper) || ENV_PREFIXES.some((p) => upper.startsWith(p)) || providers.some((names) => names.test(upper))) env[name] = value
+  }
+  return env
+}
+
+/** The tools an agent gets: Claude Code's own, and the names it may call. */
+export function agentTools(call: Pick<AgentCall, 'tools' | 'knowledgeBase' | 'github'>, has: { github: boolean; knowledgeBase: boolean }) {
+  const reading = call.tools === 'read'
+  const allowed: string[] = []
+  if (reading) {
+    allowed.push('mcp__review__git')
+    if (call.github && has.github) allowed.push('mcp__review__github')
+    if (call.github?.write) allowed.push('mcp__review__write_file')
+  }
+  const greptile = has.knowledgeBase ? [...(reading && call.knowledgeBase ? KNOWLEDGE_TOOLS : []), ...(reading && call.github ? COMMENT_TOOLS : [])] : []
+  allowed.push(...greptile.map((t) => `mcp__greptile__${t}`))
+  return { builtin: reading ? ['Read', 'Grep', 'Glob'] : [], allowed, greptile }
+}
 
 class Slots {
   private free: number
@@ -93,8 +136,8 @@ export function sdkRuntime(o: SdkRuntimeOptions): SdkRuntime {
   const slots = new Slots(o.concurrency ?? 8)
   const primed = new Map<string, Promise<void>>()
   const emit = o.onEvent ?? (() => {})
-  const env: Record<string, string> = {}
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !WITHHELD.includes(k)) env[k] = v
+  const run = o.query ?? query
+  const env = agentEnv(process.env)
   // Every tool loads up front, so none hides behind a search tool the agents do not have.
   env.ENABLE_TOOL_SEARCH = 'false'
   // No instructions the agents cannot use (git's, for commits; CLAUDE.md
@@ -166,7 +209,7 @@ export function sdkRuntime(o: SdkRuntimeOptions): SdkRuntime {
       let ready: (() => void) | null = null
       const first = !primed.has(key)
       if (first) primed.set(key, new Promise<void>((r) => (ready = r)))
-      else await Promise.race([primed.get(key), new Promise((r) => setTimeout(r, PRIME_WAIT_MS))])
+      else if (!o.signal?.aborted) await Promise.race([primed.get(key), new Promise((r) => setTimeout(r, PRIME_WAIT_MS))])
       const prime = () => {
         if (ready) ready()
         ready = null
@@ -187,26 +230,20 @@ export function sdkRuntime(o: SdkRuntimeOptions): SdkRuntime {
         cache_write: 0,
         cost: 0,
       }
-      const reading = call.tools === 'read'
+      const { builtin, allowed, greptile } = agentTools(call, { github: Boolean(o.github), knowledgeBase: Boolean(knowledgeBase) })
       const servers: Record<string, McpServerConfig> = {}
-      const allowed: string[] = []
-      if (reading) {
-        servers.review = reviewServer(call.github)
-        allowed.push('mcp__review__git')
-        if (call.github && o.github) allowed.push('mcp__review__github')
-        if (call.github?.write) allowed.push('mcp__review__write_file')
-      }
-      const greptile = [...(reading && call.knowledgeBase ? KNOWLEDGE_TOOLS : []), ...(reading && call.github ? COMMENT_TOOLS : [])]
+      if (call.tools === 'read') servers.review = reviewServer(call.github)
       if (greptile.length && knowledgeBase) {
         servers.greptile = { ...knowledgeBase, tools: greptile.map((name) => ({ name, permission_policy: 'always_allow' as const })) }
-        allowed.push(...greptile.map((t) => `mcp__greptile__${t}`))
       }
       const abort = new AbortController()
       const stop = () => abort.abort()
       o.signal?.addEventListener('abort', stop)
+      // A signal fires once: an agent that starts after it stops at once.
+      if (o.signal?.aborted) stop()
       const options: Options = {
         systemPrompt: call.system,
-        tools: reading ? ['Read', 'Grep', 'Glob'] : [],
+        tools: builtin,
         allowedTools: allowed,
         mcpServers: servers,
         strictMcpConfig: true,
@@ -226,7 +263,8 @@ export function sdkRuntime(o: SdkRuntimeOptions): SdkRuntime {
       }
       let answer: unknown = null
       try {
-        for await (const m of query({ prompt: call.prompt, options }) as AsyncIterable<SDKMessage>) {
+        if (abort.signal.aborted) throw new Error('stopped')
+        for await (const m of run({ prompt: call.prompt, options }) as AsyncIterable<SDKMessage>) {
           if (m.type === 'stream_event' || m.type === 'assistant') prime()
           if (m.type === 'rate_limit_event') {
             rt.limit.info = m.rate_limit_info as Record<string, unknown>

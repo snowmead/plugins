@@ -3,7 +3,7 @@
 // reads one route; the engine reads lists across pages. Nothing here writes.
 
 import { lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 export const MAX_OUTPUT = 60_000
 const MAX_PAGES = 10
@@ -16,15 +16,21 @@ export interface GitHub {
   api?: string
 }
 
+// The search qualifiers that pick which repositories a search reads.
+const SCOPE = /^-?(repo|org|user|owner):/i
+
 /** Why the agents may not read `route`, or null when they may. */
 export function routeRefusal(route: string, repo: string): string | null {
-  if (/^[a-z]+:|^\/\/|\s|\.\./i.test(route)) return 'Give a route relative to the API root, such as repos/owner/name/pulls/5, with no spaces or "..".'
-  const path = route.replace(/^\//, '').split('?')[0]!
+  const [path = '', query = ''] = route.replace(/^\//, '').split(/\?(.*)/s)
+  if (/^[a-z]+:|^\/|\s|\.\.|\\|#/i.test(path) || /\s|#/.test(query)) return 'Give a route relative to the API root, such as repos/owner/name/pulls/5, with no spaces, and no ".." in its path.'
+  // fetch reads %2e as a dot, so an escaped "..", or any escape, could leave the path.
+  if (path.includes('%')) return 'Give the route\'s path without % escapes.'
   if (path === `repos/${repo}` || path.startsWith(`repos/${repo}/`)) return null
   if (path === 'search/issues') {
-    const q = new URLSearchParams(route.split('?')[1] || '').get('q') || ''
-    if (q.split(/\s+/).includes(`repo:${repo}`)) return null
-    return `A search must name repo:${repo} in q.`
+    const q = new URLSearchParams(query).getAll('q')
+    const scopes = (q[0] || '').split(/\s+/).filter((term) => SCOPE.test(term))
+    if (q.length === 1 && scopes.length === 1 && scopes[0]!.toLowerCase() === `repo:${repo}`.toLowerCase()) return null
+    return `A search must name repo:${repo} in one q, and no other repo:, org:, user: or owner:.`
   }
   return `Only routes under repos/${repo}/, and search/issues with repo:${repo}, are read.`
 }
@@ -86,15 +92,22 @@ export function writeInside(path: string, text: string, dir: string, cwd: string
   const rel = relative(root, target)
   if (!rel || rel.startsWith('..') || isAbsolute(rel)) return `Only files inside ${dir} are written.`
   try {
+    // A link inside the directory can lead outside it, so no part of the path
+    // may be one, checked before any directory is made.
+    let at = root
+    for (const part of rel.split(sep)) {
+      at = join(at, part)
+      let link = false
+      try {
+        link = lstatSync(at).isSymbolicLink()
+      } catch {
+        break
+      }
+      if (link) return `${path} goes through a link.`
+    }
     mkdirSync(dirname(target), { recursive: true })
-    // A link inside the directory can lead outside it.
     const parent = relative(realpathSync(root), realpathSync(dirname(target)))
     if (parent.startsWith('..') || isAbsolute(parent)) return `${path} leads outside ${dir}.`
-    let link = false
-    try {
-      link = lstatSync(target).isSymbolicLink()
-    } catch {}
-    if (link) return `${path} is a link.`
     writeFileSync(target, text)
     return null
   } catch (e) {

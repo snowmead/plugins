@@ -88,10 +88,10 @@ With the plugin installed, `/snowmead:review` reviews the branch you are on
 against the merge base with the default branch: the files on disk, committed
 or not (a new file counts once `git add` names it). It prints the findings and
 writes a Markdown report under the git directory (`.git/review/`), where git
-never tracks it. The engine runs it as:
+never tracks it. Run it as:
 
 ```sh
-bun install --frozen-lockfile --cwd <skill>
+bun install --frozen-lockfile --production --cwd <skill>
 bun --no-env-file --cwd <skill> engine/main.ts local --repo "$PWD"
 ```
 
@@ -299,9 +299,14 @@ A pull request can neither change how its own review runs nor instruct it:
 - Each agent is a Claude Code process with Read, Grep, and Glob, the engine's
   git tool, and the knowledge base's read tools, in don't-ask mode, so any
   other tool is refused. It has no shell and no tool that writes, takes none
-  of the repository's Claude Code settings, hooks, or MCP servers, and gets no
-  GitHub token and no Greptile key (the engine puts the key in the knowledge
-  base's connection). Claude Code refuses a read outside the checkout and the
+  of the repository's Claude Code settings, hooks, or MCP servers. Its
+  environment is built from a list of names
+  ([engine/runtime.ts](engine/runtime.ts), `agentEnv`): the system's basics,
+  proxies and certificates, and Claude Code's own settings and credential
+  (`ANTHROPIC_*`, `CLAUDE_*`, and a cloud provider's when Claude Code uses
+  one). So it gets no GitHub token, no Greptile key (the engine puts the key in
+  the knowledge base's connection), and no other variable of the job's
+  environment. Claude Code refuses a read outside the checkout and the
   review's files, through a symlink too. The git tool refuses the options and
   paths that would read or write a file outside the checkout or run a
   command, and every git the engine runs is this program as a guard

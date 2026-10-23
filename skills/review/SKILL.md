@@ -45,12 +45,13 @@ your task needs before you change anything.
 - **Change the settings.** README.md, "Settings": file classes, segments (lenses), models and efforts per stage, the
   knowledge base, the sweep. Give the file `examples` (the files a pull request changes, and the segments that must
   review it) and check them before the user commits it:
-  `REVIEW_CONFIG=<repo>/.claude/review.json bun test --cwd "${CLAUDE_SKILL_DIR}" engine`.
+  `REVIEW_CONFIG=<repo>/.claude/review.json bun --no-env-file --cwd "${CLAUDE_SKILL_DIR}" test engine`.
 - **Sweep, eval or tune.** README.md, "Sweeps" and "Tuning": run `engine/main.ts` with the mode and the options
   shown there, from the repository's root, as above.
 - **Change the review itself.** Run the checks in README.md, "Development", from this folder, and bump the plugin's
   version.
 
 The review reads code and reports or posts what it returns; nothing it runs can approve, push or merge. Keep it that
-way: never give the review's agents a shell, a write tool, a GitHub token, or the job's secrets (README.md, "Trust").
+way: never give the review's agents a shell, a write tool, a GitHub token, or any of the job's environment beyond the
+names `agentEnv` in `engine/runtime.ts` lets through (README.md, "Trust").
 The tuning routine's draft agent is the one agent that writes, and only inside its `out_dir`.
