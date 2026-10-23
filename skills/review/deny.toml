@@ -1,0 +1,16 @@
+# cargo-deny's settings for the review's Rust program: its locked crates must
+# have no open RustSec advisory, and come only from crates.io.
+# `cargo deny --locked check advisories sources` from this directory.
+
+[graph]
+all-features = true
+
+[advisories]
+db-urls = ["https://github.com/RustSec/advisory-db"]
+yanked = "deny"
+unmaintained = "all"
+unused-ignored-advisory = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -1,0 +1,143 @@
+name: Claude review
+
+# Reviews each ready pull request when it opens and on every push, with the
+# review skill's own action (skills/review): one review of inline comments on
+# the lines at fault, plus a summary at the bottom of the pull request
+# description that each run replaces. skills/review/README.md says how the
+# review runs; with no REVIEW.md or .claude/review.json here, it uses the
+# skill's default rules and settings. Claude only reads: the action posts what
+# the review returns. Nothing here can approve, and the review job's token
+# cannot push or merge. The resolve job's token can, as GitHub requires to
+# resolve a thread, so that job runs nothing but `gh` on the thread ids the
+# review job lists.
+#
+# To review a pull request by hand, run this workflow from the Actions tab with
+# its number.
+#
+# Repository secrets (Settings > Secrets and variables > Actions):
+# - CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`: reviews count against
+#   that Claude subscription's usage limits and are not billed. Or
+#   ANTHROPIC_API_KEY from the Claude Console, billed per review; Claude Code
+#   uses it over the token when both are set. Without either, and on a pull
+#   request from a fork, which gets no secrets, the job skips with a warning
+#   instead of failing.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to review
+        required: true
+        type: number
+
+# Read the code; pull-requests: write posts the review, its replies in the
+# reviewer's own threads, and the summary in the description. No contents
+# write, so the review job can neither push nor merge, nor resolve a thread.
+permissions:
+  contents: read
+  pull-requests: write
+
+# A new push supersedes the review of the previous head.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Review
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    outputs:
+      resolve: ${{ steps.review.outputs.resolve }}
+    steps:
+      # A pull request event carries its head; a manual run looks it up.
+      - name: Find the pull request's head
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+          EVENT_BASE: ${{ github.event.pull_request.base.ref }}
+          INPUT_NUMBER: ${{ inputs.pr }}
+        run: |
+          if [ -n "$EVENT_HEAD" ]; then
+            printf 'head=%s\nbase=%s\n' "$EVENT_HEAD" "$EVENT_BASE" >> "$GITHUB_OUTPUT"
+          else
+            gh pr view "$INPUT_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid,baseRefName \
+              --jq '"head=\(.headRefOid)\nbase=\(.baseRefName)"' >> "$GITHUB_OUTPUT"
+          fi
+      # The head commit, not the merge commit, so inline comments land on the
+      # pull request's own line numbers. Full history for blame and log.
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ steps.pr.outputs.head }}
+          path: pr
+          fetch-depth: 0
+          persist-credentials: false
+      # The action runs as the base branch has it, or as the default branch
+      # has it when the base has none, from outside the checkout, so a pull
+      # request cannot change the review that reviews it. Only a pull_request
+      # run before either branch has the action uses the pull request's own
+      # copy: that run takes this job file from the pull request anyway, and a
+      # fork's gets no secrets. A manual run then stops with an error.
+      - name: Take the review action from the base branch
+        env:
+          BASE: ${{ steps.pr.outputs.base }}
+          HEAD: ${{ steps.pr.outputs.head }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -o pipefail
+          has_action() { git -C pr cat-file -e "$1:skills/review/action.yml" 2>/dev/null; }
+          if has_action "origin/$BASE"; then
+            source="origin/$BASE"
+          elif has_action "origin/$DEFAULT"; then
+            source="origin/$DEFAULT"
+            echo "::notice title=Claude review::origin/$BASE has no review action, so the review uses $DEFAULT's."
+          elif [ "$EVENT" = pull_request ]; then
+            source="$HEAD"
+            echo "::notice title=Claude review::No branch has the review action yet, so this pull request's own copy runs."
+          else
+            echo "::error title=Claude review::Neither origin/$BASE nor origin/$DEFAULT has the review action."
+            exit 1
+          fi
+          rm -rf .review-action
+          mkdir .review-action
+          git -C pr archive "$source" skills/review | tar -x -C .review-action
+      - uses: ./.review-action/skills/review
+        id: review
+        with:
+          path: pr
+          pr: ${{ inputs.pr }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  # Resolves the reviewer's own threads the review calls settled: fixed, or
+  # answered (skills/review/rules.md, "Later reviews"). GitHub resolves a
+  # thread only for a token that can write the repository's contents, which
+  # the review job does not hold. This job checks out nothing and runs only
+  # `gh`, with each id passed as a GraphQL variable. It runs also when the
+  # review job failed after listing the threads, as a partial review or one
+  # GitHub did not take does.
+  resolve:
+    name: Resolve settled threads
+    needs: review
+    if: ${{ !cancelled() && needs.review.outputs.resolve != '' && needs.review.outputs.resolve != '[]' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Resolve the threads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          THREADS: ${{ needs.review.outputs.resolve }}
+        run: |
+          jq -r '.[] | strings' <<< "$THREADS" | while read -r thread; do
+            gh api graphql --silent -f thread="$thread" \
+              -f query='mutation($thread: ID!) { resolveReviewThread(input: {threadId: $thread}) { clientMutationId } }' \
+              || echo "::warning title=Claude review::Could not resolve review thread $thread."
+          done
