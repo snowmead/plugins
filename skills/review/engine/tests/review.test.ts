@@ -219,6 +219,17 @@ test('the shared prompts carry the description and the diff without generated fi
   expect(unquote('src/a.rs')).toBe('src/a.rs')
 })
 
+test('a base or head that git would read as an option stops the review, and an all-digit short commit is a commit', async () => {
+  for (const args of [{ base: '--output=/tmp/x' }, { head: '-p' }]) {
+    const { result, labels } = await run({ ...BASE, ...args }, review)
+    expect(result.error).toContain('must name commits, not options')
+    expect(labels).toEqual([])
+  }
+  // main.ts reads --head 1234567 as a number.
+  const { labels } = await run({ ...BASE, head: 1234567 as unknown as string }, review)
+  expect(labels).toContain('context')
+})
+
 test('without a brief from the context stage, the changed code still gets a bugs pass and the review is partial', async () => {
   const args = { ...BASE, changed: ['src/a.rs', 'web/x.tsx', 'docs/y.md'] }
   const { result, prompts } = await run(args, (label) => (label === 'context' ? null : review(label)))
