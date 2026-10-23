@@ -37,6 +37,9 @@ import { sdkRuntime } from './runtime.ts'
 import { type TuningIo, tune } from './tuning.ts'
 
 const SKILL_DIR = resolve(import.meta.dir, '..')
+// Progress goes to stderr as plain text: Bun's console.error colors a terminal's
+// lines red, which reads as an error.
+const say = (m: string) => process.stderr.write(`${m}\n`)
 const ENGINE_OPTIONS = ['repo', 'args', 'out', 'events', 'read-dir', 'concurrency', 'report', 'json', 'committed', 'note']
 
 interface Cli {
@@ -145,7 +148,7 @@ async function main() {
       description: [note && `What the change is for: ${note}`, log ? `Commits:\n${log}` : 'No commits yet: the change is uncommitted.'].filter(Boolean).join('\n\n'),
     }
     if (base === head && committed) throw new Error(`HEAD is the base ${base.slice(0, 7)}, so there are no commits to review`)
-    if (!one(cli.options, 'json')) console.error(`Reviewing ${branch}: ${committed ? 'its commits' : 'the files on disk'} against ${base.slice(0, 7)}.`)
+    if (!one(cli.options, 'json')) say(`Reviewing ${branch}: ${committed ? 'its commits' : 'the files on disk'} against ${base.slice(0, 7)}.`)
   }
 
   const eventsFile = path('events')
@@ -155,7 +158,7 @@ async function main() {
   const emit = (event: Record<string, unknown>) => {
     if (eventsFile) appendFileSync(eventsFile, `${JSON.stringify(event)}\n`)
     if (progress && event.type === 'agent') {
-      console.error(`${event.status === 'ok' ? '✓' : '✗'} ${event.label} (${Math.round(Number(event.ms) / 1000)} s)${event.status === 'ok' ? '' : `: ${event.status}`}`)
+      say(`${event.status === 'ok' ? '✓' : '✗'} ${event.label} (${Math.round(Number(event.ms) / 1000)} s)${event.status === 'ok' ? '' : `: ${event.status}`}`)
     }
   }
   const abort = new AbortController()
@@ -180,7 +183,7 @@ async function main() {
     claudePath: process.env.REVIEW_CLAUDE || undefined,
     onEvent: emit,
     log: (m) => {
-      console.error(m)
+      say(m)
       emit({ type: 'log', message: m })
     },
     signal: abort.signal,
@@ -242,7 +245,7 @@ async function main() {
     console.log([local.verdict || 'Review finished.', ...(list.length ? list : ['No findings.']), '', `Report: ${reportPath}`].join('\n'))
   } else if (cli.mode !== 'ci') {
     if (!out || one(cli.options, 'json')) console.log(JSON.stringify(result, null, 2))
-    if (rt.usage.length) console.error(`\n${usageTable(rt.usage)}\n\n${modelTable(rt.models)}`)
+    if (rt.usage.length) say(`\n${usageTable(rt.usage)}\n\n${modelTable(rt.models)}`)
   }
   if (error) throw new Error(error)
   if (result.error && cli.mode !== 'ci') process.exitCode = 1
