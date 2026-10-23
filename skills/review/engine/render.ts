@@ -10,10 +10,12 @@ const COLOR: Record<Severity, string> = { important: 'cf222e', nit: 'bf8700', pr
 export const ICON: Record<Severity, string> = { important: '🔴', nit: '🟡', preexisting: '🟣' }
 
 // plain=1 shows a rendered file, such as Markdown, as source, where line
-// anchors work; other files ignore it.
+// anchors work; other files ignore it. Each part of the path is escaped, so
+// a space, #, ? or % stays part of it.
 export function link(repo: string | null | undefined, head: string, path: string, line: number): string {
   const loc = `${path}:${line}`
-  return repo ? `[\`${loc}\`](https://github.com/${repo}/blob/${head}/${path}?plain=1#L${line})` : `\`${loc}\``
+  const url = path.split('/').map(encodeURIComponent).join('/')
+  return repo ? `[\`${loc}\`](https://github.com/${repo}/blob/${head}/${url}?plain=1#L${line})` : `\`${loc}\``
 }
 
 export function cell(text: unknown): string {

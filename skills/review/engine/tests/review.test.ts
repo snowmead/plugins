@@ -11,7 +11,7 @@ import { expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { diffText, firstComment, unquote } from '../review.ts'
 import { refusal } from '../git.ts'
-import { commentBody, fence } from '../render.ts'
+import { commentBody, fence, link } from '../render.ts'
 import { CONFIG, SEGMENTS, SHA, ran, review, run, thread } from './harness.ts'
 
 const BASE = { pr: 5, repo: 'o/r', threads: '/t.json', config: CONFIG, base: SHA('b'), head: SHA('h'), checkout: true }
@@ -273,6 +273,7 @@ test("an issue's location links to its line, in a Markdown file's source too", a
   // GitHub renders Markdown, which has no line anchors, unless plain=1 asks for its source.
   const where = result.summary.issues.map((i: { where: string }) => i.where)
   for (const path of ['docs/y.md', 'src/c.rs']) expect(where).toContain(`[\`${path}:7\`](https://github.com/o/r/blob/${SHA('h')}/${path}?plain=1#L7)`)
+  expect(link('o/r', 'h', 'src/a b#?%.rs', 7)).toBe('[`src/a b#?%.rs:7`](https://github.com/o/r/blob/h/src/a%20b%23%3F%25.rs?plain=1#L7)')
 })
 
 test('the summary heads with the confidence score, draws the diagram, and names the comment of each posted issue', async () => {

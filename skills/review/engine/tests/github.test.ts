@@ -40,6 +40,11 @@ test("the agents read only the repository's own routes", () => {
     `search/issues?q=${encodeURIComponent('repo:o/r -org:other')}`,
     `search/issues?q=${encodeURIComponent('repo:o/r "user:x"')}`,
     `search/issues?q=${encodeURIComponent('(repo:o/r)')}`,
+    // Logic drops the repository from what it joins.
+    `search/issues?q=${encodeURIComponent('repo:o/r OR is:private')}`,
+    'search/issues?q=repo:o/r+or+author:alice',
+    `search/issues?q=${encodeURIComponent('repo:o/r NOT is:public')}`,
+    `search/issues?q=${encodeURIComponent('repo:o/r AND is:pr')}`,
   ]) {
     expect([bad, routeRefusal(bad, 'o/r')]).not.toEqual([bad, null])
   }

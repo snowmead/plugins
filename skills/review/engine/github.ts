@@ -20,6 +20,9 @@ export interface GitHub {
 // A qualifier that names where a search looks, anywhere in its query:
 // GitHub reads one inside parentheses or after a minus too.
 const SCOPE = /(repo|org|user|owner):/gi
+// GitHub's search reads AND, OR, NOT and parentheses as logic, so
+// "repo:o/r OR is:private" searches beyond the repository.
+const LOGIC = /[()]|(?:^|\s)(?:and|or|not)(?=\s|$)/i
 
 /** Why the agents may not read `route`, or null when they may. */
 export function routeRefusal(route: string, repo: string): string | null {
@@ -32,8 +35,8 @@ export function routeRefusal(route: string, repo: string): string | null {
     const q = new URLSearchParams(query).getAll('q')
     const scopes = (q[0] || '').match(SCOPE) || []
     const terms = (q[0] || '').toLowerCase().split(/\s+/)
-    if (q.length === 1 && scopes.length === 1 && terms.includes(`repo:${repo}`.toLowerCase())) return null
-    return `A search must name repo:${repo} in one q, and no other repo:, org:, user: or owner:.`
+    if (q.length === 1 && scopes.length === 1 && !LOGIC.test(q[0]!) && terms.includes(`repo:${repo}`.toLowerCase())) return null
+    return `A search must name repo:${repo} in one q, with no other repo:, org:, user: or owner:, and no AND, OR, NOT or parentheses.`
   }
   return `Only routes under repos/${repo}/, and search/issues with repo:${repo}, are read.`
 }

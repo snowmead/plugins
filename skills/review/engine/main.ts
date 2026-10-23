@@ -10,7 +10,10 @@
 //       Reviews this branch without a pull request: the files on disk against
 //       the merge base with the default branch (or --base), or only the
 //       commits with --committed. Prints the findings and writes a Markdown report under
-//       the git directory (review/).
+//       the git directory (review/). It takes no other option but --repo,
+//       --concurrency and --json, since the skill runs it without asking:
+//       none of them writes a file of the caller's choosing or reads outside
+//       the repository.
 //   ci --args <file> --out <file> --events <file> [--read-dir <dir>]...
 //       The action's run step: reviews the pull request the args name and
 //       writes the record the result step reads.
@@ -40,7 +43,8 @@ const SKILL_DIR = resolve(import.meta.dir, '..')
 // Progress goes to stderr as plain text: Bun's console.error colors a terminal's
 // lines red, which reads as an error.
 const say = (m: string) => process.stderr.write(`${m}\n`)
-const ENGINE_OPTIONS = ['repo', 'args', 'out', 'events', 'read-dir', 'concurrency', 'report', 'json', 'committed', 'note']
+const ENGINE_OPTIONS = ['repo', 'args', 'out', 'events', 'read-dir', 'concurrency', 'json', 'committed', 'note']
+const LOCAL_OPTIONS = ['repo', 'base', 'committed', 'note', 'concurrency', 'json']
 
 interface Cli {
   mode: string
@@ -78,6 +82,10 @@ const one = (o: Cli['options'], name: string) => (o[name] ? o[name]![o[name]!.le
 
 async function main() {
   const cli = parse(Bun.argv.slice(2))
+  if (cli.mode === 'local') {
+    const other = [...Object.keys(cli.options), ...Object.keys(cli.args)].filter((name) => !LOCAL_OPTIONS.includes(name))
+    if (other.length) throw new Error(`a local review takes only --${LOCAL_OPTIONS.join(', --')}, not --${other.join(', --').replace(/_/g, '-')}`)
+  }
   const concurrency = Number(one(cli.options, 'concurrency') || 8)
   if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error('--concurrency needs a whole number of agents, 1 or more')
   const cwd = resolve(one(cli.options, 'repo') || process.cwd())
@@ -248,8 +256,10 @@ async function main() {
 
   if (cli.mode === 'local' && result.local && !one(cli.options, 'json')) {
     const local = result.local as LocalResult
-    const reportPath =
-      path('report') || join(resolve(cwd, (await run(['rev-parse', '--git-path', 'review']))?.trim() || '.git/review'), `${started.toISOString().replace(/[:.]/g, '-')}-${String(args.head).slice(0, 7)}.md`)
+    const reportPath = join(
+      resolve(cwd, (await run(['rev-parse', '--git-path', 'review']))?.trim() || '.git/review'),
+      `${started.toISOString().replace(/[:.]/g, '-')}-${String(args.head).slice(0, 7)}.md`,
+    )
     mkdirSync(dirname(reportPath), { recursive: true })
     writeFileSync(reportPath, localReport({ branch, head: String(args.head), worktree: Boolean(args.worktree), started, result: local, failed: (result.failed as string[]) || [], usage: rt.usage, models: rt.models }))
     const list = terminalList(local)

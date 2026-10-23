@@ -93,7 +93,7 @@ writes a Markdown report under the git directory (`.git/review/`), where git
 never tracks it. Run it as:
 
 ```sh
-bun install --frozen-lockfile --production --ignore-scripts --cwd <skill>
+bun install --no-env-file --frozen-lockfile --production --ignore-scripts --cwd <skill>
 bun --no-env-file --cwd <skill> engine/main.ts local --repo "$PWD"
 ```
 
@@ -104,8 +104,11 @@ for. A local review uses the repository's `REVIEW.md` and
 does not; it runs on the Claude account Claude Code is signed in with, or on
 `ANTHROPIC_API_KEY`. Bun always starts in this directory, never in the
 repository under review: Bun runs the `bunfig.toml` and loads the `.env` files
-of the directory it starts in. The skill lets Claude Code run these two
-commands, as SKILL.md spells them, without asking; it asks before any other.
+of the directory it starts in. The skill lets Claude Code run the install
+and a local review, as SKILL.md spells them, without asking. A local review
+takes no option but `--repo`, `--base`, `--committed`, `--note`,
+`--concurrency` and `--json`, so it writes nothing but its report; Claude Code
+asks before a sweep, an eval, tuning, or any other command.
 
 ### Resolving threads
 
