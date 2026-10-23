@@ -14,9 +14,8 @@
 //!
 //! The trusted branch is the pull request's base when it has the rules or the
 //! settings file, else the default branch when it has them, else the base.
-//! The step also copies the rules and the action's workflow to the review
-//! directory, where the agents read them, and keeps the settings for the
-//! later steps.
+//! The step also copies the rules to the review directory, where the agents
+//! read them, and keeps the settings for the later steps.
 
 use crate::{
     actions::Runner,
@@ -84,7 +83,7 @@ pub(crate) struct Protect<'a> {
     pub(crate) rules: &'a str,
     /// The settings file, relative to the repository's root.
     pub(crate) config: &'a str,
-    /// The action's own directory, with its workflow and default rules.
+    /// The action's own directory, with its default rules.
     pub(crate) action: &'a Path,
 }
 
@@ -100,12 +99,6 @@ impl Protect<'_> {
         }
         let base_copies = self.checkout.names(&["HEAD"])?;
         let rules = self.copy_rules(&source)?;
-        let workflow = self.runner.review_dir().join("pr-review.js");
-        let engine = self.action.join("workflows/pr-review.js");
-        fs::copy(&engine, &workflow).map_err(|source| Error::Write {
-            path: workflow,
-            source,
-        })?;
         Protected {
             config: self.settings(&source)?,
             source,
@@ -400,8 +393,6 @@ mod tests {
             (".husky/pre-commit", "head"),
         ]);
         let action = tempfile::tempdir().expect("the action");
-        fs::create_dir_all(action.path().join("workflows")).expect("workflows");
-        fs::write(action.path().join("workflows/pr-review.js"), "engine").expect("the workflow");
         fs::write(action.path().join("rules.md"), "default rules").expect("the default rules");
         Setup { repo, head, action }
     }
@@ -531,11 +522,6 @@ mod tests {
             assert_eq!(
                 fs::read_to_string(&protected.rules).expect("the rules"),
                 "base rules"
-            );
-            let review = test.runner.review_dir();
-            assert_eq!(
-                fs::read_to_string(review.join("pr-review.js")).expect("the workflow"),
-                "engine"
             );
         }
     }

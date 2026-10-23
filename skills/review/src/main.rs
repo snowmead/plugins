@@ -70,17 +70,17 @@ enum Step {
     Start,
     /// Takes the review's configuration from a trusted branch.
     Protect,
-    /// Writes what the agents read and the workflow's args.
+    /// Writes what the agents read and the engine's args.
     Prepare,
-    /// Runs Claude Code, which runs the review workflow.
+    /// Runs the review engine.
     Run,
-    /// Reads the workflow's result.
+    /// Reads the engine's result.
     Result,
     /// Posts the review.
     Post,
     /// Says the review did not finish.
     Unfinished,
-    /// Lists refused tool calls and how the session ended.
+    /// Lists refused tool calls, how each agent ended, and the engine's log.
     Report,
 }
 
@@ -194,9 +194,10 @@ fn run(step: Step, runner: &Runner) -> Result<(), Error> {
         .run(),
         Step::Run => {
             let git = which("git").ok_or_else(|| Error::review("git is not on the PATH."))?;
-            let claude = or_default("REVIEW_CLAUDE", "claude");
+            let bun = or_default("REVIEW_BUN", "bun");
+            let engine = PathBuf::from(var("REVIEW_ACTION_DIR")?);
             let greptile = non_empty_var("GREPTILE_API_KEY");
-            session::Session::new(runner, &dir, &claude, greptile.as_deref(), &git)?.run()
+            session::Session::new(runner, &dir, &bun, &engine, greptile.as_deref(), &git)?.run()
         }
         Step::Result => result::ReadResult {
             runner,
@@ -231,11 +232,7 @@ fn run(step: Step, runner: &Runner) -> Result<(), Error> {
             run_url: &run_url()?,
         }
         .run(),
-        Step::Report => report::Report {
-            runner,
-            projects: claude_projects().as_deref(),
-        }
-        .run(),
+        Step::Report => report::Report { runner }.run(),
     }
 }
 
@@ -249,15 +246,6 @@ fn reviewer() -> String {
 /// The environment variable `name`, or `default` when it is unset or empty.
 fn or_default(name: &str, default: &str) -> String {
     non_empty_var(name).unwrap_or_else(|| default.into())
-}
-
-/// Claude Code's `projects` directory, in `CLAUDE_CONFIG_DIR` or else in
-/// `~/.claude`; `None` when neither variable is set.
-fn claude_projects() -> Option<PathBuf> {
-    non_empty_var("CLAUDE_CONFIG_DIR")
-        .map(PathBuf::from)
-        .or_else(|| non_empty_var("HOME").map(|home| PathBuf::from(home).join(".claude")))
-        .map(|config| config.join("projects"))
 }
 
 /// The environment variable `name`; `None` when it is unset or empty, as the

@@ -89,7 +89,7 @@ impl Prepare<'_> {
     pub(crate) fn run(&self) -> Result<(), Error> {
         let pull = Pull::load(self.runner)?;
         let protected = Protected::load(self.runner)?;
-        let config = settings::for_workflow(&protected.config, self.agents)?;
+        let config = settings::for_engine(&protected.config, self.agents)?;
         let review = self.runner.review_dir();
         let threads = self.threads(pull.number)?;
         let own = own_threads(&threads, self.reviewer);

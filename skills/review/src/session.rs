@@ -1,17 +1,23 @@
-//! The run step: starts Claude Code, which starts the review workflow with
-//! the args and waits for it.
+//! The run step: runs the review engine (`engine/main.ts`, by Bun) on the
+//! args and waits for it.
 //!
+//! The engine starts one Claude Code process per agent through the Agent SDK.
 //! The agents can read the checkout and the review directory, run git's read
-//! commands, load skills, and call the knowledge base's read tools. They get
-//! no GitHub token. The git they run is this program as [`guard`], first on
-//! their `PATH`. Shell commands run without the job's secrets
-//! (`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`) and cannot read other processes'
-//! environments, so an agent cannot print a key in any form.
+//! commands through the engine's git tool, and call the knowledge base's read
+//! tools; they have no shell and no tool that writes. They get no GitHub token
+//! and no Greptile key, which the engine puts in their MCP config instead.
+//! Every git the engine and Claude Code run is this program as [`guard`],
+//! first on their `PATH`.
 //!
-//! The session's events go to the trusted directory. The step never fails on
-//! the session's account: the workflow's own record decides whether there is a
-//! review to post (the result step), so a session that errs after the workflow
-//! finished still posts.
+//! Bun reads a `bunfig.toml`, which can preload a script, and `.env` files from
+//! the directory it starts in, so the engine starts in the action's own copy,
+//! never in the checkout, with `--no-env-file`, and is told where the checkout
+//! is.
+//!
+//! The engine writes its events and its record to the trusted directory, and
+//! its output to a log there, which the report step prints with workflow
+//! commands stopped. The step never fails on the engine's account: the record
+//! decides whether there is a review to post (the result step).
 //!
 //! [`guard`]: crate::guard
 
@@ -22,19 +28,13 @@ use crate::{
     },
     error::Error,
     prepare,
-    settings::{
-        self,
-        Stage, //
-    },
+    result,
     stream::{
         self,
         Events, //
     }, //
 };
-use serde_json::{
-    Value,
-    json, //
-};
+use serde_json::Value;
 use std::{
     env,
     ffi::OsString,
@@ -66,23 +66,16 @@ use std::{
     }, //
 };
 
-/// The tools the session and its agents may use without asking; the rest are
-/// refused, as nobody answers a prompt in the job.
-const ALLOWED_TOOLS: &str = "Workflow,Skill,Bash(git log *),Bash(git show *),Bash(git diff *),Bash(git blame *),\
-Bash(git ls-files *),Bash(git ls-tree *),mcp__greptile__list_knowledge_bases,\
-mcp__greptile__list_knowledge_base_documents,mcp__greptile__get_knowledge_base_document,\
-mcp__greptile__search_knowledge_base";
+/// The engine, from its directory.
+const ENGINE: &str = "engine/main.ts";
 
-/// Greptile's MCP server, which holds the knowledge base.
-const GREPTILE: &str = "https://api.greptile.com/mcp";
-
-/// How long the session may run: the workflow waits up to 55 minutes.
+/// How long the engine may run.
 const LIMIT: Duration = Duration::from_secs(60 * 60);
 
-/// How long a session asked to stop gets before it is killed.
+/// How long an engine asked to stop gets before it is killed.
 const GRACE: Duration = Duration::from_secs(10);
 
-/// The status of a session stopped at [`LIMIT`], as `timeout` reports one.
+/// The status of an engine stopped at [`LIMIT`], as `timeout` reports one.
 ///
 /// [`LIMIT`]: crate::session::LIMIT
 const TIMED_OUT: i32 = 124;
@@ -100,17 +93,19 @@ const LARGEST_SECONDS: i64 = 100_000_000_000;
 pub(crate) struct Session<'a> {
     /// The runner.
     runner: &'a Runner,
-    /// The checkout, where the session starts.
+    /// The checkout, which the agents read.
     checkout: &'a Path,
-    /// The Claude Code program.
-    claude: &'a str,
+    /// Bun.
+    bun: &'a str,
+    /// The engine's directory: the action's copy, where the engine starts.
+    engine: &'a Path,
     /// Greptile's API key; `None` when the job has none.
     greptile: Option<&'a str>,
     /// The real git, which the guard runs.
     git: &'a Path,
     /// The program installed as the guard: this one.
     guard: PathBuf,
-    /// How long the session may run.
+    /// How long the engine may run.
     limit: Duration,
 }
 
@@ -119,7 +114,8 @@ impl<'a> Session<'a> {
     pub(crate) fn new(
         runner: &'a Runner,
         checkout: &'a Path,
-        claude: &'a str,
+        bun: &'a str,
+        engine: &'a Path,
         greptile: Option<&'a str>,
         git: &'a Path,
     ) -> Result<Self, Error> {
@@ -130,7 +126,8 @@ impl<'a> Session<'a> {
         Ok(Self {
             runner,
             checkout,
-            claude,
+            bun,
+            engine,
             greptile,
             git,
             guard,
@@ -138,49 +135,33 @@ impl<'a> Session<'a> {
         })
     }
 
-    /// Installs the guard, runs the session, and says how a failed session
-    /// ended.
+    /// Installs the guard, runs the engine, and says how a failed run ended.
     pub(crate) fn run(&self) -> Result<(), Error> {
         let bin = self.install_guard()?;
-        let args = prepare::load_args(self.runner)?;
-        let stage = settings::session(&args["config"]);
-        // The prompt goes in on stdin: the args of a pull request with many
-        // files are too long for one command-line argument.
-        let prompt = self.runner.trusted_dir().join("prompt.txt");
-        let workflow = self.runner.review_dir().join("pr-review.js");
-        crate::state::write_text(
-            &prompt,
-            &format!(
-                "Call the Workflow tool exactly once, with scriptPath \"{}\" and with args set to this JSON object, \
-                 unchanged: {args}. Do nothing else. When the workflow finishes, reply with one word: done.",
-                workflow.display()
-            ),
-        )?;
-        let events = Events::path(self.runner);
-        let output = File::create(&events).map_err(|source| Error::Write {
-            path: events,
+        let log = log_path(self.runner);
+        let write = |source| Error::Write {
+            path: log.clone(),
             source,
-        })?;
-        let input = File::open(&prompt).map_err(|source| Error::Read {
-            path: prompt,
-            source,
-        })?;
-        let mut command = self.command(&stage, &bin);
+        };
+        let output = File::create(&log).map_err(write)?;
+        let errors = output.try_clone().map_err(write)?;
+        let mut command = self.command(&bin);
         // Its own process group, so a stop at the limit reaches every process
-        // the session started, as `timeout` does.
+        // the engine started, as `timeout` does.
         command
-            .stdin(Stdio::from(input))
+            .stdin(Stdio::null())
             .stdout(Stdio::from(output))
+            .stderr(Stdio::from(errors))
             .process_group(0);
         let child = retry_busy(|| command.spawn()).map_err(|source| Error::Spawn {
-            program: self.claude.into(),
+            program: self.bun.into(),
             source,
         })?;
         let status = wait(child, self.limit, GRACE)?;
         let events = Events::load(self.runner)?;
         if status != 0 {
             self.runner.warning(&format!(
-                "Claude Code exited with status {status}: {}. The Show how the review ended step has its last replies.",
+                "The review engine exited with status {status}: {}. The Show how the review ended step has its last lines.",
                 ending(events.as_ref())
             ));
         }
@@ -191,42 +172,30 @@ impl<'a> Session<'a> {
         Ok(())
     }
 
-    /// Claude Code in the checkout, with the stage's model and effort, the
-    /// allowed tools, the guard first on `PATH` from `bin`, and no GitHub
-    /// token.
-    fn command(&self, stage: &Stage, bin: &Path) -> Command {
-        let mut command = Command::new(self.claude);
+    /// The engine in its own directory, on the job's args and files, with the
+    /// guard first on `PATH` from `bin`, Greptile's key when there is one,
+    /// and no GitHub token.
+    fn command(&self, bin: &Path) -> Command {
+        let mut command = Command::new(self.bun);
         command
-            .args([
-                "-p",
-                "--model",
-                &stage.model,
-                "--effort",
-                stage.effort.name(),
-                "--add-dir",
-            ])
+            .args(["--no-env-file", ENGINE, "ci", "--repo"])
+            .arg(self.checkout)
+            .arg("--args")
+            .arg(prepare::args_path(self.runner))
+            .arg("--out")
+            .arg(result::record_path(self.runner))
+            .arg("--events")
+            .arg(Events::path(self.runner))
+            .arg("--read-dir")
             .arg(self.runner.review_dir())
-            .args(["--allowedTools", ALLOWED_TOOLS, "--strict-mcp-config"]);
-        if let Some(key) = self.greptile {
-            // The scrub blanks ${GREPTILE_API_KEY} in an MCP header too, so the
-            // key goes in the config itself. An agent cannot read it back from
-            // /proc: Claude Code refuses a path argument outside the checkout
-            // and the review directory, and the guard refuses the options and
-            // paths that reach a file outside the checkout.
-            command.arg("--mcp-config").arg(mcp_config(key).to_string());
-        }
-        command
-            .args(["--output-format", "stream-json", "--verbose"])
-            .current_dir(self.checkout)
+            .current_dir(self.engine)
             .env("PATH", path_with(bin))
-            .env("CLAUDE_CODE_WORKFLOWS", "1")
-            .env("CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", "1")
-            // The default follows the CPU count; review agents mostly wait on the API.
-            .env("CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS", "8")
-            // Wait for the workflow up to 55 minutes instead of the default 10.
-            .env("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS", "3300000")
             .env_remove("GH_TOKEN")
             .env_remove("GITHUB_TOKEN");
+        match self.greptile {
+            Some(key) => command.env("GREPTILE_API_KEY", key),
+            None => command.env_remove("GREPTILE_API_KEY"),
+        };
         command
     }
 
@@ -288,9 +257,9 @@ fn retry_busy<T>(mut start: impl FnMut() -> std::io::Result<T>) -> std::io::Resu
     start()
 }
 
-/// The MCP config that reaches Greptile with `key`.
-fn mcp_config(key: &str) -> Value {
-    json!({"mcpServers": {"greptile": {"type": "http", "url": GREPTILE, "headers": {"Authorization": format!("Bearer {key}")}}}})
+/// The engine's output, which the report step prints.
+pub(crate) fn log_path(runner: &Runner) -> PathBuf {
+    runner.trusted_dir().join("engine.log")
 }
 
 /// `PATH` with `bin` first.
@@ -311,7 +280,7 @@ fn path_with(bin: &Path) -> OsString {
 fn wait(mut child: Child, limit: Duration, grace: Duration) -> Result<i32, Error> {
     let deadline = Instant::now() + limit;
     let spawn = |source| Error::Spawn {
-        program: "claude".into(),
+        program: "the review engine".into(),
         source,
     };
     loop {
@@ -323,7 +292,7 @@ fn wait(mut child: Child, limit: Duration, grace: Duration) -> Result<i32, Error
         }
         thread::sleep(Duration::from_millis(200));
     }
-    // Ask first, as `timeout` does, so the session can stop its agents.
+    // Ask first, as `timeout` does, so the engine can stop its agents.
     let group = format!("-{}", child.id());
     let signal = |name: &str| {
         let _ = Command::new("kill").args([name, "--", &group]).status();
@@ -349,9 +318,9 @@ fn code(status: ExitStatus) -> i32 {
         .unwrap_or_else(|| 128 + status.signal().unwrap_or_default())
 }
 
-/// How the session ended, from Claude Code's own values, not the model's:
-/// each value keeps only letters, digits, `_`, `.`, and `-`, so none can
-/// start a workflow command.
+/// How the engine ended, from its own values and Claude Code's, not a
+/// model's: each value keeps only letters, digits, `_`, `.`, and `-`, so none
+/// can start a workflow command.
 fn ending(events: Option<&Events>) -> String {
     let null = Value::Null;
     let result = events.and_then(Events::last_result).unwrap_or(&null);
@@ -447,31 +416,29 @@ fn clean(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
+        ENGINE,
         Session,
         TIMED_OUT,
+        log_path,
         wait, //
     };
     use crate::{
         actions::TestRunner,
         prepare,
-        settings::{
-            Effort,
-            Stage, //
-        },
-        state::write_json, //
+        result,
+        stream::Events, //
     };
-    use serde_json::{
-        Value,
-        json, //
-    };
+    use serde_json::json;
     use std::{
-        ffi::OsStr,
         fs,
         os::unix::{
             fs::PermissionsExt,
             process::CommandExt, //
         },
-        path::Path,
+        path::{
+            Path,
+            PathBuf, //
+        },
         process::Command,
         thread,
         time::{
@@ -480,55 +447,57 @@ mod tests {
         },
     };
 
-    /// A claude that saves its arguments and prompt, prints `events`, and
-    /// exits with `status`; then the step run over it with `args`.
-    fn session(
-        test: &TestRunner,
-        args: &Value,
-        events: &str,
-        status: i32,
-        greptile: &str,
-    ) -> Vec<String> {
-        let temp = test.temp.path();
-        fs::write(temp.join("events"), format!("{events}\n")).expect("the events");
-        let rest = format!("cat '{}/events'\nexit {status}\n", temp.display());
-        run(test, args, &rest, greptile, Duration::from_secs(30))
+    /// The checkout and the engine's directory of a test.
+    fn dirs(test: &TestRunner) -> (PathBuf, PathBuf) {
+        let checkout = test.temp.path().join("checkout");
+        let engine = test.temp.path().join("engine");
+        for dir in [&checkout, &engine] {
+            fs::create_dir_all(dir).expect("the directory");
+        }
+        (checkout, engine)
     }
 
-    /// A claude that saves its arguments, prompt, `PATH`, and process id,
-    /// then runs the shell commands `rest`; then the step run over it with
-    /// `args` and `limit`. Returns the arguments.
-    fn run(
-        test: &TestRunner,
-        args: &Value,
-        rest: &str,
-        greptile: &str,
-        limit: Duration,
-    ) -> Vec<String> {
+    /// A Bun that writes `events` to its events file and exits with `status`;
+    /// then the step run over it.
+    fn session(test: &TestRunner, events: &str, status: i32) -> Vec<String> {
         let temp = test.temp.path();
-        let claude = temp.join("claude");
+        fs::write(temp.join("events"), format!("{events}\n")).expect("the events");
+        let rest = format!(
+            "while [ $# -gt 0 ]; do [ \"$1\" = --events ] && to=\"$2\"; shift; done\n\
+             cat '{}/events' > \"$to\"\necho 'engine output'\nexit {status}\n",
+            temp.display()
+        );
+        run(test, &rest, Duration::from_secs(30))
+    }
+
+    /// A Bun that saves its arguments, directory, `PATH`, and process id,
+    /// then runs the shell commands `rest`; then the step run over it with
+    /// `limit`. Returns the arguments.
+    fn run(test: &TestRunner, rest: &str, limit: Duration) -> Vec<String> {
+        let temp = test.temp.path();
+        let bun = temp.join("bun");
         fs::write(
-            &claude,
+            &bun,
             format!(
-                "#!/bin/bash\necho $$ > '{dir}/pid'\nprintf '%s\\0' \"$@\" > '{dir}/argv'\ncat > '{dir}/prompt'\n\
+                "#!/bin/bash\necho $$ > '{dir}/pid'\nprintf '%s\\0' \"$@\" > '{dir}/argv'\npwd > '{dir}/cwd'\n\
                  printf '%s\\n' \"$PATH\" > '{dir}/path'\n{rest}",
                 dir = temp.display()
             ),
         )
-        .expect("claude");
-        fs::set_permissions(&claude, fs::Permissions::from_mode(0o755)).expect("claude runs");
-        write_json(&prepare::args_path(&test.runner), args).expect("the args");
+        .expect("bun");
+        fs::set_permissions(&bun, fs::Permissions::from_mode(0o755)).expect("bun runs");
         // A stand-in for this program, which the step installs as the guard.
         let guard = temp.join("guard");
         fs::write(&guard, "#!/bin/bash\necho 'git version 2.0'\n").expect("the guard");
         fs::set_permissions(&guard, fs::Permissions::from_mode(0o755)).expect("the guard runs");
-        let checkout = tempfile::tempdir().expect("a checkout");
-        let claude = claude.display().to_string();
+        let (checkout, engine) = dirs(test);
+        let bun = bun.display().to_string();
         let mut step = Session::new(
             &test.runner,
-            checkout.path(),
-            &claude,
-            Some(greptile).filter(|key| !key.is_empty()),
+            &checkout,
+            &bun,
+            &engine,
+            None,
             Path::new("/usr/bin/git"),
         )
         .expect("the step");
@@ -545,58 +514,69 @@ mod tests {
     }
 
     #[test]
-    fn a_session_that_fails_leaves_the_result_to_the_next_step_and_says_how_it_ended() {
+    fn an_engine_that_fails_leaves_the_result_to_the_next_step_and_says_how_it_ended() {
         let test = TestRunner::new();
-        // A session that errs once the workflow has finished.
-        let args = json!({"pr": 5, "head": "e".repeat(40), "changed": ["src/a b.rs"], "config": {"agents": {}}});
+        // An engine that errs once the review has finished.
         let events = [
-            "not JSON from a hook".to_owned(),
+            "not JSON".to_owned(),
             json!({"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "rateLimitType": "five_hour"}}).to_string(),
             json!({"type": "result", "subtype": "error_during_execution", "terminal_reason": "aborted::error::x", "api_error_status": 529})
                 .to_string(),
         ]
         .join("\n");
-        let argv = session(&test, &args, &events, 1, "");
+        let argv = session(&test, &events, 1);
         // The values are cleaned, so none can start a workflow command.
         let log = test.log();
         assert!(
             log.ends_with(
-                "::warning title=Claude review::Claude Code exited with status 1: error_during_execution, abortederrorx, \
-                 API status 529; rate limit allowed (five_hour). The Show how the review ended step has its last replies.\n"
+                "::warning title=Claude review::The review engine exited with status 1: error_during_execution, abortederrorx, \
+                 API status 529; rate limit allowed (five_hour). The Show how the review ended step has its last lines.\n"
             ),
             "{log}"
         );
-        // The args go in on stdin, whole, and the session runs on the default stage.
-        let prompt = fs::read_to_string(test.temp.path().join("prompt")).expect("the prompt");
-        assert!(
-            prompt.contains(&format!(
-                "with args set to this JSON object, unchanged: {args}."
-            )),
-            "{prompt}"
-        );
-        let at =
-            |flag: &str| argv[argv.iter().position(|arg| arg == flag).expect(flag) + 1].clone();
+        // The engine reads the job's args and writes its record and events
+        // to the trusted directory; its agents read the checkout and the
+        // review directory.
+        let (checkout, engine) = dirs(&test);
+        let path = |path: &Path| path.display().to_string();
         assert_eq!(
-            (at("--model"), at("--effort")),
-            ("claude-sonnet-5-5".into(), "low".into())
+            argv,
+            [
+                "--no-env-file".to_owned(),
+                ENGINE.into(),
+                "ci".into(),
+                "--repo".into(),
+                path(&checkout),
+                "--args".into(),
+                path(&prepare::args_path(&test.runner)),
+                "--out".into(),
+                path(&result::record_path(&test.runner)),
+                "--events".into(),
+                path(&Events::path(&test.runner)),
+                "--read-dir".into(),
+                path(test.runner.review_dir()),
+            ]
         );
-        assert_eq!(
-            at("--add-dir"),
-            test.runner.review_dir().display().to_string()
-        );
-        // The guard is first on the session's PATH.
-        let path = fs::read_to_string(test.temp.path().join("path")).expect("the PATH");
+        // It starts in its own directory, never the checkout, with the guard
+        // first on its PATH, and its output goes to the log the report prints.
+        let read = |name: &str| fs::read_to_string(test.temp.path().join(name)).expect(name);
+        assert_eq!(read("cwd").trim(), path(&engine));
         assert!(
-            path.starts_with(&format!(
+            read("path").starts_with(&format!(
                 "{}:",
                 test.runner.trusted_dir().join("bin").display()
             )),
-            "{path}"
+            "{}",
+            read("path")
+        );
+        assert_eq!(
+            fs::read_to_string(log_path(&test.runner)).expect("the log"),
+            "engine output\n"
         );
         assert!(!log.contains("usage limit"), "{log}");
         // Without any event at all, it still says so.
         let test = TestRunner::new();
-        session(&test, &args, "", 124, "");
+        session(&test, "", 124);
         assert!(
             test.log().contains(
                 "status 124: no result, unknown, API status none; rate limit unknown (unknown)."
@@ -607,9 +587,8 @@ mod tests {
     }
 
     #[test]
-    fn a_session_stopped_by_a_usage_limit_says_when_to_run_it_again() {
-        let args = json!({"config": {"agents": {}}});
-        let limited = |info: Value, status: Value| {
+    fn an_engine_stopped_by_a_usage_limit_says_when_to_run_it_again() {
+        let limited = |info: serde_json::Value, status: serde_json::Value| {
             [
                 json!({"type": "rate_limit_event", "rate_limit_info": info}).to_string(),
                 json!({"type": "result", "subtype": "success", "is_error": true, "terminal_reason": "api_error", "api_error_status": status})
@@ -641,7 +620,7 @@ mod tests {
             ),
         ] {
             let test = TestRunner::new();
-            session(&test, &args, &events, 1, "");
+            session(&test, &events, 1);
             let log = test.log();
             assert!(
                 log.contains(
@@ -654,95 +633,44 @@ mod tests {
     }
 
     #[test]
-    fn the_session_reaches_greptile_with_the_key_in_its_config_and_runs_the_settings_model() {
+    fn the_engine_gets_greptiles_key_and_no_github_token() {
         let test = TestRunner::new();
-        let args = json!({"config": {"agents": {"session": {"model": "claude-opus-5-5"}}}});
-        // The env scrub blanks a ${GREPTILE_API_KEY} header, so the key is written into the config itself.
-        let argv = session(&test, &args, "", 0, "gk-0123");
-        let at =
-            |flag: &str| argv[argv.iter().position(|arg| arg == flag).expect(flag) + 1].clone();
-        let config: Value = serde_json::from_str(&at("--mcp-config")).expect("JSON");
-        assert_eq!(
-            config,
-            json!({"mcpServers": {"greptile": {"type": "http", "url": "https://api.greptile.com/mcp",
-                                                 "headers": {"Authorization": "Bearer gk-0123"}}}})
-        );
-        // A stage sets either field; the other keeps its default.
-        assert_eq!(
-            (at("--model"), at("--effort")),
-            ("claude-opus-5-5".into(), "low".into())
-        );
-        assert_eq!(test.log().matches("::warning").count(), 0, "{}", test.log());
-        // Without a key, no server.
-        let test = TestRunner::new();
-        let args = json!({"config": {"agents": {"session": {"effort": "medium"}}}});
-        let argv = session(&test, &args, "", 0, "");
-        let at =
-            |flag: &str| argv[argv.iter().position(|arg| arg == flag).expect(flag) + 1].clone();
-        assert!(!argv.iter().any(|arg| arg == "--mcp-config"));
-        assert_eq!(
-            (at("--model"), at("--effort")),
-            ("claude-sonnet-5-5".into(), "medium".into())
-        );
-    }
-
-    #[test]
-    fn the_session_gets_no_github_token_and_only_the_allowed_tools() {
-        let test = TestRunner::new();
-        let checkout = tempfile::tempdir().expect("a checkout");
-        let step = Session::new(
-            &test.runner,
-            checkout.path(),
-            "claude",
-            None,
-            Path::new("/usr/bin/git"),
-        )
-        .expect("the step");
-        let stage = Stage {
-            model: "sonnet".into(),
-            effort: Effort::Low,
+        let (checkout, engine) = dirs(&test);
+        let envs = |greptile: Option<&str>| -> Vec<(String, Option<String>)> {
+            let step = Session::new(
+                &test.runner,
+                &checkout,
+                "bun",
+                &engine,
+                greptile,
+                Path::new("/usr/bin/git"),
+            )
+            .expect("the step");
+            let command = step.command(Path::new("/bin"));
+            assert_eq!(command.get_current_dir(), Some(engine.as_path()));
+            command
+                .get_envs()
+                .map(|(name, value)| {
+                    (
+                        name.to_string_lossy().into_owned(),
+                        value.map(|value| value.to_string_lossy().into_owned()),
+                    )
+                })
+                .collect()
         };
-        let command = step.command(&stage, Path::new("/bin"));
-        let envs: Vec<_> = command.get_envs().collect();
+        let with = envs(Some("gk-0123"));
         for (name, value) in [
             ("GH_TOKEN", None),
             ("GITHUB_TOKEN", None),
-            ("CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", Some("1")),
+            ("GREPTILE_API_KEY", Some("gk-0123".to_owned())),
         ] {
-            assert!(
-                envs.contains(&(OsStr::new(name), value.map(OsStr::new))),
-                "{name}: {envs:?}"
-            );
+            assert!(with.contains(&(name.to_owned(), value)), "{name}: {with:?}");
         }
-        let args: Vec<_> = command.get_args().collect();
-        let tools = args
-            .iter()
-            .position(|arg| *arg == "--allowedTools")
-            .and_then(|at| args.get(at + 1))
-            .expect("the allowed tools")
-            .to_str()
-            .expect("UTF-8");
-        // The agents' shell is read-only git, which the guard runs.
-        let shell: Vec<_> = tools
-            .split(',')
-            .filter(|tool| tool.starts_with("Bash("))
-            .collect();
-        assert_eq!(
-            shell,
-            [
-                "Bash(git log *)",
-                "Bash(git show *)",
-                "Bash(git diff *)",
-                "Bash(git blame *)",
-                "Bash(git ls-files *)",
-                "Bash(git ls-tree *)"
-            ]
-        );
+        // Without a key, none, even one the job's environment has.
+        let without = envs(None);
         assert!(
-            !tools
-                .split(',')
-                .any(|tool| tool == "Bash" || tool == "Write" || tool == "Edit"),
-            "{tools}"
+            without.contains(&("GREPTILE_API_KEY".to_owned(), None)),
+            "{without:?}"
         );
     }
 
@@ -761,16 +689,15 @@ mod tests {
     #[test]
     fn a_session_past_its_limit_is_asked_to_stop_with_what_it_started() {
         let test = TestRunner::new();
-        let args = json!({"config": {"agents": {}}});
         let dir = test.temp.path().display().to_string();
-        // A session that notes being asked to stop, waiting on a command it
+        // An engine that notes being asked to stop, waiting on a command it
         // started that does not stop when asked, as an agent's might not.
         let rest = format!(
             "trap 'echo asked > \"{dir}/asked\"; exit 143' TERM\n(trap '' TERM; exec sleep 60) &\n\
              echo $! > '{dir}/agent'\nwait\n"
         );
         let started = Instant::now();
-        run(&test, &args, &rest, "", Duration::from_secs(1));
+        run(&test, &rest, Duration::from_secs(1));
         // Stopped at the limit, not when its own work ended.
         assert!(
             started.elapsed() < Duration::from_secs(20),
@@ -779,13 +706,13 @@ mod tests {
         );
         let log = test.log();
         assert!(
-            log.contains("Claude Code exited with status 124: no result"),
+            log.contains("The review engine exited with status 124: no result"),
             "{log}"
         );
         // Asked first, so it could stop its agents, not only killed.
         assert!(
             test.temp.path().join("asked").exists(),
-            "the session was not asked to stop"
+            "the engine was not asked to stop"
         );
         for name in ["pid", "agent"] {
             let pid = fs::read_to_string(test.temp.path().join(name)).expect("the process id");
@@ -809,7 +736,7 @@ mod tests {
             ))
             .process_group(0)
             .spawn()
-            .expect("the session");
+            .expect("the engine");
         let started = Instant::now();
         let status = wait(child, Duration::from_millis(500), Duration::from_secs(1));
         assert_eq!(status.expect("the status"), TIMED_OUT);

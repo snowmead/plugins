@@ -1,6 +1,6 @@
 //! Helpers for tests: a temporary git repository with commits made from a map
-//! of files, isolated from the machine's git config, and the review workflow
-//! run by Node with stub agents.
+//! of files, isolated from the machine's git config, and the review engine
+//! run by Bun with stub agents.
 
 use serde_json::Value;
 use std::{
@@ -16,26 +16,26 @@ use std::{
     },
 };
 
-/// The review workflow's result for `args`, run by Node with the stub agents
-/// of `workflows/tests/review.mjs`: the security segment finds one Nit on
+/// The review engine's result for `args`, run by Bun with the stub agents of
+/// `engine/tests/stub.ts`: the security segment finds one Nit on
 /// `src/a.rs:3`, the editor posts it, and the follow-up says thread `T1` is
 /// fixed and answers a person in thread `T2` with text that starts with
 /// "Fixed ".
 pub(crate) fn workflow(args: &Value) -> Value {
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("workflows/tests/review.mjs");
-    let mut node = Command::new("node")
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("engine/tests/stub.ts");
+    let mut bun = Command::new("bun")
         .arg(script)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("Node runs");
-    node.stdin
+        .expect("Bun runs");
+    bun.stdin
         .take()
         .expect("stdin")
         .write_all(args.to_string().as_bytes())
         .expect("the args");
-    let output = node.wait_with_output().expect("the workflow");
+    let output = bun.wait_with_output().expect("the engine");
     assert!(
         output.status.success(),
         "{}",

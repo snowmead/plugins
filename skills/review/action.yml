@@ -46,9 +46,6 @@ inputs:
   reviewer:
     description: The login the token posts as.
     default: github-actions
-  claude-code-version:
-    description: The Claude Code release the review runs on; workflows need 2.1.293 or later.
-    default: 2.1.293
 
 outputs:
   summary:
@@ -88,7 +85,7 @@ runs:
         dir="$RUNNER_TEMP/claude-review-action"
         rm -rf "$dir"
         mkdir -p "$dir"
-        (cd "$ACTION" && tar --exclude=./target -cf - .) | tar -xf - -C "$dir"
+        (cd "$ACTION" && tar --exclude=./target --exclude=./node_modules -cf - .) | tar -xf - -C "$dir"
         echo "dir=$dir" >> "$GITHUB_OUTPUT"
         if ! command -v rustup > /dev/null; then
           curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
@@ -105,6 +102,33 @@ runs:
         rustup toolchain install "$channel" --profile minimal --no-self-update
         cargo +"$channel" build --release --locked --quiet
         echo "CLAUDE_REVIEW=$PWD/target/release/claude-review" >> "$GITHUB_ENV"
+    # Bun runs the review engine (engine/). Its packages, the Agent SDK and the
+    # Claude Code it ships, install from the lockfile, without their scripts.
+    - name: Install Bun and the engine
+      if: steps.credential.outputs.present == 'true'
+      shell: bash
+      working-directory: ${{ steps.copy.outputs.dir }}
+      env:
+        BUN_VERSION: 1.4.2
+      run: |
+        set -o pipefail
+        case "$(uname -sm)" in
+          "Linux x86_64") arch=x64 sum=36368faef7527875d5ffa52e53cd48021741f2a83eb6208a8dd64068d422a913 ;;
+          "Linux aarch64") arch=aarch64 sum=54328bbc2d9c8e0c9f892c544d66c57a83b84139e34909e5ee81758f1ac8fda7 ;;
+          *) echo "::error title=Claude review::The review runs on Linux, on x86_64 or aarch64."; exit 1 ;;
+        esac
+        zip="$RUNNER_TEMP/bun-linux-$arch.zip"
+        for attempt in 1 2 3; do
+          curl -fsSLo "$zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-$arch.zip" && break
+          [ "$attempt" -lt 3 ] || exit 1
+          sleep 5
+        done
+        echo "$sum  $zip" | sha256sum --check --strict
+        rm -rf "$RUNNER_TEMP/bun"
+        unzip -q "$zip" -d "$RUNNER_TEMP/bun"
+        bin="$RUNNER_TEMP/bun/bun-linux-$arch"
+        "$bin/bun" install --frozen-lockfile --production --ignore-scripts
+        echo "$bin" >> "$GITHUB_PATH"
     - name: Find the pull request
       id: start
       if: steps.credential.outputs.present == 'true'
@@ -133,28 +157,6 @@ runs:
         REVIEW_REVIEWER: ${{ inputs.reviewer }}
         REVIEW_AGENTS: ${{ inputs.agents }}
       run: '"$CLAUDE_REVIEW" prepare'
-    # Claude Code needs bubblewrap and socat to keep the job's secrets out of
-    # the agents' shell commands.
-    - name: Install Claude Code
-      if: steps.credential.outputs.present == 'true'
-      shell: bash
-      env:
-        CLAUDE_CODE_VERSION: ${{ inputs.claude-code-version }}
-      run: |
-        set -o pipefail
-        sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends bubblewrap socat
-        if ! bwrap --ro-bind / / --unshare-pid true; then
-          # Ubuntu 24.04 limits the unprivileged user namespaces bubblewrap needs.
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          bwrap --ro-bind / / --unshare-pid true
-        fi
-        for attempt in 1 2 3; do
-          curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CODE_VERSION" && break
-          [ "$attempt" -lt 3 ] || exit 1
-          sleep 5
-        done
-        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
     - name: Review
       if: steps.credential.outputs.present == 'true'
       shell: bash
@@ -163,6 +165,7 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
         GREPTILE_API_KEY: ${{ inputs.greptile-api-key }}
+        REVIEW_ACTION_DIR: ${{ steps.copy.outputs.dir }}
       run: '"$CLAUDE_REVIEW" run'
     - name: Read the result
       if: steps.credential.outputs.present == 'true'

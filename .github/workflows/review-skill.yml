@@ -1,9 +1,10 @@
 name: Review skill
 
-# Checks skills/review, the Claude pull request review: its Rust program
-# (format, lint, tests, docs), its workflows under Node with stub agents, this
-# repository's review job, and its locked crates against RustSec advisories.
-# The weekly run catches an advisory published after the last change.
+# Checks skills/review, the Claude pull request review: its engine under Bun
+# with stub agents (types, tests), its Rust program (format, lint, tests,
+# docs), this repository's review job, and its locked crates against RustSec
+# advisories. The weekly run catches an advisory published after the last
+# change.
 
 on:
   pull_request:
@@ -42,7 +43,21 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           persist-credentials: false
-      # The Rust tests run the workflows under Node too.
+      # The Bun the action installs, checked the same way.
+      - name: Install Bun
+        env:
+          BUN_VERSION: 1.4.2
+          SHA256: 36368faef7527875d5ffa52e53cd48021741f2a83eb6208a8dd64068d422a913
+        run: |
+          zip="$RUNNER_TEMP/bun-linux-x64.zip"
+          curl -fsSLo "$zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
+          echo "$SHA256  $zip" | sha256sum --check --strict
+          unzip -q "$zip" -d "$RUNNER_TEMP/bun"
+          echo "$RUNNER_TEMP/bun/bun-linux-x64" >> "$GITHUB_PATH"
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun run typecheck
+      - run: bun test engine
+      # The job test below runs under Node.
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '24'
@@ -57,11 +72,11 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
+      # The Rust tests run the engine under Bun too.
       - run: cargo test --locked
       - run: cargo doc --locked --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: -D warnings
-      - run: node --test 'workflows/tests/*.test.mjs'
       - name: The review job takes the action from a trusted branch
         working-directory: .
         run: node --test '.github/tests/*.test.mjs'

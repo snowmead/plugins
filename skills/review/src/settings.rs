@@ -1,15 +1,11 @@
 //! The review's settings as the steps use them. The settings file (the action's
-//! `config` input, `.claude/review.json` by default) belongs to the workflow,
+//! `config` input, `.claude/review.json` by default) belongs to the engine,
 //! which reads all of it; the steps read only the models, apply a run's
-//! overrides of them, and pass the result to the workflow in its args.
+//! overrides of them, and pass the result to the engine in its args.
 //!
 //! `agents` maps each stage of the review to the model and effort its agents
-//! run on. The workflow (`workflows/pr-review.js`, `DEFAULTS`) holds the default
-//! of every stage; [`SESSION_MODEL`] and [`SESSION_EFFORT`] repeat the
-//! session's, which a test keeps equal.
-//!
-//! [`SESSION_MODEL`]: crate::settings::SESSION_MODEL
-//! [`SESSION_EFFORT`]: crate::settings::SESSION_EFFORT
+//! run on. The engine (`engine/settings.ts`, `DEFAULTS`) holds the default of
+//! every stage.
 
 use crate::error::Error;
 use serde_json::{
@@ -20,15 +16,6 @@ use std::{
     fmt,
     str::FromStr, //
 };
-
-/// The model and effort of a stage.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Stage {
-    /// The model, by its Claude Code name.
-    pub(crate) model: String,
-    /// The reasoning effort.
-    pub(crate) effort: Effort,
-}
 
 /// A reasoning effort Claude Code takes, as `--effort` names it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,26 +32,25 @@ pub(crate) enum Effort {
     Max,
 }
 
-/// The default model of the Claude Code session, which only starts the
-/// workflow and waits for it.
-const SESSION_MODEL: &str = "claude-sonnet-5-5";
-
-/// The default effort of the Claude Code session.
-const SESSION_EFFORT: Effort = Effort::Low;
-
 /// The stages a run can set.
 const STAGES: &[&str] = &[
-    "session", "context", "finder", "skeptic", "followup", "editor", "judge", "loader", "scope",
+    "context", "scope", "finder", "skeptic", "followup", "editor", "judge", "tuner",
 ];
 
-/// Settings keys the workflow does not read, which stay out of its args:
+/// Stages earlier versions had, which settings may still name: they are taken
+/// and left out of the engine's args. `session` started the workflow, and
+/// `loader` read the settings and the threads, which the engine now reads
+/// itself.
+const RETIRED_STAGES: &[&str] = &["session", "loader"];
+
+/// Settings keys the engine does not read, which stay out of its args:
 /// `examples` are for the settings' own tests.
-const NOT_FOR_THE_WORKFLOW: &[&str] = &["examples"];
+const NOT_FOR_THE_ENGINE: &[&str] = &["examples"];
 
 /// `config` with the run's `overrides` (a JSON object of stages, or empty
 /// text for none) set over its stages field by field, as the settings are set
-/// over the defaults, without the keys the workflow does not read.
-pub(crate) fn for_workflow(config: &Value, overrides: &str) -> Result<Value, Error> {
+/// over the defaults, without the keys and stages the engine does not read.
+pub(crate) fn for_engine(config: &Value, overrides: &str) -> Result<Value, Error> {
     let mut config = match config {
         Value::Object(fields) => fields.clone(),
         Value::Null => Map::new(),
@@ -74,7 +60,7 @@ pub(crate) fn for_workflow(config: &Value, overrides: &str) -> Result<Value, Err
             ));
         }
     };
-    for key in NOT_FOR_THE_WORKFLOW {
+    for key in NOT_FOR_THE_ENGINE {
         config.remove(*key);
     }
     let mut agents = match config.remove("agents") {
@@ -102,29 +88,15 @@ pub(crate) fn for_workflow(config: &Value, overrides: &str) -> Result<Value, Err
     for (name, stage) in &agents {
         check_stage(name, stage)?;
     }
+    agents.retain(|name, _| !RETIRED_STAGES.contains(&name.as_str()));
     config.insert("agents".into(), Value::Object(agents));
     Ok(Value::Object(config))
-}
-
-/// The session's stage in `config`, or [`SESSION_MODEL`] at [`SESSION_EFFORT`].
-///
-/// [`SESSION_MODEL`]: crate::settings::SESSION_MODEL
-/// [`SESSION_EFFORT`]: crate::settings::SESSION_EFFORT
-pub(crate) fn session(config: &Value) -> Stage {
-    let stage = &config["agents"]["session"];
-    Stage {
-        model: stage["model"].as_str().unwrap_or(SESSION_MODEL).to_owned(),
-        effort: stage["effort"]
-            .as_str()
-            .and_then(|effort| effort.parse().ok())
-            .unwrap_or(SESSION_EFFORT),
-    }
 }
 
 /// Checks that the stage `name` is one the review has, set as
 /// `{model, effort}` with a known effort.
 fn check_stage(name: &str, stage: &Value) -> Result<(), Error> {
-    if !STAGES.contains(&name) {
+    if !STAGES.contains(&name) && !RETIRED_STAGES.contains(&name) {
         return Err(Error::review(format!(
             "The settings name a stage the review does not have: {name}. Its stages are {}.",
             STAGES.join(", ")
@@ -155,7 +127,7 @@ fn check_stage(name: &str, stage: &Value) -> Result<(), Error> {
 
 impl Effort {
     /// Every effort, from the least to the most, which a test keeps equal to
-    /// the workflow's list.
+    /// the engine's list.
     const ALL: [Self; 5] = [Self::Low, Self::Medium, Self::High, Self::Xhigh, Self::Max];
 
     /// Claude Code's name for the effort.
@@ -195,10 +167,8 @@ impl fmt::Display for Effort {
 mod tests {
     use super::{
         Effort,
-        SESSION_EFFORT,
-        SESSION_MODEL,
         STAGES,
-        for_workflow, //
+        for_engine, //
     };
     use crate::testing;
     use serde_json::{
@@ -213,7 +183,7 @@ mod tests {
             "examples": [{"files": ["a.rs"], "segments": ["bugs"]}],
             "agents": {"finder": {"model": "claude-sonnet-5-5", "effort": "high"}, "editor": {"effort": "medium"}},
         });
-        let merged = for_workflow(
+        let merged = for_engine(
             &config,
             r#"{"finder": {"model": "claude-opus-5-5"}, "skeptic": {"effort": "low"}}"#,
         )
@@ -230,7 +200,16 @@ mod tests {
             })
         );
         assert_eq!(
-            for_workflow(&json!(null), "").expect("no settings"),
+            for_engine(&json!(null), "").expect("no settings"),
+            json!({"agents": {}})
+        );
+        // A stage earlier versions had is taken and left out.
+        assert_eq!(
+            for_engine(
+                &json!({"agents": {"session": {"model": "m"}, "loader": {}}}),
+                r#"{"session": {"effort": "low"}}"#
+            )
+            .expect("retired stages"),
             json!({"agents": {}})
         );
     }
@@ -256,7 +235,7 @@ mod tests {
             (json!({}), "[1]", "not a JSON object of stages"),
             (json!({}), "{", "not JSON"),
         ] {
-            let error = for_workflow(&config, overrides)
+            let error = for_engine(&config, overrides)
                 .expect_err(message)
                 .to_string();
             assert!(error.contains(message), "{error}");
@@ -264,8 +243,8 @@ mod tests {
     }
 
     #[test]
-    fn the_stages_and_efforts_are_the_workflows() {
-        // The workflow lists its own in the error for one it does not have.
+    fn the_stages_and_efforts_are_the_engines() {
+        // The engine lists its own in the error for one it does not have.
         let listed = |agents: Value, before: &str, after: &str| {
             let result = testing::workflow(&json!({"mode": "names", "config": {"agents": agents}}));
             let error = result["error"].as_str().expect("an error");
@@ -289,16 +268,6 @@ mod tests {
         assert_eq!(
             listed(json!({"finder": {"effort": "none"}}), "an effort (", ")."),
             sorted(&Effort::ALL.map(Effort::name))
-        );
-    }
-
-    #[test]
-    fn the_session_default_is_the_workflows() {
-        let workflow = include_str!("../workflows/pr-review.js");
-        let line = format!("session: {{ model: '{SESSION_MODEL}', effort: '{SESSION_EFFORT}' }}");
-        assert!(
-            workflow.contains(&line),
-            "workflows/pr-review.js has no `{line}` default"
         );
     }
 }
