@@ -320,6 +320,7 @@ fn passes_read_commands_through_unchanged() {
         &["diff", "HEAD~1", "HEAD", "--", "README.md"],
         &["diff", "HEAD~1..HEAD", "--", "README.md"],
         &["diff", "origin/main...HEAD", "--stat"],
+        &["diff", "--src-prefix=a/", "--dst-prefix=b/", "HEAD~1"],
         &["diff", readme, "web/README.md"],
         &["-C", checkout, "diff", "--numstat"],
         &["-C", "here", "diff", "--numstat"],

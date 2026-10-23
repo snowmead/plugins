@@ -8,8 +8,8 @@
 //
 //   local [--base <rev>] [--committed] [--note <text>]
 //       Reviews this branch without a pull request: the files on disk against
-//       the merge base with the default branch, or only the commits with
-//       --committed. Prints the findings and writes a Markdown report under
+//       the merge base with the default branch (or --base), or only the
+//       commits with --committed. Prints the findings and writes a Markdown report under
 //       the git directory (review/).
 //   ci --args <file> --out <file> --events <file> [--read-dir <dir>]...
 //       The action's run step: reviews the pull request the args name and
@@ -61,9 +61,12 @@ function parse(argv: string[]): Cli {
     if (value === undefined) throw new Error(`${flag} needs a value`)
     if (ENGINE_OPTIONS.includes(name)) (options[name] ??= []).push(value)
     else {
+      // JSON for a number, an object or a list; a value such as the short
+      // commit 1234e56, which reads as a number it does not spell, stays text.
       let parsed: unknown = value
       try {
-        parsed = JSON.parse(value)
+        const json = JSON.parse(value)
+        if (typeof json !== 'number' || String(json) === value) parsed = json
       } catch {}
       args[name.replace(/-/g, '_')] = parsed
     }
@@ -133,7 +136,12 @@ async function main() {
           break
         }
       }
-    } else base = (await run(['rev-parse', '--verify', `${base}^{commit}`]))?.trim() || base
+    } else {
+      // The fork point, as for the default branch: against a base that moved
+      // on, the files on disk would show its new commits reversed.
+      const rev = (await run(['rev-parse', '--verify', `${base}^{commit}`]))?.trim() || String(base)
+      base = (await run(['merge-base', 'HEAD', rev]))?.trim() || rev
+    }
     if (!base) throw new Error('found no default branch to review against: give --base <rev>')
     const committed = Boolean(one(cli.options, 'committed'))
     const dirty = Boolean((await run(['status', '--porcelain', '--untracked-files=no']))?.trim())

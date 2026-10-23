@@ -35,6 +35,11 @@ test("the agents read only the repository's own routes", () => {
     'search/issues?q=repo:o/r+org:other',
     'search/issues?q=repo:o/r+user:someone',
     'search/issues?q=repo:o/r&q=repo:other/private',
+    // A scope inside parentheses, after a minus, or in quotes counts too.
+    `search/issues?q=${encodeURIComponent('repo:o/r OR (org:other is:pr)')}`,
+    `search/issues?q=${encodeURIComponent('repo:o/r -org:other')}`,
+    `search/issues?q=${encodeURIComponent('repo:o/r "user:x"')}`,
+    `search/issues?q=${encodeURIComponent('(repo:o/r)')}`,
   ]) {
     expect([bad, routeRefusal(bad, 'o/r')]).not.toEqual([bad, null])
   }

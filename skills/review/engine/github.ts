@@ -17,7 +17,9 @@ export interface GitHub {
 }
 
 // The search qualifiers that pick which repositories a search reads.
-const SCOPE = /^-?(repo|org|user|owner):/i
+// A qualifier that names where a search looks, anywhere in its query:
+// GitHub reads one inside parentheses or after a minus too.
+const SCOPE = /(repo|org|user|owner):/gi
 
 /** Why the agents may not read `route`, or null when they may. */
 export function routeRefusal(route: string, repo: string): string | null {
@@ -28,8 +30,9 @@ export function routeRefusal(route: string, repo: string): string | null {
   if (path === `repos/${repo}` || path.startsWith(`repos/${repo}/`)) return null
   if (path === 'search/issues') {
     const q = new URLSearchParams(query).getAll('q')
-    const scopes = (q[0] || '').split(/\s+/).filter((term) => SCOPE.test(term))
-    if (q.length === 1 && scopes.length === 1 && scopes[0]!.toLowerCase() === `repo:${repo}`.toLowerCase()) return null
+    const scopes = (q[0] || '').match(SCOPE) || []
+    const terms = (q[0] || '').toLowerCase().split(/\s+/)
+    if (q.length === 1 && scopes.length === 1 && terms.includes(`repo:${repo}`.toLowerCase())) return null
     return `A search must name repo:${repo} in one q, and no other repo:, org:, user: or owner:.`
   }
   return `Only routes under repos/${repo}/, and search/issues with repo:${repo}, are read.`

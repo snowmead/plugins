@@ -452,7 +452,8 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
     const changed: string[] | null =
       R.changed || (await io.git(['diff', '--name-only', ...range]))?.split('\n').filter(Boolean) || null
     if (!changed) return { error: `git could not list the files that ${range[0]} changes.` }
-    const raw = (await io.git(['diff', '--no-color', '--no-ext-diff', '--no-textconv', ...range])) ?? ''
+    // a/ and b/ whatever the user's diff.noprefix or diff.mnemonicPrefix, for diffText.
+    const raw = (await io.git(['diff', '--no-color', '--no-ext-diff', '--no-textconv', '--src-prefix=a/', '--dst-prefix=b/', ...range])) ?? ''
     const stat = (await io.git(['diff', '--stat=120', ...range]))?.trim() ?? ''
     const pr = describePr(prFile)
     const shared: Shared = { rules, description: R.description ? cut(String(R.description), MAX_DESCRIPTION) : pr.text, diff: diffText(raw, inDiff) }

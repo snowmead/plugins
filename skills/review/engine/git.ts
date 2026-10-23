@@ -55,7 +55,8 @@ export function refusal(args: string[], cwd: string): string | null {
       const hit = REFUSED.find((r) => r === name || (name.length > 3 && r.startsWith(name) && !OPTIONS_OF_THEIR_OWN.includes(name)))
       if (hit) return `${hit} is refused: it reads or writes a file outside the checkout, or runs a command.`
     } else if (!paths && arg.startsWith('-') && arg.length > 1 && SHORT[sub]) {
-      const cluster = arg.slice(1)
+      // blame's -L takes the rest of its cluster as a range (-L/Struct/,+5).
+      const cluster = sub === 'blame' ? arg.slice(1).split('L')[0]! : arg.slice(1)
       const bad = [...SHORT[sub]!].find((ch) => cluster.includes(ch))
       if (bad) {
         return `git ${sub} -${bad} is refused: it reads a file or runs a command. To search for text that starts with -, write that - as [-] in a pattern (git grep -e '[-]-output').`

@@ -16,6 +16,10 @@
 //! settings file, else the default branch when it has them, else the base.
 //! The step also copies the rules to the review directory, where the agents
 //! read them, and keeps the settings for the later steps.
+//!
+//! It stops first when the checkout keeps a credential in its own git config,
+//! as `actions/checkout` does unless `persist-credentials: false`: the agents
+//! read the checkout, its `.git/config` included.
 
 use crate::{
     actions::Runner,
@@ -92,6 +96,18 @@ impl Protect<'_> {
     pub(crate) fn run(&self) -> Result<(), Error> {
         for (name, path) in [("rules", self.rules), ("config", self.config)] {
             check_relative(name, path)?;
+        }
+        if self.checkout.succeeds(&[
+            "config",
+            "--local",
+            "--get-regexp",
+            r"^http\..*\.extraheader$",
+        ]) {
+            return Err(Error::review(
+                "The checkout keeps a GitHub token in its git config (an http extraheader), where the \
+                 review's agents could read it. Check the pull request out with \
+                 `persist-credentials: false`.",
+            ));
         }
         let source = self.source();
         for path in self.paths(&source)? {
@@ -666,6 +682,22 @@ mod tests {
         ] {
             assert_eq!(configures(name.as_bytes()), configures_it, "{name}");
         }
+    }
+
+    #[test]
+    fn refuses_a_checkout_that_keeps_a_token_in_its_git_config() {
+        let setup = setup();
+        setup.repo.git(&[
+            "config",
+            "--local",
+            "http.https://github.com/.extraheader",
+            "AUTHORIZATION: basic eC1hY2Nlc3MtdG9rZW46dA==",
+        ]);
+        let (_, result, tree) = protect(&setup, "main", "main");
+        let error = result.expect_err("a refusal");
+        assert!(error.contains("persist-credentials: false"), "{error}");
+        // Nothing was replaced.
+        assert_eq!(tree.get("AGENTS.md").map(String::as_str), Some("head"));
     }
 
     #[test]

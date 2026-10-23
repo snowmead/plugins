@@ -843,6 +843,9 @@ test("the agents' git runs only read commands, and none that reads or writes out
     ['show', 'HEAD:../README.md'],
     ['diff', '--text'],
     ['blame', '--ignore-rev', 'abc', 'src/a.rs'],
+    // A range that holds an S is not blame's -S.
+    ['blame', '-L/Struct/,+5', 'src/a.rs'],
+    ['blame', '-wL/Struct/,+5', 'src/a.rs'],
   ]) {
     expect(refusal(ok, cwd)).toBeNull()
   }
@@ -856,6 +859,7 @@ test("the agents' git runs only read commands, and none that reads or writes out
     [['diff', '../other'], 'leads outside the checkout'],
     [['blame', '--contents', '/etc/hostname', 'x'], '--contents is refused'],
     [['blame', '-S', 'revs', 'x'], 'blame -S is refused'],
+    [['blame', '-wS', 'revs', 'x'], 'blame -S is refused'],
     [['grep', '-O', 'x'], 'grep -O is refused'],
     [['grep', '-nf', 'patterns'], 'grep -f is refused'],
     [['grep', '--open-files-in-pager=vi', 'x'], '--open-files-in-pager is refused'],

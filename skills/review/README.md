@@ -47,7 +47,9 @@ jobs:
 
 Check out the pull request's head, not the merge commit, with full history,
 and keep the `concurrency` group: two runs at once would each delete the
-other's pending review.
+other's pending review. Keep `persist-credentials: false` too: otherwise the
+checkout keeps the job's token in `.git/config`, where the agents could read
+it, and the review stops.
 Pin the action to a commit: the job holds the Claude credential, so the action
 must never come from the pull request under review. A repository that keeps
 the action in its own tree takes it from the base branch instead: check the
@@ -96,7 +98,7 @@ bun --no-env-file --cwd <skill> engine/main.ts local --repo "$PWD"
 ```
 
 where `<skill>` is this directory. `--committed` reviews only the commits,
-`--base <rev>` names another base, and `--note <text>` says what the change is
+`--base <rev>` reviews against the merge base with another branch, and `--note <text>` says what the change is
 for. A local review uses the repository's `REVIEW.md` and
 `.claude/review.json` when it has them, and this directory's defaults when it
 does not; it runs on the Claude account Claude Code is signed in with, or on

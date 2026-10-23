@@ -30,13 +30,13 @@ your task needs before you change anything.
   ```
 
   It reviews the files on disk against the merge base with the default branch, prints the findings, and writes a
-  Markdown report under `.git/review/`. Add `--committed` to review only the commits, `--base <rev>` for another
-  base, and `--note "<what the change is for>"` when the user said. A run takes a few minutes; run it in the
+  Markdown report under `.git/review/`. Add `--committed` to review only the commits, `--base <rev>` for the
+  fork point with another branch, and `--note "<what the change is for>"` when the user said. A run takes a few minutes; run it in the
   background and tell the user when it starts. Then show the findings, most severe first, and the report's path.
   Always start Bun with `--cwd "${CLAUDE_SKILL_DIR}"` and `--no-env-file`, never from the repository: Bun would run
   the repository's `bunfig.toml` and load its `.env` files.
 - **Add the review to a repository.** Write the job file from README.md, "Using it": pinned to a commit, the pull
-  request's head checked out with full history, and the `concurrency` group kept. Add the resolve job from
+  request's head checked out with full history and `persist-credentials: false`, and the `concurrency` group kept. Add the resolve job from
   "Resolving threads" only when the user wants settled threads resolved; it is the one job with contents write.
   Tell the user to add a `CLAUDE_CODE_OAUTH_TOKEN` secret (from `claude setup-token`) or an `ANTHROPIC_API_KEY`;
   you cannot add secrets.

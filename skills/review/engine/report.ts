@@ -1,7 +1,7 @@
 // What a run spent, by stage and by model, and the Markdown report of a local
 // review, which the engine writes where git never tracks it.
 
-import { fence, ICON, NAME } from './render.ts'
+import { cell, fence, ICON, NAME } from './render.ts'
 import type { Finding, Severity } from './schemas.ts'
 import type { AgentUsage, SdkRuntime } from './runtime.ts'
 
@@ -87,7 +87,7 @@ export function localReport(o: {
   }
   if (r.listed.length) {
     out.push('## Listed, not raised', '', '| | Location | Finding | Why |', '|---|---|---|---|')
-    for (const x of r.listed) out.push(`| ${ICON[x.severity as Severity] || ''} | \`${x.path}${x.line ? `:${x.line}` : ''}\` | ${x.title} | ${x.note || ''} |`)
+    for (const x of r.listed) out.push(`| ${ICON[x.severity as Severity] || ''} | \`${x.path}${x.line ? `:${x.line}` : ''}\` | ${cell(x.title)} | ${cell(x.note || '')} |`)
     out.push('')
   }
   out.push('## Segments', '', '| Segment | State |', '|---|---|', ...r.segments.map((s) => `| ${s.title} | ${STATE[s.state] || s.state}${s.reason ? `: ${s.reason}` : ''} |`), '')
