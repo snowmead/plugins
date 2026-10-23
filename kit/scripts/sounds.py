@@ -7,10 +7,11 @@ Clones (or fast-forwards) earshot's default branch into ~/.cache/plugins-kit/ear
 newest bank; --no-pull renders from the commit already there, which leaves the existing sounds as they are when
 only KIT changed. Rendering needs no models and no network beyond the clone.
 
-Every sound is one of earshot's short, crisp UI ticks and clicks (30 to 95 ms, no thumps, no ringing). They are
-matched on loudness, not peak: a 39 ms tick and a 90 ms tink with the same peak differ by 10 dB or more to the ear.
-Each is set to the same 10 ms RMS, then played at LEVEL (the contents tick) plus a small per-sound offset.
-Stored as 16-bit 32 kHz mono WAV data URIs (the kit is about 50 KB).
+Every sound is one of earshot's short, crisp UI ticks and clicks (30 to 95 ms, no thumps, no ringing). Each is run
+through earshot's model-free audit (forge.sfx.check) as it is stored, and the line it prints says clean or why not:
+keep only clean ones. They are matched on loudness, not peak: a 39 ms tick and a 90 ms tink with the same peak
+differ by 10 dB or more to the ear. Each is set to the same 10 ms RMS, then played at LEVEL (the contents tick) plus
+a small per-sound offset. Stored as 16-bit 32 kHz mono WAV data URIs (the kit is about 35 KB).
 """
 import base64, io, json, os, subprocess, sys, wave
 
@@ -30,8 +31,8 @@ KIT = {
     'step':     ('pro_hover_tick/soft', -1),    # a figure moves one step
     'select':   ('pro_click/soft', 1),          # an option is picked
     'deselect': ('pro_hover_tick/detent', -2),  # an option is cleared
-    'reveal':   ('pro_hover_tick/glass', 0),    # a panel or an answer opens
-    'toggle':   ('pro_hover_tick/air', -1),     # a switch, a select, the sound button
+    'reveal':   ('pro_click/glass', 0),         # a panel or an answer opens: a short glassy tink
+    'toggle':   ('pro_click/snap', 0),          # a switch, a select, the sound button: a short snap
     'send':     ('pro_pop/tink', 1),            # feedback sent, or a self-check is right: a light tonal tink
     'hover':    ('pro_hover_tick/soft', -12),   # a mouse moves onto a control: the step tick, far under; at most one each 80 ms
 }
@@ -74,13 +75,17 @@ def main():
     commit = sync(pull='--no-pull' not in sys.argv)
     sys.path.insert(0, CACHE)
     import earshot
-    from earshot.forge import bank
+    from earshot.forge import bank, sfx
     sounds = {}
     for event, (sid, offset) in KIT.items():
         y, meta = bank.render(sid)
         uri, dur, rms = encode(np.asarray(y, dtype=np.float64), meta.get('sr', 48000))
+        with wave.open(io.BytesIO(base64.b64decode(uri.split(',', 1)[1]))) as w:
+            stored = np.frombuffer(w.readframes(w.getnframes()), '<i2') / 32767
+        audit = sfx.check(stored, sr=SR, category=sid.split('/')[0], sound=sid)
         sounds[event] = {'uri': uri, 'db': LEVEL + offset, 'src': sid, 'dur': round(dur, 3)}
-        print(f'{event:9s} {sid:24s} {dur:.3f} s  rms {rms:6.1f} dB  plays at {rms + LEVEL + offset:6.1f} dB')
+        print(f'{event:9s} {sid:24s} {dur:.3f} s  rms {rms:6.1f} dB  plays at {rms + LEVEL + offset:6.1f} dB  '
+              + ('clean' if audit['ok'] else '; '.join(w['msg'] for w in audit['warnings'])))
     kit = {'earshot': getattr(earshot, '__version__', ''), 'commit': commit, 'bank': getattr(bank, 'VERSION', ''),
            'sounds': sounds}
     with open(OUT, 'w') as f:
