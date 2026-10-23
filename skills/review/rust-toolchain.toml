@@ -1,0 +1,5 @@
+[toolchain]
+# The release the action builds with (action.yml reads this channel).
+channel = "1.99.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]

@@ -1,0 +1,19 @@
+{
+  "classes": {
+    "generated": [
+      "**/{Cargo.lock,package-lock.json,pnpm-lock.yaml}",
+      "deps.lock",
+      "plugins-lock.json",
+      "web/src/api.gen.ts",
+      ".{claude,codex}/skills/*"
+    ],
+    "prose": ["**/*.md", "**/*.txt", "!{src,web}/**/*.txt", "docs/**", "LICENSE*"],
+    "design": ["docs/**", "**/{AGENTS,CLAUDE}{,.local}.md", "REVIEW.md", ".{agents,claude,codex}/**"]
+  },
+  "segments": [
+    { "name": "rust", "files": ["**/*.rs", "**/*.sql", "**/Cargo.toml"] },
+    { "name": "web", "files": ["web/**", "!@generated", "!@prose"], "agents": { "finder": { "model": "claude-haiku-5-5" } } }
+  ],
+  "agents": { "editor": { "effort": "medium" } },
+  "knowledge_base": { "name": "the knowledge base", "skill": "docs-index" }
+}

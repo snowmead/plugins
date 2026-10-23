@@ -1,0 +1,195 @@
+name: Claude review
+description: >-
+  Reviews a pull request with Claude Code in segments, checks each finding
+  with a skeptic, and posts one review of inline comments for each push, with
+  a summary at the bottom of the pull request description.
+author: snowmead
+
+# README.md in this directory says how the review works, what each input does,
+# and how to call the action safely. Each step below runs one subcommand of the
+# action's Rust program (src/main.rs), built from this directory.
+
+inputs:
+  github-token:
+    description: Token that reads the pull request and posts the review; needs pull-requests write.
+    default: ${{ github.token }}
+  claude-code-oauth-token:
+    description: >-
+      A Claude subscription's token from `claude setup-token`. The review
+      counts against that subscription's usage limits and is not billed.
+    default: ''
+  anthropic-api-key:
+    description: >-
+      An Anthropic API key, billed per review. Claude Code uses it over the
+      subscription token when both are set.
+    default: ''
+  greptile-api-key:
+    description: Optional. Lets the review read Greptile's knowledge base of the repository.
+    default: ''
+  pr:
+    description: The pull request number, for a run that is not a pull request event.
+    default: ''
+  path:
+    description: The checkout of the pull request's head, relative to the workspace, with full history.
+    default: '.'
+  rules:
+    description: The review rules in the repository; the action's rules.md when the trusted branch has none.
+    default: REVIEW.md
+  config:
+    description: The review's settings file in the repository (README.md, "Settings").
+    default: .claude/review.json
+  agents:
+    description: >-
+      Models and efforts for this run, over the settings: a JSON object of
+      stages, such as {"finder": {"model": "claude-opus-5-5", "effort": "high"}}.
+    default: ''
+  reviewer:
+    description: The login the token posts as.
+    default: github-actions
+  claude-code-version:
+    description: The Claude Code release the review runs on; workflows need 2.1.293 or later.
+    default: 2.1.293
+
+outputs:
+  summary:
+    description: '"written" when the review wrote its summary: to the pull request description, or to the run''s summary page when the description has no room for it.'
+    value: ${{ steps.post.outputs.summary }}
+  resolve:
+    description: >-
+      A JSON list of the ids of the reviewer's own threads that the review
+      calls settled, for a job whose token may resolve them (README.md,
+      "Resolving threads").
+    value: ${{ steps.post.outputs.resolve }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check for a Claude credential
+      id: credential
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+      run: |
+        if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+          echo "present=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "::warning title=Claude review skipped::Give the action a claude-code-oauth-token or an anthropic-api-key to turn on reviews."
+        fi
+    # The program builds in the runner's temporary directory, outside the
+    # checkout, so no Cargo or toolchain file of the pull request applies.
+    - name: Copy the action
+      id: copy
+      if: steps.credential.outputs.present == 'true'
+      shell: bash
+      env:
+        ACTION: ${{ github.action_path }}
+      run: |
+        dir="$RUNNER_TEMP/claude-review-action"
+        rm -rf "$dir"
+        mkdir -p "$dir"
+        (cd "$ACTION" && tar --exclude=./target -cf - .) | tar -xf - -C "$dir"
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+        if ! command -v rustup > /dev/null; then
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        fi
+    # About a minute on two cores: the toolchain, then a clean build.
+    - name: Build the review
+      if: steps.credential.outputs.present == 'true'
+      shell: bash
+      working-directory: ${{ steps.copy.outputs.dir }}
+      run: |
+        export PATH="$HOME/.cargo/bin:$PATH"
+        channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
+        rustup toolchain install "$channel" --profile minimal --no-self-update
+        cargo +"$channel" build --release --locked --quiet
+        echo "CLAUDE_REVIEW=$PWD/target/release/claude-review" >> "$GITHUB_ENV"
+    - name: Find the pull request
+      id: start
+      if: steps.credential.outputs.present == 'true'
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REVIEW_PR: ${{ inputs.pr }}
+        REVIEW_REVIEWER: ${{ inputs.reviewer }}
+      run: '"$CLAUDE_REVIEW" start'
+    - name: Take the review configuration from the trusted branch
+      if: steps.credential.outputs.present == 'true'
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        REVIEW_RULES: ${{ inputs.rules }}
+        REVIEW_CONFIG: ${{ inputs.config }}
+        REVIEW_ACTION_DIR: ${{ steps.copy.outputs.dir }}
+      run: '"$CLAUDE_REVIEW" protect'
+    - name: Prepare the review
+      if: steps.credential.outputs.present == 'true'
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REVIEW_REVIEWER: ${{ inputs.reviewer }}
+        REVIEW_AGENTS: ${{ inputs.agents }}
+      run: '"$CLAUDE_REVIEW" prepare'
+    # Claude Code needs bubblewrap and socat to keep the job's secrets out of
+    # the agents' shell commands.
+    - name: Install Claude Code
+      if: steps.credential.outputs.present == 'true'
+      shell: bash
+      env:
+        CLAUDE_CODE_VERSION: ${{ inputs.claude-code-version }}
+      run: |
+        set -o pipefail
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends bubblewrap socat
+        if ! bwrap --ro-bind / / --unshare-pid true; then
+          # Ubuntu 24.04 limits the unprivileged user namespaces bubblewrap needs.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          bwrap --ro-bind / / --unshare-pid true
+        fi
+        for attempt in 1 2 3; do
+          curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CODE_VERSION" && break
+          [ "$attempt" -lt 3 ] || exit 1
+          sleep 5
+        done
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+    - name: Review
+      if: steps.credential.outputs.present == 'true'
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        GREPTILE_API_KEY: ${{ inputs.greptile-api-key }}
+      run: '"$CLAUDE_REVIEW" run'
+    - name: Read the result
+      if: steps.credential.outputs.present == 'true'
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        REVIEW_BILLING: ${{ inputs.anthropic-api-key != '' && 'api-key' || 'subscription' }}
+      run: '"$CLAUDE_REVIEW" result'
+    - name: Post the review
+      id: post
+      if: steps.credential.outputs.present == 'true'
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        GREPTILE_API_KEY: ${{ inputs.greptile-api-key }}
+      run: '"$CLAUDE_REVIEW" post'
+    - name: Say the review did not finish
+      if: failure() && steps.start.outcome == 'success' && steps.post.outputs.summary != 'written'
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: '"$CLAUDE_REVIEW" unfinished'
+    - name: Show how the review ended
+      if: always() && steps.credential.outputs.present == 'true' && env.CLAUDE_REVIEW != ''
+      shell: bash
+      run: '"$CLAUDE_REVIEW" report'

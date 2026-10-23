@@ -9,6 +9,7 @@ under the same prefix: `/snowmead:<skill>`.
 | [guided-review](skills/guided-review) | `/snowmead:guided-review` | Turns a pull request or branch, or a stack of them, into a guided code review, published as a Claude Artifact: an overview with a before / after of the behavior, then the diff as short chapters, each explained beside its code, with review marks, a file tree and syntax-highlighted diffs. A stack's pull requests are picked from a menu in the title. Needs [Bun](https://bun.sh). |
 | [changelog](skills/changelog) | `/snowmead:changelog` | Keeps a team changelog as a Claude Artifact: each run writes up the pull requests merged since the last entry (or in the last N days) as features with animated scenes and PR links, and posts a summary to Slack. Runs the same by hand or on a schedule. Needs [Bun](https://bun.sh) and the GitHub CLI. |
 | [rust](skills/rust) | `/snowmead:rust` | Effective Rust: defaults for reading and writing Rust, from the toolchain and module layout to types, conversions, ownership, unsafe code and tests, with standard-library and nightly references. |
+| [review](skills/review) | `/snowmead:review` | A Claude pull request review that runs as a GitHub Action: on each push, one agent per lens (bugs, security, tests, design, docs, and any a repository adds), a skeptic that tries to refute each finding, and an editor, then one review of inline comments and a summary in the description. The skill adds it to a repository and tunes its rules and settings. Needs a Linux runner and a Claude subscription token or an Anthropic API key. |
 
 ## Install
 
@@ -56,6 +57,7 @@ skills/thinkr/                    skill thinkr  (SKILL.md, …)
 skills/guided-review/             skill guided-review  (SKILL.md, …)
 skills/changelog/                 skill changelog  (SKILL.md, …)
 skills/rust/                      skill rust  (SKILL.md, references/)
+skills/review/                    skill review  (SKILL.md, action.yml, its Rust program, workflows/)
 kit/                              what the Artifact skills share (see kit/README.md)
 ```
 
@@ -66,6 +68,10 @@ copies the link in as real files. When `kit/` changes, test every skill that lin
 To add a skill: create `skills/<skill>/` with `SKILL.md` (it runs as `/snowmead:<skill>`), name it in the
 descriptions in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, and check it. A skill that builds
 an Artifact page links the kit too (`ln -s ../../kit skills/<skill>/kit`).
+
+The review skill is also this repository's CI: `.github/workflows/review-skill.yml` checks it (its Rust program, its
+workflows' tests and its crates' advisories), and `.github/workflows/claude-review.yml` reviews each pull request
+here with the action as the base branch has it.
 
 ```sh
 claude plugin validate --strict . && claude plugin validate --strict .claude-plugin/plugin.json

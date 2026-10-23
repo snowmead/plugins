@@ -1,0 +1,2 @@
+# The action builds on stable Rust, so this holds only stable options. Brace
+# groups in imports stay vertical: their last item ends with an empty comment.
