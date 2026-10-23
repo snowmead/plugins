@@ -146,8 +146,11 @@ async function main() {
       }
     } else {
       // The fork point, as for the default branch: against a base that moved
-      // on, the files on disk would show its new commits reversed.
-      const rev = (await run(['rev-parse', '--verify', `${base}^{commit}`]))?.trim() || String(base)
+      // on, the files on disk would show its new commits reversed. Only a
+      // commit's id goes on to git, never the text given, which git could read
+      // as an option such as --output=<file>.
+      const rev = String(base).startsWith('-') ? null : (await run(['rev-parse', '--verify', '--quiet', `${base}^{commit}`]))?.trim()
+      if (!rev) throw new Error(`--base ${base} names no commit`)
       base = (await run(['merge-base', 'HEAD', rev]))?.trim() || rev
     }
     if (!base) throw new Error('found no default branch to review against: give --base <rev>')

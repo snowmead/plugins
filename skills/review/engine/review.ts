@@ -483,8 +483,12 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
   async function gather(R: Review): Promise<Gathered | { error: string }> {
     const tag = R.replay ? `#${R.pr} ` : ''
     const prFile = R.pr_file ? json<Record<string, any>>(io.read(R.pr_file)) : null
-    let head: string | undefined = R.head || (prFile && prFile.headRefOid) || undefined
-    let base: string | undefined = R.base
+    // The command line reads an all-digit short commit as a number.
+    const text = (v: unknown) => (v === undefined || v === null || v === '' ? undefined : String(v))
+    const head = text(R.head) ?? text(prFile && prFile.headRefOid)
+    let base = text(R.base)
+    // git would read either as an option, such as --output=<file>.
+    if (base?.startsWith('-') || head?.startsWith('-')) return { error: `The base ${base} and the head ${head} must name commits, not options.` }
     if (!base && head && prFile && prFile.baseRefName) base = (await io.git(['merge-base', `origin/${prFile.baseRefName}`, head]))?.trim()
     if (!base || !head) return { error: 'The args name no base and head, and the pull request file does not give them.' }
     if (!R.worktree && (await io.git(['cat-file', '-e', `${head}^{commit}`])) === null) return { error: `The head ${head} is not in the local clone.` }
