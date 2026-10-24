@@ -82,6 +82,9 @@ pub(crate) struct Prepare<'a> {
     pub(crate) checkout: &'a Git<'a>,
     /// The run's model overrides (the `agents` input); empty for none.
     pub(crate) agents: &'a str,
+    /// The settings file's path: a pull request that changes it has that
+    /// copy's examples checked, since the review runs on the trusted one.
+    pub(crate) config: &'a str,
 }
 
 impl Prepare<'_> {
@@ -132,6 +135,7 @@ impl Prepare<'_> {
             ("base_copies", json!(protected.base_copies)),
             ("reviewer", json!(self.reviewer)),
             ("config", config),
+            ("settings_file", json!(self.config)),
         ];
         args.extend(
             fields
@@ -483,6 +487,7 @@ mod tests {
             reviewer: "github-actions",
             checkout: &checkout,
             agents: r#"{"finder": {"model": "claude-opus-5-5"}}"#,
+            config: ".claude/review.json",
         };
         step.run().expect("the step");
         let args = super::load_args(&test.runner).expect("the args");
@@ -646,7 +651,8 @@ mod tests {
                 &args["rules"],
                 &args["base_copies"],
                 &args["reviewer"],
-                &args["checkout"]
+                &args["checkout"],
+                &args["settings_file"]
             ),
             (
                 &json!(70),
@@ -654,7 +660,8 @@ mod tests {
                 &json!("/review/REVIEW.md"),
                 &json!(["AGENTS.md"]),
                 &json!("github-actions"),
-                &json!(true)
+                &json!(true),
+                &json!(".claude/review.json")
             )
         );
         // The run's overrides join the settings, and the settings' own tests stay out.

@@ -229,7 +229,9 @@ one subcommand of the program:
 The settings file (`config`, `.claude/review.json` by default) is JSON. Every
 key is optional; what it leaves out comes from the engine's `DEFAULTS`
 ([engine/settings.ts](engine/settings.ts)). The action reads it from the
-trusted branch.
+trusted branch. When a pull request changes it, the engine checks the pull
+request's copy, with no agent: settings that are not valid, and each example
+that fails, are Important findings on it.
 
 | Key | What it holds |
 |---|---|
@@ -238,7 +240,7 @@ trusted branch.
 | `agents` | The model and effort of each stage, merged over the defaults per stage. |
 | `knowledge_base` | `{name, skill}`: how the summary names the knowledge base, and the skill whose steps the agents follow to read it; `false` turns it off. Without a skill, the agents use its read tools, which the engine connects when it has a Greptile key. The default is Greptile's, with no skill. |
 | `sweep` | `{max_areas}`: how many areas a [sweep](#sweeps) reviews (default 4). |
-| `examples` | `{changed, segments}` pairs that the repository's own test checks against the settings; the engine ignores them. |
+| `examples` | `{changed, segments}` pairs: the files a pull request changes, and the segments that must review it. The review checks them when a pull request changes the settings file; nothing else reads them. |
 
 A pattern list is read in order, and the last pattern that matches a file
 decides: `**` crosses directories, `*` and `?` stay within one, `{a,b}` is

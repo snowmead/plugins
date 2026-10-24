@@ -15,6 +15,8 @@
 //   repo           owner/name, for links in the summary
 //   config         the settings, as the action passes them
 //   config_file    a file to read the settings from when config is absent
+//   settings_file  the settings file's path in the repository, when config
+//                  comes from elsewhere; a change to it has its examples checked
 //   reviewer       the login this reviewer posts as (default github-actions)
 //   base, head     commits to review; found from pr_file when absent
 //   checkout       true when the working tree is at head (the action's case)
@@ -106,7 +108,7 @@ import {
   VERDICT,
   VERDICTS,
 } from './schemas.ts'
-import { type Effort, type Segment, type Settings, type StageName, settle } from './settings.ts'
+import { type Effort, type Segment, type Settings, type StageName, exampleProblems, settle } from './settings.ts'
 
 // --- What the pipeline runs on ------------------------------------------------
 
@@ -475,6 +477,7 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
     done: (SegResult & { kept: Kept[] })[]
     failed: string[]
     candidates: (Kept & { key: string; segment: string })[]
+    examples?: { checked: number; failed: number }
     followed: (ThreadState & { url?: string; title: string; severity?: Severity; path?: string; line?: number })[] | null
   }
 
@@ -488,7 +491,7 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
     const head = text(R.head) ?? text(prFile && prFile.headRefOid)
     let base = text(R.base)
     // git would read either as an option, such as --output=<file>.
-    if (base?.startsWith('-') || head?.startsWith('-')) return { error: `The base ${base} and the head ${head} must name commits, not options.` }
+    for (const [name, v] of [['base', base], ['head', head]] as const) if (v?.startsWith('-')) return { error: `The ${name} ${v} must name a commit, not an option.` }
     if (!base && head && prFile && prFile.baseRefName) base = (await io.git(['merge-base', `origin/${prFile.baseRefName}`, head]))?.trim()
     if (!base || !head) return { error: 'The args name no base and head, and the pull request file does not give them.' }
     if (!R.worktree && (await io.git(['cat-file', '-e', `${head}^{commit}`])) === null) return { error: `The head ${head} is not in the local clone.` }
@@ -644,7 +647,22 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
     for (const r of done) {
       for (const f of r.kept) candidates.push({ key: `${r.seg.name}-${candidates.length + 1}`, segment: r.seg.name, ...f })
     }
-    return { c, brief, changed, plan, done, failed, candidates, followed: followups }
+    // A change to the settings file has the change's copy checked, with its
+    // examples, by the engine alone: the action reviews with the trusted
+    // branch's settings, so nothing else reads the pull request's.
+    const settingsFile: string | undefined = R.replay ? undefined : R.settings_file || R.config_file
+    let examples: Gathered['examples']
+    if (settingsFile && changed.includes(settingsFile)) {
+      const text = c.worktree ? io.read(settingsFile) : await io.git(['show', `${head}:${settingsFile}`])
+      if (text !== null) {
+        const { checked, problems } = exampleProblems(text, settingsFile)
+        examples = { checked, failed: problems.length }
+        for (const p of problems) {
+          candidates.push({ key: `settings-${candidates.length + 1}`, segment: 'settings', path: settingsFile, side: 'RIGHT', severity: 'important', verdict: 'confirmed', ...p })
+        }
+      }
+    }
+    return { c, brief, changed, plan, done, failed, candidates, examples, followed: followups }
   }
 
   // --- Finish -----------------------------------------------------------------------
@@ -662,7 +680,7 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
 
   // The editor, then the comments, replies in earlier threads, and summary the action posts.
   async function finish(R: Review, g: Gathered): Promise<Result> {
-    const { c, brief, changed, plan, done, failed, candidates, followed } = g
+    const { c, brief, changed, plan, done, failed, candidates, examples, followed } = g
     // Each finding the summary lists without a thread has an id, S1, S2, and so
     // on, and stays listed until the code fixes it or the author answers it,
     // whichever segments run again. An id is never given again, even once its
@@ -891,6 +909,7 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
       else if (s.passes === 2 && r) state = `Ran: ${r.runs} passes over ${r.areas} area${r.areas === 1 ? '' : 's'}`
       return `| ${s.title} | ${cell(state)} | ${r ? `${r.kept.length} of ${r.findings.length}` : '-'} |`
     })
+    if (examples) segRows.push(`| Settings examples | Checked ${examples.checked}, with no agent | ${examples.failed} of ${examples.failed} |`)
 
     const partial = failed.length > 0
     const disputes = openThreads.filter(disputed).length + disputedEntries
