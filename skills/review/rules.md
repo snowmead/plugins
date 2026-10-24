@@ -133,7 +133,8 @@ its comments and replies, and says where the summary is.
    shows its id.
 6. Earlier findings now fixed or answered, threads and summary entries alike.
 7. A table of segments: which ran, which did not run again or did not apply,
-   which failed, and how many findings each kept.
+   which failed, and how many findings each kept; and, when the change touches
+   the settings file, a row for its checked examples and how many failed.
 8. The last reviewed commit, and a note when the knowledge base was not read.
 
 ## Tuning

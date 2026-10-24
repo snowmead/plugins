@@ -108,7 +108,7 @@ import {
   VERDICT,
   VERDICTS,
 } from './schemas.ts'
-import { type Effort, type Segment, type Settings, type StageName, exampleProblems, settle } from './settings.ts'
+import { type Effort, type Segment, type Settings, type StageName, checkExamples, settle } from './settings.ts'
 
 // --- What the pipeline runs on ------------------------------------------------
 
@@ -283,6 +283,12 @@ export function caseProblem(x: unknown, segments: string[]): string | null {
     typeof c.id === 'string' && Number.isInteger(c.pr) && commit(c.base) && commit(c.head) && segments.includes(c.segment as string) &&
     ['find', 'quiet'].includes(c.expect as string) && typeof c.path === 'string' && Number.isInteger(c.line) && typeof c.issue === 'string'
   return ok ? null : `the eval case ${JSON.stringify(c.id)} is not valid: it needs id, pr, base, head, segment (one of ${segments.join(', ')}), expect, path, line, and issue`
+}
+
+/** The examples check of the change's copy of the settings `file`, read where the change's files are; undefined when the change removes the file. */
+async function settingsCheck(c: Change, io: Io, file: string): Promise<Awaited<ReturnType<typeof checkExamples>> | undefined> {
+  const text = c.worktree ? io.read(file) : await io.git(['show', `${c.head}:${file}`])
+  return text === null ? undefined : checkExamples(text, file)
 }
 
 /** Text from a pull request file: its title and description. */
@@ -513,6 +519,13 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
     // a/ and b/ whatever the user's diff.noprefix or diff.mnemonicPrefix, for diffText.
     const raw = (await io.git(['diff', '--no-color', '--no-ext-diff', '--no-textconv', '--src-prefix=a/', '--dst-prefix=b/', ...range])) ?? ''
     const stat = (await io.git(['diff', '--stat=120', ...range]))?.trim() ?? ''
+    // A change to the settings file has the change's copy checked, with its
+    // examples, by the engine alone: the action reviews with the trusted
+    // branch's settings, so nothing else reads the pull request's. The check
+    // runs while the agents do; it is awaited below, and a failure surfaces there.
+    const settingsFile: string | undefined = R.replay ? undefined : R.settings_file || R.config_file
+    const checking = settingsFile && changed.includes(settingsFile) ? settingsCheck(c, io, settingsFile) : undefined
+    checking?.catch(() => undefined)
     const pr = describePr(prFile)
     const shared: Shared = { rules, description: R.description ? cut(String(R.description), MAX_DESCRIPTION) : pr.text, diff: diffText(raw, inDiff) }
 
@@ -647,19 +660,12 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
     for (const r of done) {
       for (const f of r.kept) candidates.push({ key: `${r.seg.name}-${candidates.length + 1}`, segment: r.seg.name, ...f })
     }
-    // A change to the settings file has the change's copy checked, with its
-    // examples, by the engine alone: the action reviews with the trusted
-    // branch's settings, so nothing else reads the pull request's.
-    const settingsFile: string | undefined = R.replay ? undefined : R.settings_file || R.config_file
+    const checked = await checking
     let examples: Gathered['examples']
-    if (settingsFile && changed.includes(settingsFile)) {
-      const text = c.worktree ? io.read(settingsFile) : await io.git(['show', `${head}:${settingsFile}`])
-      if (text !== null) {
-        const { checked, problems } = exampleProblems(text, settingsFile)
-        examples = { checked, failed: problems.length }
-        for (const p of problems) {
-          candidates.push({ key: `settings-${candidates.length + 1}`, segment: 'settings', path: settingsFile, side: 'RIGHT', severity: 'important', verdict: 'confirmed', ...p })
-        }
+    if (checked && settingsFile) {
+      examples = { checked: checked.checked, failed: checked.problems.length }
+      for (const p of checked.problems) {
+        candidates.push({ key: `settings-${candidates.length + 1}`, segment: 'settings', path: settingsFile, side: 'RIGHT', severity: 'important', verdict: 'confirmed', ...p })
       }
     }
     return { c, brief, changed, plan, done, failed, candidates, examples, followed: followups }

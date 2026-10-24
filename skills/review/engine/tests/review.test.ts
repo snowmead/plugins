@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs'
 import { diffText, firstComment, unquote } from '../review.ts'
 import { refusal } from '../git.ts'
 import { commentBody, fence, link } from '../render.ts'
-import { exampleProblems } from '../settings.ts'
+import { checkExamples, exampleProblems } from '../settings.ts'
 import { CONFIG, SEGMENTS, SHA, ran, review, run, thread } from './harness.ts'
 
 const BASE = { pr: 5, repo: 'o/r', threads: '/t.json', config: CONFIG, base: SHA('b'), head: SHA('h'), checkout: true }
@@ -930,6 +930,16 @@ test("a settings file's examples are checked against its own segments, each at t
     expect(only!.body).toContain(why!)
   }
   expect(exampleProblems(JSON.stringify(CONFIG), file)).toEqual({ checked: 0, problems: [] })
+  // Each element's line, however the file is written; every example here fails.
+  const fails = '{"changed":["web/x.tsx"],"segments":[]}'
+  for (const [written, want] of [
+    [`{"examples":[${fails},3,"x"]}`, [1, 1, 1]],
+    [`{\r\n  "examples": [\r\n    ${fails},\r\n    3\r\n  ]\r\n}`, [3, 4]],
+    [`{"examples":[${fails}],\n"examples":[\n3,\n"x"]}`, [3, 4]],
+    [`{"segments":[{"name":"bugs","note":"]\\" \\"examples\\":["}],\n"examples":[\n{"changed":[["x"]],"segments":[]},\n${fails}]}`, [3, 4]],
+  ] as [string, number[]][]) {
+    expect(exampleProblems(written, file).problems.map((p) => p.line)).toEqual(want)
+  }
 })
 
 test("a change to the settings file has its own copy's examples checked with no agent, and what fails goes to the editor", async () => {
@@ -955,6 +965,30 @@ test("a change to the settings file has its own copy's examples checked with no 
   const held = await run(args, review, { files: { [`${SHA('h')}:${file}`]: holds } })
   expect(held.prompts.editor).not.toContain('settings-')
   expect(held.result.summary.bottom).toContain('| Settings examples | Checked 1, with no agent | 0 of 0 |')
+  // Settings that do not load are one finding, and a local review finds the file by config_file.
+  const broken = await run(args, editor, { files: { [`${SHA('h')}:${file}`]: '{' } })
+  expect(broken.result.comments[0].body).toContain(`The settings in ${file} are not valid`)
+  expect(broken.result.summary.bottom).toContain('| Settings examples | Checked 0, with no agent | 1 of 1 |')
+  const { settings_file: _, ...unnamed } = args
+  const byConfig = await run({ ...unnamed, config_file: file, worktree: true }, editor, { files: { [file]: text } })
+  expect(byConfig.result.comments.length).toBe(1)
+  // A change that removes the file, and a replay, check nothing.
+  for (const other of [await run(args, review), await run({ ...args, replay: true, segments: ['bugs'] }, (label) => review(label.replace(/^#\d+ /, '')), { files: { [`${SHA('h')}:${file}`]: text } })]) {
+    expect(other.prompts.editor).not.toContain('settings-')
+    expect(other.result.summary.bottom).not.toContain('Settings examples')
+  }
+})
+
+test('a check of the examples that runs too long is stopped, and is one finding', async () => {
+  const file = '.claude/review.json'
+  const slow = JSON.stringify({ ...CONFIG, segments: [{ name: 'web', files: [`${'{a,a}'.repeat(40)}b`] }], examples: [{ changed: [`${'a'.repeat(40)}c`], segments: [] }] })
+  const started = performance.now()
+  const { checked, problems } = await checkExamples(slow, file, 500)
+  expect(performance.now() - started).toBeLessThan(5000)
+  expect([checked, problems.length, problems[0]!.line]).toEqual([0, 1, 1])
+  expect(problems[0]!.title).toBe(`Checking the examples in ${file} took over 0.5 seconds, so it was stopped`)
+  const fine = JSON.stringify({ ...CONFIG, examples: [{ changed: ['web/x.tsx'], segments: ['web'] }] })
+  expect(await checkExamples(fine, file)).toEqual(exampleProblems(fine, file))
 })
 
 test("a repository's settings file reviews each of its examples with the segments the example names", async () => {
@@ -973,6 +1007,8 @@ test("a repository's settings file reviews each of its examples with the segment
       return { findings: [] }
     }
     const { labels } = await run({ ...BASE, config, changed: example.changed }, answer)
-    expect(ran(labels, names.segments)).toEqual(example.segments)
+    expect(ran(labels, names.segments).sort()).toEqual([...example.segments].sort())
   }
+  // The check a review of a change to the file runs agrees.
+  expect(exampleProblems(readFileSync(process.env.REVIEW_CONFIG, 'utf8'), process.env.REVIEW_CONFIG).problems).toEqual([])
 })

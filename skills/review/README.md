@@ -231,7 +231,8 @@ key is optional; what it leaves out comes from the engine's `DEFAULTS`
 ([engine/settings.ts](engine/settings.ts)). The action reads it from the
 trusted branch. When a pull request changes it, the engine checks the pull
 request's copy, with no agent: settings that are not valid, and each example
-that fails, are Important findings on it.
+that fails, are Important findings on it. That check runs in a process of its
+own, stopped after 10 seconds ([Trust](#trust)).
 
 | Key | What it holds |
 |---|---|
@@ -240,7 +241,7 @@ that fails, are Important findings on it.
 | `agents` | The model and effort of each stage, merged over the defaults per stage. |
 | `knowledge_base` | `{name, skill}`: how the summary names the knowledge base, and the skill whose steps the agents follow to read it; `false` turns it off. Without a skill, the agents use its read tools, which the engine connects when it has a Greptile key. The default is Greptile's, with no skill. |
 | `sweep` | `{max_areas}`: how many areas a [sweep](#sweeps) reviews (default 4). |
-| `examples` | `{changed, segments}` pairs: the files a pull request changes, and the segments that must review it. The review checks them when a pull request changes the settings file; nothing else reads them. |
+| `examples` | `{changed, segments}` pairs: the files a pull request changes, and the segments that must review it. The review checks them when a pull request changes the settings file, and the engine tests check them when `REVIEW_CONFIG` names the file ([Development](#development)). |
 
 A pattern list is read in order, and the last pattern that matches a file
 decides: `**` crosses directories, `*` and `?` stay within one, `{a,b}` is
@@ -326,6 +327,11 @@ A pull request can neither change how its own review runs nor instruct it:
   run its code or set the environment of the process that holds the Claude
   credential. The Claude Code each agent runs, the native program the SDK
   ships and starts in the checkout, reads neither.
+- The engine evaluates the pull request's copy of the settings file only to
+  check its examples, and does that in a Bun process of its own whose
+  environment holds only `PATH`, killed after 10 seconds: the pull request
+  wrote both the patterns and the paths they are matched against, and a
+  pattern can backtrack for hours.
 - The job reads the review from the engine's record, never from an agent's
   answer, and posts it only when the engine ran on the args the job wrote.
   It replies in, and lists for resolving, only its own open threads, listed
