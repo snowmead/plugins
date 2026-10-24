@@ -2,6 +2,8 @@
 // when each runs, and the model and effort of each stage. A repository's
 // settings file (README.md, "Settings") goes over DEFAULTS.
 
+import { dirname, join } from 'node:path'
+
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
@@ -292,4 +294,152 @@ export function settle(config: unknown): Settings | { error: string } {
     .filter((s) => s.enabled !== false)
     .map((s) => ({ ...s, passes: s.passes || 1, applies: (fs: string[]) => fs.some((f) => matches(s.files, f)) }))
   return { agents, classes, inClass: (name, f) => inClass(name, f), segments: live, knowledgeBase, sweep }
+}
+
+/** An example in a settings file that its segments do not bear out, or settings that are not valid. */
+export interface ExampleProblem {
+  /** The line the example starts on, or 1. */
+  line: number
+  title: string
+  body: string
+  trace: string
+}
+
+/**
+ * Checks the settings file `text` and its `examples`: the segments that review
+ * a change to an example's `changed` must be the ones it names. Settings that
+ * are not valid are one problem, since every review would stop on them. Only
+ * JSON and the patterns are read; nothing runs.
+ */
+export function exampleProblems(text: string, file: string): { checked: number; problems: ExampleProblem[] } {
+  const invalid = (why: string) => ({
+    checked: 0,
+    problems: [{ line: 1, title: `The settings in ${file} are not valid, so every review would stop on them`, body: why, trace: `The engine read ${file} at the head and found: ${why}` }],
+  })
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch (e) {
+    return invalid(`${file} is not JSON: ${(e as Error).message}.`)
+  }
+  const settled = settle(parsed)
+  if ('error' in settled) return invalid(settled.error)
+  const examples = (parsed as Json).examples
+  if (examples === undefined) return { checked: 0, problems: [] }
+  if (!Array.isArray(examples)) return invalid('The examples are not a list of {changed, segments}.')
+  const names = settled.segments.map((s) => s.name)
+  const lines = exampleLines(text)
+  const list = (xs: string[]) => (xs.length ? xs.map((x) => `\`${x}\``).join(', ') : 'none')
+  const problems: ExampleProblem[] = []
+  examples.forEach((x: unknown, i) => {
+    const line = lines[i] ?? 1
+    const n = i + 1
+    if (!isObject(x) || !isPatterns(x.changed) || !isPatterns(x.segments)) {
+      problems.push({ line, title: `Example ${n} is not {changed, segments}`, body: `Example ${n} needs \`changed\`, the files a pull request changes, and \`segments\`, the segments that review it, each a list of text.`, trace: `examples[${i}] in ${file} is ${JSON.stringify(x)}.` })
+      return
+    }
+    const changed = x.changed as string[]
+    const want = unique(x.segments as string[])
+    const got = changed.length ? settled.segments.filter((s) => s.applies(changed)).map((s) => s.name) : []
+    const missing = want.filter((s) => !got.includes(s))
+    const extra = got.filter((s) => !want.includes(s))
+    if (!missing.length && !extra.length) return
+    const unknown = missing.filter((s) => !names.includes(s))
+    const parts = [
+      `For a change to ${list(changed)}, example ${n} expects ${list(want)}, but the settings run ${list(got)}.`,
+      missing.length ? `Not run: ${list(missing)}${unknown.length ? `, of which ${list(unknown)} ${unknown.length === 1 ? 'is not a segment' : 'are not segments'}` : ''}.` : '',
+      extra.length ? `Run but not expected: ${list(extra)}.` : '',
+      'Change the segments or the example, whichever is wrong.',
+    ]
+    problems.push({
+      line,
+      title: `Example ${n} expects ${want.join(', ') || 'no segments'}, but the settings run ${got.join(', ') || 'none'}`,
+      body: parts.filter(Boolean).join(' '),
+      trace: `examples[${i}] in ${file} lists ${list(changed)}. Each enabled segment runs when one of those files matches its files patterns, the last matching pattern deciding: ${settled.segments.map((s) => `${s.name} ${got.includes(s.name) ? 'matches' : 'does not'}`).join(', ')}.`,
+    })
+  })
+  return { checked: examples.length, problems }
+}
+
+/** How long checkExamples lets exampleProblems run. */
+export const EXAMPLES_MS = 10_000
+
+/**
+ * exampleProblems on a change's own copy of the settings, in a process that is
+ * killed after `ms`: the change wrote the patterns and the paths they are
+ * matched against, and a pattern such as `{a,a}` repeated, or many `*`, can
+ * backtrack for hours. A check that runs out of time or fails is one problem,
+ * so the review goes on. `script` is the process's program, for tests.
+ */
+export async function checkExamples(text: string, file: string, ms = EXAMPLES_MS, script = join(import.meta.dir, 'check-examples.ts')): Promise<{ checked: number; problems: ExampleProblem[] }> {
+  const p = Bun.spawn([process.execPath, '--no-env-file', script], {
+    cwd: dirname(import.meta.dir),
+    env: { PATH: process.env.PATH ?? '' },
+    stdin: new TextEncoder().encode(JSON.stringify({ text, file })),
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: ms,
+    killSignal: 'SIGKILL',
+  })
+  const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited])
+  if (code === 0) return JSON.parse(out)
+  const s = ms / 1000
+  const one = (problem: ExampleProblem) => ({ checked: 0, problems: [problem] })
+  if (p.signalCode) {
+    return one({
+      line: 1,
+      title: `Checking the examples in ${file} took over ${s} seconds, so it was stopped`,
+      body: `A \`files\` pattern in these settings takes too long to match an example's path, which happens when many \`*\` or \`{…,…}\` groups can match the same text. A review that matches the pattern against a changed file can stall the same way. Simplify the pattern.`,
+      trace: `The engine checked ${file} at the head in a process of its own and stopped it after ${s} seconds.`,
+    })
+  }
+  const lines = err.split('\n').map((l) => l.trim()).filter(Boolean)
+  const why = (lines.find((l) => /^[A-Za-z]*Error\b/.test(l)) ?? lines.at(-1) ?? `exit code ${code}`).slice(0, 300).replaceAll('`', "'")
+  return one({
+    line: 1,
+    title: `The examples in ${file} could not be checked`,
+    body: `Checking these settings failed with \`${why}\`, and a review that applies them can fail the same way. Simplify the classes and patterns its segments use.`,
+    trace: `The engine checked ${file} at the head in a process of its own, which exited with code ${code}: ${why}`,
+  })
+}
+
+const unique = (xs: string[]) => [...new Set(xs)]
+
+// The line each element of the top-level "examples" list starts on, since
+// JSON.parse keeps no places. A later "examples" key wins, as in JSON.parse.
+function exampleLines(text: string): number[] {
+  let lines: number[] = []
+  let depth = 0
+  let line = 1
+  let key = ''
+  let inside = false
+  let next = false
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i]!
+    if (ch === '\n') {
+      line += 1
+      continue
+    }
+    if (inside && depth === 2 && next && !/[\s,\]]/.test(ch)) {
+      lines.push(line)
+      next = false
+    }
+    if (ch === '"') {
+      let j = i + 1
+      while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1
+      if (depth === 1) key = text.slice(i + 1, j)
+      i = j
+    } else if (ch === '{' || ch === '[') {
+      depth += 1
+      if (depth === 2 && ch === '[' && key === 'examples') {
+        lines = []
+        inside = true
+        next = true
+      }
+    } else if (ch === '}' || ch === ']') {
+      if (depth === 2) inside = false
+      depth -= 1
+    } else if (ch === ',' && inside && depth === 2) next = true
+  }
+  return lines
 }

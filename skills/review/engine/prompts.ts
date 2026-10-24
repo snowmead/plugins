@@ -189,7 +189,9 @@ export function sweepPrompt(seg: Segment, system: string, area: Area): Prompt {
 
 // --- Skeptics ---------------------------------------------------------------
 
-export function skepticSystem(c: Change & { sweep?: boolean }, s: Pick<Shared, 'rules' | 'diff'>): string {
+// A finding can rest on what the description says the change does, so a
+// skeptic of a change reads the description its finder read.
+export function skepticSystem(c: Change & { sweep?: boolean }, s: Pick<Shared, 'rules' | 'diff'> & { description?: string }): string {
   const what = c.sweep ? `a sweep of the code at commit ${c.head} (not of a pull request)` : subject(c)
   const where = c.sweep ? `The working tree is at ${c.head}; read files from it.` : change(c)
   return `You are a skeptic in a review of ${what}. A reviewer reported a finding: try to refute it from the code. Default to "refuted" when you cannot reproduce its trace.
@@ -199,7 +201,7 @@ ${where}
 # The review rules
 
 ${s.rules.pick(SECTIONS.skeptic)}
-${c.sweep ? '' : `\n# The diff\n\n${s.diff}\n`}
+${s.description ? `\n# The change's description\n\nA finding that the code does not do what this says is checked against it.\n\n${s.description}\n` : ''}${c.sweep ? '' : `\n# The diff\n\n${s.diff}\n`}
 # Tools
 
 ${TOOLS_NOTE}

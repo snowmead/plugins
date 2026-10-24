@@ -46,6 +46,7 @@ your task needs before you change anything.
   knowledge base, the sweep. Give the file `examples` (the files a pull request changes, and the segments that must
   review it) and check them before the user commits it:
   `REVIEW_CONFIG=<repo>/.claude/review.json bun --no-env-file --cwd "${CLAUDE_SKILL_DIR}" test engine`.
+  A review of a change to the file checks them again.
 - **Sweep, eval or tune.** README.md, "Sweeps" and "Tuning": run `engine/main.ts` with the mode and the options
   shown there, from the repository's root, as above.
 - **Change the review itself.** Run the checks in README.md, "Development", from this folder, and bump the plugin's

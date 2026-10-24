@@ -8,10 +8,13 @@
 // each lists the files a pull request changes and the segments that review it.
 
 import { expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { diffText, firstComment, unquote } from '../review.ts'
 import { refusal } from '../git.ts'
 import { commentBody, fence, link } from '../render.ts'
+import { checkExamples, exampleProblems } from '../settings.ts'
 import { CONFIG, SEGMENTS, SHA, ran, review, run, thread } from './harness.ts'
 
 const BASE = { pr: 5, repo: 'o/r', threads: '/t.json', config: CONFIG, base: SHA('b'), head: SHA('h'), checkout: true }
@@ -83,7 +86,7 @@ test('each stage runs on its model and effort: the defaults, the settings, then 
 
 test('every agent of a stage shares one system prompt, and only the lens, area, or finding differs', async () => {
   const finding = (line: number) => ({ path: 'src/a.rs', line, severity: 'nit', title: `t${line}`, body: 'b', trace: 't' })
-  const { calls } = await run(BASE, (label, prompt) => {
+  const { calls } = await run({ ...BASE, description: 'Caches the lookups.' }, (label, prompt) => {
     if (label === 'bugs 1.1') return { findings: [finding(3)] }
     if (label === 'design') return { findings: [finding(4)] }
     if (label.startsWith('verify ')) return verdict(prompt, { verdict: 'confirmed', severity: 'nit', reason: 'r', security_or_privacy: false })
@@ -94,6 +97,8 @@ test('every agent of a stage shares one system prompt, and only the lens, area, 
   expect(calls['bugs 1.1']!.prompt).toStartWith('You are the Bugs reviewer')
   expect(calls['verify bugs src/a.rs:3']!.system).toBe(calls['verify design src/a.rs:4']!.system)
   expect(calls['verify bugs src/a.rs:3']!.prompt).toContain('"title":"t3"')
+  // A skeptic reads the description its finder read, to check a finding about what it claims.
+  for (const label of ['bugs 1.1', 'verify bugs src/a.rs:3']) expect(calls[label]!.system).toContain('Caches the lookups.')
   // The rules sections the stage reads are in the shared prompt, and the follow-up's are not.
   expect(finders[0]).toContain('## Never report')
   expect(finders[0]).not.toContain('## Later reviews')
@@ -220,9 +225,15 @@ test('the shared prompts carry the description and the diff without generated fi
 })
 
 test('a base or head that git would read as an option stops the review, and an all-digit short commit is a commit', async () => {
-  for (const args of [{ base: '--output=/tmp/x' }, { head: '-p' }]) {
-    const { result, labels } = await run({ ...BASE, ...args }, review)
-    expect(result.error).toContain('must name commits, not options')
+  // The head can also come from the pull request file, with no base given.
+  const pr = { files: { '/pr.json': JSON.stringify({ headRefOid: '-p', baseRefName: 'main' }) } }
+  for (const [args, files, error] of [
+    [{ base: '--output=/tmp/x' }, undefined, 'The base --output=/tmp/x must name a commit, not an option.'],
+    [{ head: '-p' }, undefined, 'The head -p must name a commit, not an option.'],
+    [{ base: undefined, head: undefined, pr_file: '/pr.json' }, pr, 'The head -p must name a commit, not an option.'],
+  ] as const) {
+    const { result, labels } = await run({ ...BASE, ...args }, review, files)
+    expect(result.error).toBe(error)
     expect(labels).toEqual([])
   }
   // main.ts reads --head 1234567 as a number.
@@ -891,6 +902,106 @@ test("the agents' git runs only read commands, and none that reads or writes out
   }
 })
 
+test("a settings file's examples are checked against its own segments, each at the line it starts on", () => {
+  const file = '.claude/review.json'
+  const examples = [
+    { changed: ['src/a.rs'], segments: ['bugs', 'security', 'tests', 'design', 'docs', 'rust'] },
+    { changed: ['web/x.tsx'], segments: ['docs', 'web', 'lint'] },
+    { changed: 'web/x.tsx' },
+  ]
+  const text = JSON.stringify({ ...CONFIG, examples }, null, 2)
+  const lines = text.split('\n')
+  const from = lines.findIndex((l) => l.startsWith('  "examples"'))
+  const starts = lines.flatMap((l, i) => (i > from && l === '    {' ? [i + 1] : []))
+  const { checked, problems } = exampleProblems(text, file)
+  expect(checked).toBe(3)
+  expect(problems.map((p) => p.line)).toEqual(starts.slice(1, 3))
+  const [wrong, shape] = problems
+  expect(wrong!.title).toBe('Example 2 expects docs, web, lint, but the settings run bugs, security, tests, design, docs, web')
+  expect(wrong!.body).toContain('Not run: `lint`, of which `lint` is not a segment.')
+  expect(wrong!.body).toContain('Run but not expected: `bugs`, `security`, `tests`, `design`.')
+  expect(shape!.title).toBe('Example 3 is not {changed, segments}')
+  // Settings the review would stop on are one problem, at the top.
+  for (const [bad, why] of [
+    ['{', 'is not JSON'],
+    [JSON.stringify({ segments: 3 }), 'segments is not a list.'],
+    [JSON.stringify({ examples: {} }), 'The examples are not a list'],
+  ]) {
+    const { problems: [only, ...rest] } = exampleProblems(bad!, file)
+    expect([only!.line, only!.title, rest.length]).toEqual([1, `The settings in ${file} are not valid, so every review would stop on them`, 0])
+    expect(only!.body).toContain(why!)
+  }
+  expect(exampleProblems(JSON.stringify(CONFIG), file)).toEqual({ checked: 0, problems: [] })
+  // Each element's line, however the file is written; every example here fails.
+  const fails = '{"changed":["web/x.tsx"],"segments":[]}'
+  for (const [written, want] of [
+    [`{"examples":[${fails},3,"x"]}`, [1, 1, 1]],
+    [`{\r\n  "examples": [\r\n    ${fails},\r\n    3\r\n  ]\r\n}`, [3, 4]],
+    [`{"examples":[${fails}],\n"examples":[\n3,\n"x"]}`, [3, 4]],
+    [`{"segments":[{"name":"bugs","note":"]\\" \\"examples\\":["}],\n"examples":[\n{"changed":[["x"]],"segments":[]},\n${fails}]}`, [3, 4]],
+  ] as [string, number[]][]) {
+    expect(exampleProblems(written, file).problems.map((p) => p.line)).toEqual(want)
+  }
+})
+
+test("a change to the settings file has its own copy's examples checked with no agent, and what fails goes to the editor", async () => {
+  const file = '.claude/review.json'
+  const text = JSON.stringify({ ...CONFIG, examples: [{ changed: ['web/x.tsx'], segments: ['web'] }] }, null, 2)
+  const args = { ...BASE, settings_file: file, changed: [file, 'src/a.rs'] }
+  const editor = (label: string) => (label === 'editor' ? { ...(review('editor') as object), summary_only: [], post: [{ keys: ['settings-1'], slug: 'example' }] } : review(label))
+  // The action reviews with the trusted settings, so the change's copy is read at the head.
+  const { result, prompts } = await run(args, editor, { files: { [`${SHA('h')}:${file}`]: text } })
+  expect(prompts.editor).toContain('"key":"settings-1","segment":"settings"')
+  expect(result.comments.length).toBe(1)
+  expect(result.comments[0].path).toBe(file)
+  expect(result.comments[0].body).toContain('Example 1 expects web, but the settings run bugs, security, tests, design, docs, web')
+  expect(result.summary.bottom).toContain('| Settings examples | Checked 1, with no agent | 1 of 1 |')
+  // A local review of the files on disk reads the file there.
+  const local = await run({ ...args, worktree: true }, editor, { files: { [file]: text } })
+  expect(local.result.comments.length).toBe(1)
+  // Unchanged, or examples that hold, add nothing.
+  const quiet = await run({ ...BASE, settings_file: file }, review, { files: { [`${SHA('h')}:${file}`]: text } })
+  expect(quiet.prompts.editor).not.toContain('settings-')
+  expect(quiet.result.summary.bottom).not.toContain('Settings examples')
+  const holds = JSON.stringify({ ...CONFIG, examples: [{ changed: ['docs/y.md'], segments: ['security', 'design', 'docs'] }] })
+  const held = await run(args, review, { files: { [`${SHA('h')}:${file}`]: holds } })
+  expect(held.prompts.editor).not.toContain('settings-')
+  expect(held.result.summary.bottom).toContain('| Settings examples | Checked 1, with no agent | 0 of 0 |')
+  // Settings that do not load are one finding, and a local review finds the file by config_file.
+  const broken = await run(args, editor, { files: { [`${SHA('h')}:${file}`]: '{' } })
+  expect(broken.result.comments[0].body).toContain(`The settings in ${file} are not valid`)
+  expect(broken.result.summary.bottom).toContain('| Settings examples | Checked 0, with no agent | 1 of 1 |')
+  const { settings_file: _, ...unnamed } = args
+  const byConfig = await run({ ...unnamed, config_file: file, worktree: true }, editor, { files: { [file]: text } })
+  expect(byConfig.result.comments.length).toBe(1)
+  // A change that removes the file, and a replay, check nothing.
+  for (const other of [await run(args, review), await run({ ...args, replay: true, segments: ['bugs'] }, (label) => review(label.replace(/^#\d+ /, '')), { files: { [`${SHA('h')}:${file}`]: text } })]) {
+    expect(other.prompts.editor).not.toContain('settings-')
+    expect(other.result.summary.bottom).not.toContain('Settings examples')
+  }
+})
+
+test('a check of the examples that runs too long is stopped, and it or one that fails is one finding', async () => {
+  const file = '.claude/review.json'
+  const slow = JSON.stringify({ ...CONFIG, segments: [{ name: 'web', files: [`${'{a,a}'.repeat(40)}b`] }], examples: [{ changed: [`${'a'.repeat(40)}c`], segments: [] }] })
+  const started = performance.now()
+  const { checked, problems } = await checkExamples(slow, file, 500)
+  expect(performance.now() - started).toBeLessThan(5000)
+  expect([checked, problems.length, problems[0]!.line]).toEqual([0, 1, 1])
+  expect(problems[0]!.title).toBe(`Checking the examples in ${file} took over 0.5 seconds, so it was stopped`)
+  const fine = JSON.stringify({ ...CONFIG, examples: [{ changed: ['web/x.tsx'], segments: ['web'] }] })
+  expect(await checkExamples(fine, file)).toEqual(exampleProblems(fine, file))
+  // A check that fails is one finding too, so the review goes on.
+  const dir = mkdtempSync(join(tmpdir(), 'review-check-'))
+  const crash = join(dir, 'crash.ts')
+  writeFileSync(crash, "throw new RangeError('Maximum call stack size exceeded.')\n")
+  const failed = await checkExamples(fine, file, 5000, crash)
+  rmSync(dir, { recursive: true })
+  expect([failed.checked, failed.problems.length, failed.problems[0]!.line]).toEqual([0, 1, 1])
+  expect(failed.problems[0]!.title).toBe(`The examples in ${file} could not be checked`)
+  expect(failed.problems[0]!.body).toContain('`RangeError: Maximum call stack size exceeded.`')
+})
+
 test("a repository's settings file reviews each of its examples with the segments the example names", async () => {
   if (!process.env.REVIEW_CONFIG) return
   const settings = JSON.parse(readFileSync(process.env.REVIEW_CONFIG, 'utf8'))
@@ -907,6 +1018,8 @@ test("a repository's settings file reviews each of its examples with the segment
       return { findings: [] }
     }
     const { labels } = await run({ ...BASE, config, changed: example.changed }, answer)
-    expect(ran(labels, names.segments)).toEqual(example.segments)
+    expect(ran(labels, names.segments).sort()).toEqual([...example.segments].sort())
   }
+  // The check a review of a change to the file runs agrees.
+  expect(exampleProblems(readFileSync(process.env.REVIEW_CONFIG, 'utf8'), process.env.REVIEW_CONFIG).problems).toEqual([])
 })

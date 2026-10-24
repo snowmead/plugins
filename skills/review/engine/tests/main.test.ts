@@ -19,9 +19,12 @@ test('a local review refuses every option but its own, before it writes or reads
 test('a local review takes only a commit as its base, never an option for git', () => {
   const repo = mkdtempSync(join(tmpdir(), 'local-'))
   const git = (...args: string[]) => Bun.spawnSync(['git', '-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args])
+  // HEAD stays on the first commit, and side is one commit ahead of it.
   git('init', '-q')
   git('commit', '-q', '--allow-empty', '-m', 'one')
-  git('branch', 'side')
+  git('checkout', '-q', '-b', 'side')
+  git('commit', '-q', '--allow-empty', '-m', 'two')
+  git('checkout', '-q', '-')
   const local = (...args: string[]) =>
     Bun.spawnSync([process.execPath, '--no-env-file', join(import.meta.dir, '../main.ts'), 'local', '--repo', repo, ...args], { stdout: 'pipe', stderr: 'pipe' })
   const file = join(repo, 'written')
@@ -33,7 +36,9 @@ test('a local review takes only a commit as its base, never an option for git', 
   expect(existsSync(file)).toBe(false)
   // A commit or a branch goes on as its merge base with HEAD, here HEAD
   // itself, so --committed finds nothing to review and stops before any agent.
+  // Taken as given, side would be a base that HEAD is behind.
   const head = git('rev-parse', '--short', 'HEAD').stdout.toString().trim()
+  expect(git('rev-parse', '--short', 'side').stdout.toString().trim()).not.toBe(head)
   for (const base of ['HEAD', 'side']) {
     const p = local('--base', base, '--committed')
     expect([base, p.exitCode]).toEqual([base, 1])

@@ -190,6 +190,7 @@ fn run(step: Step, runner: &Runner) -> Result<(), Error> {
             reviewer: &reviewer,
             checkout: &checkout,
             agents: &var_or_empty("REVIEW_AGENTS"),
+            config: &or_default("REVIEW_CONFIG", ".claude/review.json"),
         }
         .run(),
         Step::Run => {

@@ -54,6 +54,8 @@ export function stubIo(setup: Setup = {}): Io {
       if (sub === 'rev-parse') return `${setup.head || SHA('h')}\n`
       if (sub === 'merge-base') return `${SHA('b')}\n`
       if (sub === 'cat-file') return ''
+      // A file at a commit, given as files['<commit>:<path>'].
+      if (sub === 'show') return rest[0]! in files ? files[rest[0]!]! : null
       if (sub === 'diff' && rest[0] === '--name-only') {
         const range = rest[rest.length - 1]!
         return `${((setup.changed && setup.changed[range]) || CHANGED).join('\0')}\0`
