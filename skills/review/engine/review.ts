@@ -522,7 +522,7 @@ export async function review(args: Args | number | string, rt: Runtime, io: Io):
     // A change to the settings file has the change's copy checked, with its
     // examples, by the engine alone: the action reviews with the trusted
     // branch's settings, so nothing else reads the pull request's. The check
-    // runs while the agents do; it is awaited below, and a failure surfaces there.
+    // runs while the agents do, and is awaited below.
     const settingsFile: string | undefined = R.replay ? undefined : R.settings_file || R.config_file
     const checking = settingsFile && changed.includes(settingsFile) ? settingsCheck(c, io, settingsFile) : undefined
     checking?.catch(() => undefined)

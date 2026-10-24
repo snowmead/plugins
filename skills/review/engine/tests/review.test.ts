@@ -8,7 +8,9 @@
 // each lists the files a pull request changes and the segments that review it.
 
 import { expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { diffText, firstComment, unquote } from '../review.ts'
 import { refusal } from '../git.ts'
 import { commentBody, fence, link } from '../render.ts'
@@ -979,7 +981,7 @@ test("a change to the settings file has its own copy's examples checked with no 
   }
 })
 
-test('a check of the examples that runs too long is stopped, and is one finding', async () => {
+test('a check of the examples that runs too long is stopped, and it or one that fails is one finding', async () => {
   const file = '.claude/review.json'
   const slow = JSON.stringify({ ...CONFIG, segments: [{ name: 'web', files: [`${'{a,a}'.repeat(40)}b`] }], examples: [{ changed: [`${'a'.repeat(40)}c`], segments: [] }] })
   const started = performance.now()
@@ -989,6 +991,15 @@ test('a check of the examples that runs too long is stopped, and is one finding'
   expect(problems[0]!.title).toBe(`Checking the examples in ${file} took over 0.5 seconds, so it was stopped`)
   const fine = JSON.stringify({ ...CONFIG, examples: [{ changed: ['web/x.tsx'], segments: ['web'] }] })
   expect(await checkExamples(fine, file)).toEqual(exampleProblems(fine, file))
+  // A check that fails is one finding too, so the review goes on.
+  const dir = mkdtempSync(join(tmpdir(), 'review-check-'))
+  const crash = join(dir, 'crash.ts')
+  writeFileSync(crash, "throw new RangeError('Maximum call stack size exceeded.')\n")
+  const failed = await checkExamples(fine, file, 5000, crash)
+  rmSync(dir, { recursive: true })
+  expect([failed.checked, failed.problems.length, failed.problems[0]!.line]).toEqual([0, 1, 1])
+  expect(failed.problems[0]!.title).toBe(`The examples in ${file} could not be checked`)
+  expect(failed.problems[0]!.body).toContain('`RangeError: Maximum call stack size exceeded.`')
 })
 
 test("a repository's settings file reviews each of its examples with the segments the example names", async () => {

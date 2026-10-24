@@ -368,10 +368,11 @@ export const EXAMPLES_MS = 10_000
  * exampleProblems on a change's own copy of the settings, in a process that is
  * killed after `ms`: the change wrote the patterns and the paths they are
  * matched against, and a pattern such as `{a,a}` repeated, or many `*`, can
- * backtrack for hours. A check that runs out of time is one problem.
+ * backtrack for hours. A check that runs out of time or fails is one problem,
+ * so the review goes on. `script` is the process's program, for tests.
  */
-export async function checkExamples(text: string, file: string, ms = EXAMPLES_MS): Promise<{ checked: number; problems: ExampleProblem[] }> {
-  const p = Bun.spawn([process.execPath, '--no-env-file', join(import.meta.dir, 'check-examples.ts')], {
+export async function checkExamples(text: string, file: string, ms = EXAMPLES_MS, script = join(import.meta.dir, 'check-examples.ts')): Promise<{ checked: number; problems: ExampleProblem[] }> {
+  const p = Bun.spawn([process.execPath, '--no-env-file', script], {
     cwd: dirname(import.meta.dir),
     env: { PATH: process.env.PATH ?? '' },
     stdin: new TextEncoder().encode(JSON.stringify({ text, file })),
@@ -382,19 +383,24 @@ export async function checkExamples(text: string, file: string, ms = EXAMPLES_MS
   })
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited])
   if (code === 0) return JSON.parse(out)
-  if (!p.signalCode) throw new Error(`The check of the examples in ${file} failed: ${err.trim()}`)
   const s = ms / 1000
-  return {
-    checked: 0,
-    problems: [
-      {
-        line: 1,
-        title: `Checking the examples in ${file} took over ${s} seconds, so it was stopped`,
-        body: `A \`files\` pattern in these settings takes too long to match an example's path, which happens when many \`*\` or \`{…,…}\` groups can match the same text. A review that matches the pattern against a changed file can stall the same way. Simplify the pattern.`,
-        trace: `The engine checked ${file} at the head in a process of its own and stopped it after ${s} seconds.`,
-      },
-    ],
+  const one = (problem: ExampleProblem) => ({ checked: 0, problems: [problem] })
+  if (p.signalCode) {
+    return one({
+      line: 1,
+      title: `Checking the examples in ${file} took over ${s} seconds, so it was stopped`,
+      body: `A \`files\` pattern in these settings takes too long to match an example's path, which happens when many \`*\` or \`{…,…}\` groups can match the same text. A review that matches the pattern against a changed file can stall the same way. Simplify the pattern.`,
+      trace: `The engine checked ${file} at the head in a process of its own and stopped it after ${s} seconds.`,
+    })
   }
+  const lines = err.split('\n').map((l) => l.trim()).filter(Boolean)
+  const why = (lines.find((l) => /^[A-Za-z]*Error\b/.test(l)) ?? lines.at(-1) ?? `exit code ${code}`).slice(0, 300).replaceAll('`', "'")
+  return one({
+    line: 1,
+    title: `The examples in ${file} could not be checked`,
+    body: `Checking these settings failed with \`${why}\`, and a review that applies them can fail the same way. Simplify the classes and patterns its segments use.`,
+    trace: `The engine checked ${file} at the head in a process of its own, which exited with code ${code}: ${why}`,
+  })
 }
 
 const unique = (xs: string[]) => [...new Set(xs)]

@@ -331,7 +331,8 @@ A pull request can neither change how its own review runs nor instruct it:
   check its examples, and does that in a Bun process of its own whose
   environment holds only `PATH`, killed after 10 seconds: the pull request
   wrote both the patterns and the paths they are matched against, and a
-  pattern can backtrack for hours.
+  pattern can backtrack for hours. A check that runs out of time or fails is
+  one finding, and the review goes on.
 - The job reads the review from the engine's record, never from an agent's
   answer, and posts it only when the engine ran on the args the job wrote.
   It replies in, and lists for resolving, only its own open threads, listed
