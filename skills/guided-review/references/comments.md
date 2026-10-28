@@ -9,7 +9,7 @@ covers the capabilities that make that work, what a send holds, and how to act o
 | To comment on | The reader |
 |---|---|
 | A line | Hovers it and presses the **+** in its gutter. |
-| A block of lines | Drags the **+** down (or up) over the lines. A block may run from removed lines into added ones. |
+| A block of lines | Clicks the first line's number and Shift-clicks the last's (or the other way up), then presses the **+**, which sits on the last line of the selection. Or drags the **+** down (or up) over the lines. A block may run from removed lines into added ones. |
 | A file as a whole | Presses the speech bubble in the file's card header. |
 | The pull request as a whole | Writes in the box at the top of the Comments sidebar. |
 

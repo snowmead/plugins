@@ -367,18 +367,29 @@ async function runPage(name: string, file: string, run: string, expect: Record<s
   }
 }
 
-// Review comments: a line and a file comment kept from an earlier visit draw in their cards and the sidebar; the
-// gutter's "+", dragged over three lines with real mouse events, opens a composer for them; a general comment comes
-// from the sidebar; Send (copied here, with no Claude to send to) holds every comment and clears them, and the batch
-// can be brought back.
+// Review comments: a line and a file comment kept from an earlier visit draw in their cards and the sidebar; three
+// lines selected by their numbers (a click, then a Shift-click), and the gutter's "+" dragged over three others, each
+// with real mouse events, open a composer for them; a general comment comes from the sidebar; Send (copied here, with
+// no Claude to send to) holds every comment and clears them, and the batch can be brought back.
 async function runComments(file: string) {
   const name = 'comments';
   const tab = await browser(join(dirname(file), `profile-${name}`), { warnings: true });
   const got: Record<string, unknown> = {}, ms: Record<string, number> = {};
   const take = (x: { r: Record<string, unknown>; ms: Record<string, number> }) => { Object.assign(got, x.r); Object.assign(ms, x.ms); return x.r; };
-  const mouse = (type: string, x: number, y: number, down = false) => tab.send('Input.dispatchMouseEvent', { type, x, y, button: down || type !== 'mouseMoved' ? 'left' : 'none', buttons: down || type === 'mousePressed' ? 1 : 0, clickCount: 1 });
+  const mouse = (type: string, x: number, y: number, down = false, modifiers = 0) => tab.send('Input.dispatchMouseEvent', { type, x, y, modifiers, button: down || type !== 'mouseMoved' ? 'left' : 'none', buttons: down || type === 'mousePressed' ? 1 : 0, clickCount: 1 });
+  const click = async (at: { x: number; y: number }, modifiers = 0) => {
+    await mouse('mouseMoved', at.x, at.y);
+    await mouse('mousePressed', at.x, at.y, false, modifiers);
+    await mouse('mouseReleased', at.x, at.y, false, modifiers);
+  };
   const root = `card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('diffs-container').shadowRoot`;
   const num = (line: number) => `${root}.querySelector('[data-column-number="${line}"]:not([data-line-type="change-deletion"])')`;
+  /** The centre of an element on screen, or null. */
+  const centre = async (el: string) => JSON.parse(await tab.run(`(() => { const card = (s, p) => [...document.querySelectorAll(s + ' .gr-file')].find((c) => c.dataset.path === p);
+      const u = ${el}?.getBoundingClientRect();
+      return JSON.stringify(u ? { x: u.left + u.width / 2, y: u.top + u.height / 2 } : null); })()`)) as { x: number; y: number } | null;
+  /** The lines the card shows selected. */
+  const picked = `[...${root}.querySelectorAll('[data-content] [data-line][data-selected-line]')].map((e) => e.dataset.line).join(' ')`;
   try {
     await tab.open('file://' + file);
     await inPage(tab, `const head = window.GR_DATA.prs[0].head;
@@ -404,6 +415,24 @@ async function runComments(file: string) {
       r.added = $('.gr-note-count').textContent + ' ' + document.querySelectorAll('.gr-side-item').length;
       ${num(31)}.scrollIntoView({ block: 'center' });
       await sleep(100);`));
+    // A click on line 37's number, then a Shift-click on 35's, selects 35–37 and puts the "+" on 37. The clicks land on
+    // the digits, left of where the "+" shows.
+    const digits = (line: number) => `${num(line)}.querySelector('[data-line-number-content]')`;
+    const n37 = await centre(digits(37)), n35 = await centre(digits(35));
+    if (n37 && n35) { await click(n37); await click(n35, 8); }
+    take(await inPage(tab, `await sleep(50);
+      r.picked = ${picked};
+      r.plusOnLast = ${root}.querySelector('[data-utility-button]')?.closest('[data-column-number]')?.dataset.columnNumber;`));
+    const onLast = await centre(`${root}.querySelector('[data-utility-button]')`);
+    if (onLast) await click(onLast);
+    take(await inPage(tab, `await sleep(100);
+      const form = card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('.gr-composer');
+      r.pickedComposer = form?.querySelector('.gr-composer-where')?.textContent;
+      r.pickedKept = ${picked};
+      if (form) { form.querySelector('textarea').value = 'Selected by their numbers'; form.requestSubmit(); }
+      const saved = JSON.parse(localStorage.getItem('gr:42:comments')).find((c) => c.text === 'Selected by their numbers');
+      r.pickedSaved = saved ? saved.start + '-' + saved.end + ' ' + saved.side + saved.endSide + ' ' + saved.code.map((l) => l[0]).join('') : null;
+      r.pickedCleared = await until(() => !${root}.querySelector('[data-selected-line]'));`));
     const at = JSON.parse(await tab.run(`(() => { const card = (s, p) => [...document.querySelectorAll(s + ' .gr-file')].find((c) => c.dataset.path === p);
       const a = ${num(31)}.getBoundingClientRect(), b = ${num(33)}.getBoundingClientRect();
       return JSON.stringify({ x: a.left + a.width / 2, y: a.top + a.height / 2, y2: b.top + b.height / 2 }); })()`));
@@ -429,9 +458,10 @@ async function runComments(file: string) {
       navigator.clipboard.writeText = (text) => { copied = text; return Promise.resolve(); };
       $('[data-note-send]').click();
       await until(() => copied);
-      r.sent = !!copied && copied.startsWith('# Review comments on #42 ') && copied.includes(': 4 comments')
+      r.sent = !!copied && copied.startsWith('# Review comments on #42 ') && copied.includes(': 5 comments')
         && copied.includes('1. General\\n   Seeded general comment') && copied.includes('src/webhooks/backoff.ts (the file)')
-        && copied.includes('src/webhooks/deliver.ts:27\\n') && copied.includes('src/webhooks/deliver.ts:31-33\\n   | + ');
+        && copied.includes('src/webhooks/deliver.ts:27\\n') && copied.includes('src/webhooks/deliver.ts:31-33\\n   | + ')
+        && copied.includes('src/webhooks/deliver.ts:35-37\\n');
       r.cleared = $('.gr-note-count').hidden && !document.querySelector('.gr-guide .gr-note') && localStorage.getItem('gr:42:comments') === '[]';
       $('[data-note-restore]')?.click();
       r.restored = JSON.parse(localStorage.getItem('gr:42:comments')).length;`));
@@ -443,8 +473,9 @@ async function runComments(file: string) {
     tab.close();
   }
   report(name, tab, got, ms, {
-    badge: '2', lineNote: true, fileNote: 'Seeded file comment', sideItems: 2, typingKeepsKeys: true, added: '3 3', plus: true,
-    composer: 'Comment on lines 31–33', composerFocused: true, dragged: '31-33 nn +++', draggedDrawn: true, sent: true, cleared: true, restored: 4,
+    badge: '2', lineNote: true, fileNote: 'Seeded file comment', sideItems: 2, typingKeepsKeys: true, added: '3 3',
+    picked: '35 36 37', plusOnLast: '37', pickedComposer: 'Comment on lines 35–37', pickedKept: '35 36 37', pickedSaved: '35-37 nn ++ ', pickedCleared: true,
+    plus: true, composer: 'Comment on lines 31–33', composerFocused: true, dragged: '31-33 nn +++', draggedDrawn: true, sent: true, cleared: true, restored: 5,
   }, { side: BUDGET.interaction, add: BUDGET.interaction, lineAdd: BUDGET.frame });
 }
 

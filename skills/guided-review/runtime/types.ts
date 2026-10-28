@@ -159,8 +159,8 @@ declare global {
 // ---------------------------------------------------------------- the library slices the runtime uses
 export interface PierreHunkSeparator { hunkIndex: number; lines: number; lineCountKnown?: boolean; expandable?: boolean }
 export interface PierreAnnotation<T> { side: 'additions' | 'deletions'; lineNumber: number; metadata: T }
-/** A range of lines the reader picked in the gutter, in the order dragged. An end on `deletions` is numbered on the old
-    side; any other end (an added or unchanged line) on the new side. */
+/** A range of lines the reader picked in the gutter (the lines selected, or the "+" dragged over), in the order picked.
+    An end on `deletions` is numbered on the old side; any other end (an added or unchanged line) on the new side. */
 export interface PierreLineRange { start: number; end: number; side?: 'additions' | 'deletions'; endSide?: 'additions' | 'deletions' }
 export interface PierreFileDiffMeta { isPartial: boolean }
 export interface PierreFileDiff {
@@ -170,7 +170,7 @@ export interface PierreFileDiff {
   setLineAnnotations(list: PierreAnnotation<unknown>[]): void;
   setThemeType(t: ThemeType): void;
   expandHunk(index: number, direction: 'up' | 'down' | 'both', lines?: number): void;
-  setSelectedLines(range: { start: number; end: number; side: 'additions' | 'deletions' } | null): void;
+  setSelectedLines(range: PierreLineRange | null): void;
 }
 export interface PierreDiffs {
   parsePatchFiles(patch: string): { files: PierreFileDiffMeta[] }[];

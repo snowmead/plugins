@@ -234,9 +234,14 @@ export function mount(card: Element): Promise<void> | undefined {
       expansionLineCount: STEP,
       collapsedContextThreshold: fd.isPartial ? 0 : 3,
       renderAnnotation: (a: PierreAnnotation<Note>) => (a.metadata.kind === 'move' ? moveChip(f, a.metadata.mv) : noteEl(a.metadata)),
-      // The "+" beside the line under the pointer starts a comment; dragging it takes a block of lines.
+      // The "+" beside the line under the pointer starts a comment; dragging it takes a block of lines. A click on a
+      // line number selects the line, a Shift-click selects the lines up to another, and the "+" then sits on the
+      // last of them and takes them all.
       enableGutterUtility: true,
+      enableLineSelection: true,
       onGutterUtilityClick: (range: PierreLineRange) => openLine(st, range),
+      // A selection the reader starts outlives a jump's highlight of its line.
+      onLineSelectionStart: () => clearTimeout(st.flashTimer),
       unsafeCSS: CODE_CSS,
     };
     st.inst = new diffs.FileDiff(st.opts);

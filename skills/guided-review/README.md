@@ -16,7 +16,8 @@ them:
   and each reader can switch from the bar.
 - **Review marks**: tick a chapter or a file to fold it and count it toward "3 of 6 chapters reviewed". `j` and `k`
   move between chapters, `r` marks one. Marks stay in the reader's browser and survive a rebuild for a new head.
-- **Review comments**: press the **+** in a card's gutter to comment on a line, or drag it over a block of lines;
+- **Review comments**: press the **+** in a card's gutter to comment on a line. For a block of lines, click a line
+  number, Shift-click another and press the **+**, or drag the **+** over the lines;
   the speech bubble in a file's header comments on the whole file, and the **Comments** sidebar (`c`) on the whole
   pull request. The sidebar lists every pending comment and sends them all to Claude at once, which answers in one
   thread, changes the code on the branch and republishes the guide for the new head. Without a Claude session to

@@ -2,7 +2,8 @@
    request as a whole, reads them in a sidebar, and sends them all at once, as a thinkr plan page sends its answers.
 
    - A line comment starts from the "+" @pierre/diffs shows beside the line under the pointer (drag it to take a block
-     of lines) and sits under its last line, in every card that shows that line.
+     of lines), or beside the last of the lines the reader selected by their numbers (a click, then a Shift-click on
+     another to take the lines between), and sits under its last line, in every card that shows that line.
    - A file comment starts from the speech bubble in a card's header and sits under the header.
    - A general comment is written at the top of the sidebar.
 
@@ -171,6 +172,8 @@ export function openLine(st: CardState, range: PierreLineRange) {
   });
   draft = { c, form, st, note: { side: b.side === 'o' ? 'deletions' : 'additions', lineNumber: b.line, metadata: { kind: 'draft', form } } };
   redrawNotes(st);
+  // The lines stay highlighted while the comment is written, even where closing an empty composer cleared them.
+  st.inst?.setSelectedLines(range);
   focusIn(form);
   sound.play('reveal');
 }
@@ -339,7 +342,7 @@ function paintSide() {
     const k = last?.items.reduce((s, x) => s + x.list.length, 0) ?? 0;
     groups.push(h('div', { class: 'gr-side-empty' },
       h('p', { class: 'lead', text: 'No comments yet.' }),
-      h('p', {}, 'Hover a line and press ', h('b', {}, '+'), ', or drag the ', h('b', {}, '+'), ' over a block of lines. The speech bubble in a file’s header comments on the whole file; the box above, on the whole pull request. Send them to Claude together when you are done.'),
+      h('p', {}, 'Hover a line and press ', h('b', {}, '+'), '. For a block of lines, click a line number, Shift-click another, and press ', h('b', {}, '+'), ', or drag the ', h('b', {}, '+'), ' over them. The speech bubble in a file’s header comments on the whole file; the box above, on the whole pull request. Send them to Claude together when you are done.'),
       k ? h('button', { class: 'k-btn is-sm', type: 'button', 'data-note-restore': '' }, `Bring back the ${k} sent at ${new Date(last!.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`) : null));
   }
   parts.list.replaceChildren(...groups);
