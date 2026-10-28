@@ -372,7 +372,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     `<span>written for ${headLink}</span>`,
   ].filter(Boolean).join('');
   const ofWhat = pr.url ? `<a href="${esc(pr.url)}" target="_blank" rel="noopener">${num}</a>` : esc(branch ?? 'the branch');
-  const keys = `<kbd>j</kbd> <kbd>k</kbd> next and previous chapter · <kbd>r</kbd> mark the chapter reviewed${multi ? ' · <kbd>[</kbd> <kbd>]</kbd> previous and next pull request' : ''} · <kbd>b</kbd> chapter text or file tree · <kbd>c</kbd> comments · shift-click a fold to open it all`;
+  const keys = `<kbd>j</kbd> <kbd>k</kbd> next and previous chapter · <kbd>r</kbd> mark the chapter reviewed${multi ? ' · <kbd>[</kbd> <kbd>]</kbd> previous and next pull request' : ''} · <kbd>b</kbd> chapter text or file tree · <kbd>c</kbd> show or hide comments · shift-click a fold to open it all`;
   const hunkCount = diff.files.reduce((s, f) => s + f.hunks.length, 0);
   const report = [
     `guide ${num || esc(pr.title)}: ${n} chapters, ${diff.files.length} files, ${hunkCount} hunks, ${flows} flow${flows === 1 ? '' : 's'}`,
@@ -433,17 +433,16 @@ function picker(self: Built, i: number) {
 
 // Each pull request's parts carry data-pr, and only the chosen one's show: its progress and links in the bar, and its
 // panel (header, guide, diff, footer). The tabs, the layout switch, the sound and the comments stay. The comments
-// sidebar fills in when it first opens.
+// margin fills in at the right of the panel on screen.
 const hide = (i: number) => (i ? ' hidden' : '');
 const markup = `<div class="k-bar gr-bar"><div class="gr-wrap">
 <button type="button" class="k-btn is-ghost is-icon is-sm gr-panel-toggle" data-panel-toggle aria-expanded="true" aria-label="Hide the chapter text" title="Hide the chapter text (b)">${PANEL}</button>
 <div class="k-seg is-sm gr-tabs" role="tablist"><button type="button" class="gr-tab" role="tab" data-view="guide" aria-selected="true">Guide</button><button type="button" class="gr-tab" role="tab" data-view="diff" aria-selected="false">Diff</button></div>
-<span class="gr-spacer"></span>${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span>${soundButton('k-btn is-ghost is-icon is-sm')}<button type="button" class="k-btn is-sm gr-note-toggle" data-side-toggle aria-controls="gr-side" aria-expanded="false" aria-label="Comments" title="Comments (c)">${COMMENT}<span class="long">Comments</span><span class="gr-note-count" hidden>0</span></button>${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
+<span class="gr-spacer"></span>${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span>${soundButton('k-btn is-ghost is-icon is-sm')}<button type="button" class="k-btn is-sm gr-note-toggle" data-notes-toggle aria-pressed="true" aria-label="Hide comments" title="Hide comments (c)">${COMMENT}<span class="long">Comments</span><span class="gr-note-count" hidden>0</span></button><button type="button" class="k-btn is-sm gr-send" data-note-send hidden><span class="n">Send</span><span class="long">to Claude</span></button>${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
 </div></div>
-<aside class="gr-side" id="gr-side" aria-label="Comments" data-uncommentable hidden></aside>
 <div class="gr-wrap">
 ${prs.map((p, i) => `<div class="gr-pr" id="${multi ? p.id : 'gr-pr'}" data-pr="${p.id}"${hide(i)}>
-<header class="gr-head">${picker(p, i)}<div class="gr-meta">${p.meta}</div></header>
+<header class="gr-head">${picker(p, i)}<div class="gr-meta">${p.meta}<button type="button" class="gr-head-note" data-note-general title="Comment on the pull request as a whole">${COMMENT}Comment</button></div></header>
 <main>
 <div class="gr-view gr-guide">
 ${p.sections}

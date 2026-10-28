@@ -1,38 +1,48 @@
 /* Review comments. The reader writes comments for Claude on a line or a block of lines, on a file, or on the pull
-   request as a whole, reads them in a sidebar, and sends them all at once, as a thinkr plan page sends its answers.
+   request as a whole, and sends each at once or adds it to a batch they send together. A sent comment stays on the
+   page as a thread (threads.ts), where Claude's answers come back and the reader replies.
 
    - A line comment starts from the "+" @pierre/diffs shows beside the line under the pointer (drag it to take a block
      of lines), or beside the last of the lines the reader selected by their numbers (a click, then a Shift-click on
-     another to take the lines between), and sits under its last line, in every card that shows that line.
-   - A file comment starts from the speech bubble in a card's header and sits under the header.
-   - A general comment is written at the top of the sidebar.
+     another to take the lines between).
+   - A file comment starts from the speech bubble in a card's header.
+   - A general comment starts from the Comment button under the pull request's title.
+   - A reply starts from a thread's Reply box.
 
-   Comments stay in the reader's browser, per pull request like the review marks, until they are sent. Send writes the
-   batch to the page database at comments/<user id>/sends/<send id> (Claude reads it with ArtifactData) and posts a
-   summary with Send to Claude, which wakes the session that published the page: one thread per send, anchored at the
-   pull request's title, since the shell cannot anchor inside a card's shadow root. Where the reader cannot send, the
-   summary is copied for the chat. */
-import type { CanSendToClaude, CapabilityMap, CommentsCap, DbCap, DiffFile, DocRef, Move, PierreAnnotation, PierreLineRange, ReviewComment, Side } from './types';
+   On a wide screen every comment is a box in a margin at the right of the code, as comments sit beside a document: a
+   box for each thread, each pending comment and the comment being written, level with the line, file header or title
+   it is on. Boxes that would meet stack down the margin. The box the reader clicks comes level with its line, a
+   little nearer the code, and its lines are selected. On a narrow screen there is no margin: each box sits in the
+   code instead, under its line, under its file's header, or under the title.
+
+   Pending comments and replies stay in the reader's browser, per pull request like the review marks, until they are
+   sent. A send posts a summary with Send to Claude, which wakes the session that published the page: one comment
+   thread per send, anchored at the pull request's title, since the shell cannot anchor inside a card's shadow root.
+   Then it writes the send to the page database at comments/<user id>/sends/<send id>, where Claude reads it with
+   ArtifactData and the page reads it back as threads. Where the reader cannot send, the summary is copied for the
+   chat. */
+import type { CanSendToClaude, CapabilityMap, CommentsCap, Line, Move, PierreAnnotation, PierreLineRange, ReviewComment, SendDoc, SentComment, Side } from './types';
 import { $, $$, copyText, h, store } from '../kit/web/dom';
 import { ICON } from '../kit/web/icons';
 import { sound } from '../kit/web/sound';
 import { toast } from '../kit/web/toast';
 import { split } from './dom';
-import { type CardState, drawnCards, rebuildOld, redrawNotes, setFold } from './cards';
+import { type CardState, allDrawn, cards, mount, redrawNotes, rowOf, setFold } from './cards';
 import { type Ctx, active, ctxOf, ctxs, diffOf, guideOf } from './ctx';
-import { choose, jump, toCard, view } from './nav';
+import { view } from './nav';
+import { type Post, type Target, type Thread, authorOf, codeOf, keepLocal, mark, newId, onThreads, placeOf, refFor, rowAt, rowsOf, saveSend, startThreads, threadOf, threadsOf, watchThreads } from './threads';
 
 const MAX_BYTES = 3900; // a comment holds 4 KiB
-const MAX_CODE = 30; // lines of code kept with a line comment
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-/** Under this width the sidebar lies over the page instead of beside it. */
-const overlay = matchMedia('(max-width: 1199px)');
+/** Wide enough for the margin beside the code; narrower, comments sit in the code. */
+const wide = matchMedia('(min-width: 1180px)');
+const now = () => new Date().toISOString();
 
-/** What a card draws under a line (cards.ts): a moved-code chip, a comment, or the composer of a new one. */
-export type Note = { kind: 'move'; mv: Move } | { kind: 'comment'; cm: ReviewComment } | { kind: 'draft'; form: HTMLFormElement };
-type Target = Pick<ReviewComment, 'kind' | 'path' | 'start' | 'side' | 'end' | 'endSide'>;
+/** What a card draws under a line (cards.ts): a moved-code chip, a pending comment, a thread, or the composer of a new
+    comment. Comments are drawn there only where there is no margin. */
+export type Note = { kind: 'move'; mv: Move } | { kind: 'comment'; cm: ReviewComment } | { kind: 'thread'; id: string } | { kind: 'draft'; form: HTMLFormElement };
 
-// ---------------------------------------------------------------- the comments
+// ---------------------------------------------------------------- the pending comments
 const keyOf = (c: Ctx) => `${c.pr.key}:comments`;
 const lists = new Map<Ctx, ReviewComment[]>();
 function listOf(c: Ctx) {
@@ -48,13 +58,22 @@ function find(id: string) {
   for (const c of ctxs) { const cm = listOf(c).find((x) => x.id === id); if (cm) return { c, cm }; }
   return null;
 }
-/** A pull request's comments in reading order: general ones, then by file in the diff's order, each file's own
+/** The threads a pull request shows: a comment still pending while its send goes out is not one yet. */
+const sentOf = (c: Ctx) => threadsOf(c).filter((t) => !listOf(c).some((cm) => cm.id === t.id));
+
+/** Things in reading order, by the place each is on: general first, then by file in the diff's order, each file's own
     comments before its line comments, and those by line. A file the head no longer has comes last. */
-function ordered(c: Ctx) {
+function byPlace<T>(c: Ctx, list: T[], place: (x: T) => Target) {
   const rank = new Map(c.pr.files.map((f, i) => [f.path, i]));
-  const at = (cm: ReviewComment) => (cm.kind === 'general' ? -1 : rank.get(cm.path!) ?? c.pr.files.length);
-  return [...listOf(c)].sort((a, b) => at(a) - at(b) || (a.kind === 'file' ? -1 : 0) - (b.kind === 'file' ? -1 : 0) || (a.start ?? 0) - (b.start ?? 0));
+  const at = (t: Target) => (t.kind === 'general' ? -1 : rank.get(t.path!) ?? c.pr.files.length);
+  const placed = list.map((x) => ({ x, t: place(x) }));
+  placed.sort((a, b) => at(a.t) - at(b.t) || (a.t.kind === 'file' ? -1 : 0) - (b.t.kind === 'file' ? -1 : 0) || (a.t.start ?? 0) - (b.t.start ?? 0));
+  return placed.map((p) => p.x);
 }
+/** The place a comment is in: a reply's is its thread's. */
+const general: Target = { kind: 'general' };
+const placeIn = (cm: ReviewComment): Target => (cm.kind === 'reply' ? threadOf(cm.thread)?.cm ?? general : cm);
+const ordered = (c: Ctx) => byPlace(c, listOf(c), placeIn);
 
 const old = (s?: Side) => (s === 'o' ? ' (old)' : '');
 /** "Line 31", "Lines 31–33", "Line 12 (old)", "Lines 30 (old) to 32". */
@@ -62,87 +81,127 @@ function lineLabel(t: Target) {
   if (t.side === t.endSide) return t.start === t.end ? `Line ${t.start}${old(t.side)}` : `Lines ${t.start}–${t.end}${old(t.side)}`;
   return `Lines ${t.start}${old(t.side)} to ${t.end}${old(t.endSide)}`;
 }
+const placeLabel = (t: Target) => (t.kind === 'line' ? lineLabel(t) : t.kind === 'file' ? 'The whole file' : 'The pull request');
 /** Where a comment is, for Claude: "src/a.ts:31-33", "src/a.ts:12 (old)", "src/a.ts (the file)", "General". */
-function where(cm: ReviewComment) {
+function where(cm: Target) {
   if (cm.kind === 'general') return 'General';
   if (cm.kind === 'file') return `${cm.path} (the file)`;
   if (cm.side === cm.endSide) return `${cm.path}:${cm.start}${cm.end !== cm.start ? `-${cm.end}` : ''}${old(cm.side)}`;
   return `${cm.path}:${cm.start}${old(cm.side)} to ${cm.end}${old(cm.endSide)}`;
 }
+const firstLine = (s: string, n = 100) => { const l = s.split('\n')[0]; return l.length > n ? `${l.slice(0, n - 1)}…` : l; };
+/** The lines of a place, for the code to select them. */
+const rangeOf = (t: Target): PierreLineRange => ({ start: t.start!, end: t.end!, side: t.side === 'o' ? 'deletions' : 'additions', endSide: t.endSide === 'o' ? 'deletions' : 'additions' });
 
-/** Every line of a file's hunks, in order, and the index of one line by its number on a side. */
-const rowsOf = (f: DiffFile) => f.hunks.flatMap((hk) => hk.lines);
-const rowAt = (rows: DiffFile['hunks'][number]['lines'], line: number, s: Side) => rows.findIndex((l) => (s === 'o' ? l[1] : l[2]) === line);
-/** The lines a comment is on, as the page shows them. */
-function codeOf(f: DiffFile, t: Target): ReviewComment['code'] {
-  const rows = rowsOf(f);
-  const i = rowAt(rows, t.start!, t.side!), j = rowAt(rows, t.end!, t.endSide!);
-  if (i >= 0 && j >= 0) return rows.slice(i, j + 1).slice(0, MAX_CODE).map((l) => [l[0], l[3]]);
-  // A line outside the hunks, in a fold the reader opened on the Diff tab: unchanged, so its side's text has it.
-  const text = t.side === 'o' ? (f.old ?? rebuildOld(f)) : f.new;
-  return text ? text.slice(t.start! - 1, t.end).slice(0, MAX_CODE).map((s) => [' ', s]) : [];
-}
+// Comments hidden from the bar stay, and still go with a send; the margin closes and the code takes its width.
+let hidden = store.get<boolean>('gr:notes-hidden') === true;
+const inMargin = () => wide.matches && !hidden;
+const inCode = () => !wide.matches && !hidden;
 
-/** Store a pull request's comments, show them wherever a file's are drawn, and count them. */
-function changed(c: Ctx, paths: (string | undefined)[]) {
+/** Store a pull request's pending comments and draw again what shows them: the cards of `paths`, the comments and
+    threads `ids`. */
+function changed(c: Ctx, paths: (string | undefined)[], ids: (string | undefined)[] = []) {
   store.set(keyOf(c), listOf(c));
-  for (const path of new Set(paths)) {
-    if (!path) continue;
-    for (const st of drawnCards(c, path)) redrawNotes(st);
-    for (const el of $$('.gr-file', c.root)) if (el.dataset.path === path) fileNotes(c, el);
+  repaint(c, paths, ids);
+}
+function repaint(c: Ctx, paths: Iterable<string | undefined>, ids: Iterable<string | undefined>) {
+  const want = new Set([...ids].filter((x): x is string => !!x));
+  if (inCode()) {
+    for (const path of new Set(paths)) {
+      if (!path) continue;
+      for (const st of allDrawn(c)) if (st.f.path === path) redrawNotes(st);
+      for (const el of $$('.gr-file', c.root)) if (el.dataset.path === path) fileNotes(c, el);
+    }
+    headNotes(c);
   }
-  paintCount();
-  paintSide();
+  if (want.size) {
+    for (const el of $$<HTMLElement>('.gr-thread')) if (want.has(el.dataset.threadId!)) paintThread(el);
+    for (const el of $$<HTMLElement>('.gr-note[data-note-id]')) { const hit = want.has(el.dataset.noteId!) && find(el.dataset.noteId!); if (hit) paintNote(el, hit.cm); }
+  }
+  paintBar();
+  relayout();
 }
 function add(c: Ctx, t: Target, text: string) {
   const f = t.path ? c.files.get(t.path) : undefined;
-  const cm: ReviewComment = { id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, ...t, text, head: c.pr.head, at: new Date().toISOString() };
+  const cm: ReviewComment = { id: newId('c'), ...t, text, head: c.pr.head, at: now() };
   if (t.kind === 'line' && f) cm.code = codeOf(f, t);
   listOf(c).push(cm);
   changed(c, [t.path]);
-  sound.play('select');
+  return cm;
+}
+function addReply(t: Thread, text: string) {
+  const cm: ReviewComment = { id: newId('r'), kind: 'reply', thread: t.id, path: t.cm.path, text, head: t.c.pr.head, at: now() };
+  listOf(t.c).push(cm);
+  changed(t.c, [], [t.id]);
+  return cm;
 }
 function remove(id: string) {
   const hit = find(id);
   if (!hit) return;
   lists.set(hit.c, listOf(hit.c).filter((x) => x !== hit.cm));
-  changed(hit.c, [hit.cm.path]);
+  if (looking === `n:${id}`) look(null);
+  changed(hit.c, hit.cm.thread ? [] : [hit.cm.path], [hit.cm.thread]);
   sound.play('deselect');
+}
+/** A new comment or reply is kept: added to the batch, or sent at once. */
+function kept(cm: ReviewComment, now: boolean) {
+  if (now) void send([cm]);
+  else { sound.play('select'); paintBar(); }
 }
 
 // ---------------------------------------------------------------- composers
-const hint = () => h('span', { class: 'gr-composer-hint' }, h('kbd', {}, MAC ? '⌘' : 'Ctrl'), h('kbd', {}, '↵'));
-/** A comment box: Cancel and a submit button, ⌘↵ submits and Escape cancels. */
-function composer(o: { label: string; text?: string; submit: string; save(text: string): void; cancel(): void }) {
-  const box = h('textarea', { class: 'gr-field', rows: 3, maxlength: 2000, placeholder: 'Leave a comment for Claude', 'aria-label': o.label });
+const sendWord = () => (canSend === 'available' ? 'Send' : 'Copy');
+const sendTitle = (what: string) => (canSend === 'available' ? `Send ${what} to Claude now (${MAC ? '⌘' : 'Ctrl'}↵)` : `${whyCopy()} (${MAC ? '⌘' : 'Ctrl'}↵)`);
+/** A comment box. A new comment or reply has Cancel, Add to batch and Send (⌘↵); an edit has Cancel and Save.
+    Escape cancels. */
+function composer(o: { label?: string; text?: string; placeholder?: string; edit?: boolean; reply?: boolean; save(text: string, now: boolean): void; cancel(): void }) {
+  const box = h('textarea', { class: 'gr-field', rows: 3, maxlength: 2000, placeholder: o.placeholder ?? 'Leave a comment for Claude', 'aria-label': o.label ?? o.placeholder ?? 'Comment' });
   box.value = o.text ?? '';
-  const cancel = h('button', { class: 'k-btn is-ghost is-sm', type: 'button' }, 'Cancel');
+  const take = (now: boolean) => { const t = box.value.trim(); if (t) o.save(t, now); else box.focus(); };
+  const button = (text: string, cls: string, fn: () => void, title?: string, data?: string) => h('button', { class: `k-btn is-sm ${cls}`, type: 'button', title, onclick: fn, [data ?? 'data-composer-cancel']: '' }, text);
   const form = h('form', { class: 'gr-composer', 'data-uncommentable': '' },
-    h('div', { class: 'gr-composer-where', text: o.label }), box,
-    h('div', { class: 'gr-composer-foot' }, hint(), cancel, h('button', { class: 'k-btn is-primary is-sm', type: 'submit' }, o.submit)));
-  form.addEventListener('submit', (e) => { e.preventDefault(); const t = box.value.trim(); if (t) o.save(t); else box.focus(); });
+    o.label ? h('div', { class: 'gr-composer-where', text: o.label }) : null, box,
+    h('div', { class: 'gr-composer-foot' },
+      button('Cancel', 'is-ghost', () => o.cancel()),
+      o.edit ? null : button('Add to batch', '', () => take(false), 'Keep it with your other pending comments, to send them together', 'data-composer-add'),
+      h('button', { class: 'k-btn is-primary is-sm', type: 'submit', 'data-composer-send': '', title: o.edit ? `Save (${MAC ? '⌘' : 'Ctrl'}↵)` : sendTitle(o.reply ? 'this reply' : 'this comment') }, o.edit ? 'Save' : sendWord())));
+  form.addEventListener('submit', (e) => { e.preventDefault(); take(!o.edit); });
   form.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); o.cancel(); }
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); form.requestSubmit(); }
   });
-  cancel.addEventListener('click', () => o.cancel());
   return form;
 }
 /** Focus a composer's box at once, so no key typed straight after the click is lost; a box the code has not placed
     yet is focused in the next frame. */
 function focusIn(el: Element) {
   const box = () => el.querySelector<HTMLTextAreaElement>('textarea');
-  if (el.isConnected) box()?.focus();
-  else requestAnimationFrame(() => box()?.focus());
+  if (el.isConnected) box()?.focus({ preventScroll: true });
+  else requestAnimationFrame(() => box()?.focus({ preventScroll: true }));
+}
+const fill = (el: HTMLElement, ...kids: (Node | null)[]) => el.replaceChildren(...kids.filter((k): k is Node => !!k));
+/** Draw inside an element again without taking the reader out of a box they are typing in. */
+function keepTyping(el: Element, draw: () => void) {
+  const a = document.activeElement;
+  const box = a instanceof HTMLTextAreaElement && el.contains(a) ? a : null;
+  const [s, e] = box ? [box.selectionStart, box.selectionEnd] : [0, 0];
+  draw();
+  if (box?.isConnected && document.activeElement !== box) { box.focus({ preventScroll: true }); box.setSelectionRange(s, e); }
 }
 
-// One new line or file comment is open at a time: a line comment's composer is a note of its card, a file comment's
-// sits in the card's notes under the header.
-let draft: { c: Ctx; form: HTMLFormElement; st?: CardState; note?: PierreAnnotation<Note>; card?: HTMLElement } | null = null;
+// One new comment or reply is open at a time: a new comment's composer is a box of its own, a reply's sits in its
+// thread.
+let draft: { c: Ctx; form: HTMLFormElement; target?: Target; st?: CardState; note?: Note; thread?: HTMLElement } | null = null;
 /** Close the open composer, unless it holds text: then point at it and keep it. Returns whether it is closed. */
 function takeDraft() {
   const box = draft?.form.querySelector('textarea');
-  if (box?.value.trim()) { box.focus(); toast('Add or cancel the open comment first.'); return false; }
+  // A composer the page no longer shows (its thread is gone) cannot hold the reader up.
+  if (box?.value.trim() && draft!.form.isConnected) {
+    if (hidden) setHidden(false);
+    box.focus();
+    toast('Add or cancel the open comment first.');
+    return false;
+  }
   closeDraft();
   return true;
 }
@@ -150,11 +209,47 @@ function closeDraft() {
   const d = draft;
   if (!d) return;
   draft = null;
-  if (d.st) { d.st.inst?.setSelectedLines(null); redrawNotes(d.st); }
-  if (d.card) fileNotes(d.c, d.card);
+  d.st?.inst?.setSelectedLines(null);
+  if (looking === 'draft' || (d.thread && looking === d.thread.dataset.key)) look(null);
+  if (d.thread) paintThread(d.thread);
+  else showDraft(d.c, d.st);
+}
+/** Draw the comment being written where it goes, or take it away once it is closed. */
+function showDraft(c: Ctx, st?: CardState) {
+  if (inCode()) {
+    if (st) redrawNotes(st);
+    for (const el of $$('.gr-file', c.root)) fileNotes(c, el);
+    headNotes(c);
+  }
+  relayout();
+}
+/** Open a composer for a new comment on `t`. */
+function openNew(c: Ctx, t: Target, label: string, st?: CardState, range?: PierreLineRange) {
+  if (hidden) setHidden(false);
+  const form = composer({
+    label,
+    save: (text, now) => {
+      draft = null;
+      const cm = add(c, t, text);
+      // The comment stays the box the reader looks at, its lines still selected.
+      if (looking === 'draft') looking = `n:${cm.id}`;
+      for (const el of $$<HTMLElement>(`[data-key="n:${cm.id}"]`)) el.classList.add('is-active');
+      kept(cm, now);
+    },
+    cancel: closeDraft,
+  });
+  form.dataset.key = 'draft';
+  draft = { c, form, target: t, st };
+  if (st) draft.note = { kind: 'draft', form };
+  look('draft', false);
+  showDraft(c, st);
+  // The lines stay selected while the comment is written, even where closing an empty composer cleared them.
+  if (st && range) { st.inst?.setSelectedLines(range); lit = st; }
+  focusIn(form);
+  sound.play('reveal');
 }
 
-/** The gutter's "+": a composer under the last line picked. */
+/** The gutter's "+": a composer for the lines picked. */
 export function openLine(st: CardState, range: PierreLineRange) {
   if (!takeDraft()) return;
   const toSide = (s?: string): Side => (s === 'deletions' ? 'o' : 'n');
@@ -164,258 +259,454 @@ export function openLine(st: CardState, range: PierreLineRange) {
   const ia = rowAt(rows, a.line, a.side), ib = rowAt(rows, b.line, b.side);
   if (ia >= 0 && ib >= 0 ? ia > ib : a.side === b.side && a.line > b.line) [a, b] = [b, a];
   const t: Target = { kind: 'line', path: st.f.path, start: a.line, side: a.side, end: b.line, endSide: b.side };
-  const c = st.ctx;
-  const form = composer({
-    label: `Comment on ${lineLabel(t).toLowerCase()}`, submit: 'Add comment',
-    save: (text) => { const d = draft; draft = null; d?.st?.inst?.setSelectedLines(null); add(c, t, text); },
-    cancel: closeDraft,
-  });
-  draft = { c, form, st, note: { side: b.side === 'o' ? 'deletions' : 'additions', lineNumber: b.line, metadata: { kind: 'draft', form } } };
-  redrawNotes(st);
-  // The lines stay highlighted while the comment is written, even where closing an empty composer cleared them.
-  st.inst?.setSelectedLines(range);
-  focusIn(form);
-  sound.play('reveal');
+  openNew(st.ctx, t, `Comment on ${lineLabel(t).toLowerCase()}`, st, range);
 }
-
 /** The speech bubble in a card's header: a composer for the file as a whole. */
 function openFile(card: HTMLElement) {
   const c = ctxOf(card);
   const path = card.dataset.path!;
   if (!c || !takeDraft()) return;
   setFold(card, false);
-  const t: Target = { kind: 'file', path };
+  const chapter = card.closest<HTMLElement>('.gr-sec')?.dataset.chapter;
+  openNew(c, { kind: 'file', path, ...(chapter ? { chapter } : {}) }, `Comment on ${split(path)[0]} as a whole`);
+}
+/** The Comment button under the title: a composer for the pull request as a whole. */
+function openGeneral(c: Ctx) {
+  if (!takeDraft()) return;
+  openNew(c, general, 'Comment on the pull request');
+}
+/** A thread's Reply box: a composer at the foot of the thread. */
+function openReply(el: HTMLElement) {
+  const t = threadOf(el.dataset.threadId);
+  if (!t || !takeDraft()) return;
   const form = composer({
-    label: `Comment on ${split(path)[0]} as a whole`, submit: 'Add comment',
-    save: (text) => { draft = null; add(c, t, text); },
+    placeholder: 'Reply to Claude', reply: true,
+    save: (text, now) => { draft = null; kept(addReply(t, text), now); },
     cancel: closeDraft,
   });
-  draft = { c, form, card };
-  fileNotes(c, card);
+  draft = { c: t.c, form, thread: el };
+  paintThread(el);
+  look(el.dataset.key!, false);
+  relayout();
   focusIn(form);
   sound.play('reveal');
 }
 
-/** Edit a comment where it is drawn: in a card or in the sidebar. */
-function edit(el: HTMLElement, id: string) {
+// A pending comment or reply is edited where it is drawn: in its box, or in its thread.
+let editing: { id: string; form: HTMLFormElement; at: HTMLElement } | null = null;
+function edit(btn: HTMLElement, id: string) {
   const hit = find(id);
-  if (!hit) return;
+  const at = btn.closest<HTMLElement>('.gr-thread, .gr-note');
+  if (!hit || !at) return;
   const { c, cm } = hit;
-  const inSide = !!el.closest('.gr-side');
-  el.replaceChildren(composer({
-    label: 'Edit comment', text: cm.text, submit: 'Save',
-    save: (text) => {
-      cm.text = text;
-      cm.at = new Date().toISOString();
-      store.set(keyOf(c), listOf(c));
-      for (const x of $$(`.gr-note[data-note-id="${id}"]`)) if (x === el || !x.querySelector('form')) paintNote(x, cm);
-      paintSide();
-    },
-    cancel: () => { if (inSide) paintSide(); else paintNote(el, cm); },
-  }));
-  focusIn(el);
+  const done = () => { editing = null; changed(c, cm.thread ? [] : [cm.path], [cm.thread ?? cm.id]); };
+  editing = {
+    id, at,
+    form: composer({ label: cm.kind === 'reply' ? 'Edit reply' : 'Edit comment', text: cm.text, edit: true, save: (text) => { cm.text = text; cm.at = now(); done(); }, cancel: done }),
+  };
+  if (at.classList.contains('gr-thread')) paintThread(at); else paintNote(at, cm);
+  relayout();
+  focusIn(editing.form);
+}
+const editingHere = (el: HTMLElement, id: string) => editing?.at === el && editing.id === id;
+
+// ---------------------------------------------------------------- the boxes
+/** One box: a thread, a pending comment, or the comment being written (`at` is where it shows on the page's head,
+    null when it is outdated). */
+interface Item { key: string; c: Ctx; cm: ReviewComment; at: Target | null; t?: Thread }
+/** What a pull request shows as boxes, in reading order. A pending reply shows in its thread. */
+function itemsOf(c: Ctx): Item[] {
+  const out: Item[] = [];
+  for (const t of sentOf(c)) out.push({ key: `t:${t.id}`, c, cm: t.cm, at: placeOf(c, t.cm), t });
+  for (const cm of listOf(c)) if (cm.kind !== 'reply') out.push({ key: `n:${cm.id}`, c, cm, at: placeOf(c, cm) });
+  if (draft?.c === c && draft.target) out.push({ key: 'draft', c, cm: { id: 'draft', ...draft.target, text: '', head: c.pr.head, at: '' }, at: draft.target });
+  return byPlace(c, out, (x) => x.at ?? x.cm);
+}
+const viewOf = (c: Ctx) => (view() === 'guide' ? guideOf(c) : diffOf(c));
+const rowCache = new WeakMap<CardState, Line[]>();
+const rowsIn = (st: CardState) => { let r = rowCache.get(st); if (!r) rowCache.set(st, r = st.hunks.flatMap((hk) => hk.lines)); return r; };
+
+/** Where a box goes in a view: beside a line of a card that shows it; else beside a card of its file (a file comment,
+    beside the card it was written on; an outdated one, or a line no card of the view shows, beside the first); else
+    beside the title (a general comment, a file the pull request no longer has). */
+type Spot = { at: 'row'; st: CardState; line: number; side: Side } | { at: 'card'; card: HTMLElement } | { at: 'head' };
+function spotOf(it: Item, scope: HTMLElement): Spot {
+  const { cm, at } = it;
+  if (cm.kind === 'general' || !cm.path) return { at: 'head' };
+  const list = $$('.gr-file', scope).filter((x) => x.dataset.path === cm.path);
+  if (!list.length) return { at: 'head' };
+  if (at?.kind === 'line') for (const card of list) {
+    const st = cards.get(card);
+    if (!st) continue;
+    const rows = rowsIn(st);
+    if (rowAt(rows, at.start!, at.side!) >= 0) return { at: 'row', st, line: at.start!, side: at.side! };
+    if (rowAt(rows, at.end!, at.endSide!) >= 0) return { at: 'row', st, line: at.end!, side: at.endSide! };
+    // The Diff tab's card of the whole file shows a folded line once the reader opens the fold.
+    if (st.whole && rowOf(st, at.start!, at.side!)) return { at: 'row', st, line: at.start!, side: at.side! };
+  }
+  const own = cm.chapter ? list.find((x) => x.closest<HTMLElement>('.gr-sec')?.dataset.chapter === cm.chapter) : undefined;
+  return { at: 'card', card: own ?? list[0] };
+}
+/** Whether a box shows its code: when the lines it is on are not beside it. */
+function showsCode(it: Item) {
+  if (it.cm.kind !== 'line' || !it.cm.code?.length) return false;
+  if (!it.at) return true;
+  const f = it.c.files.get(it.at.path!);
+  return !f || rowAt(rowsOf(f), it.at.start!, it.at.side!) < 0;
 }
 
-// ---------------------------------------------------------------- notes in cards
+// The boxes the code shows itself, where there is no margin.
 const notes = new WeakMap<ReviewComment, Note>();
 const noteOf = (cm: ReviewComment) => { let n = notes.get(cm); if (!n) notes.set(cm, n = { kind: 'comment', cm }); return n; };
-/** The line comments a card shows, under their last line, and the open composer when it is the card's. Only comments
-    written on the guide's head: another head's line numbers may name other lines. */
+// The library keeps a slotted element across redraws while its note is the same object, so each thread keeps one.
+const threadNotes = new Map<string, Note>();
+const threadNote = (id: string) => { let n = threadNotes.get(id); if (!n) threadNotes.set(id, n = { kind: 'thread', id }); return n; };
+/** The boxes a card draws under its lines where there is no margin, each under the last line it is on. */
 export function commentNotes(st: CardState): PierreAnnotation<Note>[] {
+  if (!inCode()) return [];
+  const scope = st.el.closest<HTMLElement>('.gr-view');
+  if (!scope) return [];
   const out: PierreAnnotation<Note>[] = [];
-  const rows = st.whole ? null : st.hunks.flatMap((hk) => hk.lines);
-  for (const cm of listOf(st.ctx)) {
-    if (cm.kind !== 'line' || cm.path !== st.f.path || cm.head !== st.ctx.pr.head) continue;
-    if (rows && rowAt(rows, cm.end!, cm.endSide!) < 0) continue;
-    out.push({ side: cm.endSide === 'o' ? 'deletions' : 'additions', lineNumber: cm.end!, metadata: noteOf(cm) });
+  const rows = rowsIn(st);
+  for (const it of itemsOf(st.ctx)) {
+    const s = spotOf(it, scope);
+    if (s.at !== 'row' || s.st !== st || !it.at) continue;
+    const end = st.whole || rowAt(rows, it.at.end!, it.at.endSide!) >= 0;
+    const [line, side] = end ? [it.at.end!, it.at.endSide!] : [s.line, s.side];
+    const metadata = it.t ? threadNote(it.t.id) : it.key === 'draft' ? draft!.note! : noteOf(it.cm);
+    out.push({ side: side === 'o' ? 'deletions' : 'additions', lineNumber: line, metadata });
   }
-  if (draft?.st === st && draft.note) out.push(draft.note);
   return out;
 }
-export const noteEl = (n: Exclude<Note, { kind: 'move' }>) => (n.kind === 'draft' ? n.form : noteCard(n.cm));
-
-function noteCard(cm: ReviewComment) {
-  const el = h('div', { class: 'gr-note', 'data-note-id': cm.id });
-  paintNote(el, cm);
-  return el;
+export const noteEl = (n: Exclude<Note, { kind: 'move' }>) => (n.kind === 'draft' ? n.form : n.kind === 'thread' ? threadEl(n.id) : noteCard(n.cm));
+/** Draw a list of boxes again in place: what is drawn already is reused, so a box being typed in stays. */
+function fillBoxes(box: HTMLElement, items: Item[]) {
+  const had = new Map($$<HTMLElement>(':scope > [data-key]', box).map((el) => [el.dataset.key!, el]));
+  const kids = items.map((it) => {
+    const el = had.get(it.key);
+    if (el) paintBox(el, it);
+    return el ?? boxEl(it);
+  });
+  if (!kids.length && box.hidden) return;
+  keepTyping(box, () => box.replaceChildren(...kids));
+  box.hidden = !kids.length;
 }
-function paintNote(el: HTMLElement, cm: ReviewComment) {
-  el.replaceChildren(
-    h('div', { class: 'gr-note-head' },
-      h('span', { class: 'gr-note-what', text: cm.kind === 'line' ? lineLabel(cm) : 'The whole file' }),
-      h('span', { class: 'gr-note-pending', text: 'Pending' }),
-      h('button', { class: 'k-btn is-ghost is-sm', type: 'button', 'data-note-edit': cm.id }, 'Edit'),
-      h('button', { class: 'k-btn is-ghost is-sm is-icon', type: 'button', 'data-note-del': cm.id, 'aria-label': 'Delete comment', title: 'Delete', html: ICON.x })),
-    h('p', { class: 'gr-note-text', text: cm.text }));
-}
-/** A card's file comments, under its header, with the open file composer when it is the card's. */
+/** A card's boxes under its header where there is no margin: its file's comments, and those that cannot sit on a line. */
 export function fileNotes(c: Ctx, card: HTMLElement) {
   const box = $('.gr-notes', card);
   if (!box) return;
-  const path = card.dataset.path;
-  const kids: HTMLElement[] = listOf(c).filter((cm) => cm.kind === 'file' && cm.path === path).map(noteCard);
-  if (draft?.card === card) kids.push(draft.form);
-  if (!kids.length && box.hidden) return;
-  box.replaceChildren(...kids);
-  box.hidden = !kids.length;
+  const scope = card.closest<HTMLElement>('.gr-view');
+  fillBoxes(box, inCode() && scope ? itemsOf(c).filter((it) => { const s = spotOf(it, scope); return s.at === 'card' && s.card === card; }) : []);
+}
+/** The boxes under the title where there is no margin: comments on the pull request as a whole. */
+function headNotes(c: Ctx) {
+  const head = $('.gr-head', c.root);
+  if (!head) return;
+  let box = $('.gr-head-notes', head);
+  if (!box) head.append(box = h('div', { class: 'gr-head-notes', hidden: true }));
+  const scope = viewOf(c);
+  fillBoxes(box, inCode() ? itemsOf(c).filter((it) => spotOf(it, scope).at === 'head') : []);
 }
 
-// ---------------------------------------------------------------- the sidebar
-const side = () => document.getElementById('gr-side');
-export const sideOpen = () => document.body.classList.contains('gr-side-open');
-let parts: { list: HTMLElement; general: HTMLTextAreaElement; meta: HTMLElement; send: HTMLButtonElement; why: HTMLElement } | null = null;
+/** A box's element: a thread, a pending comment, or the composer of a new one. */
+function boxEl(it: Item) {
+  if (it.key === 'draft') return draft!.form;
+  return it.t ? threadEl(it.t.id) : noteCard(it.cm);
+}
+function paintBox(el: HTMLElement, it: Item) {
+  if (it.t) paintThread(el); else if (it.key !== 'draft') paintNote(el, it.cm);
+}
+function noteCard(cm: ReviewComment) {
+  const el = h('div', { class: 'gr-note', 'data-note-id': cm.id, 'data-key': `n:${cm.id}` });
+  paintNote(el, cm);
+  return el;
+}
+const btn = (text: string, attrs: Record<string, string>, icon?: string) =>
+  h('button', { class: `k-btn is-ghost is-sm${icon ? ' is-icon' : ''}`, type: 'button', ...attrs, html: icon }, icon ? null : text);
+/** A pending comment's box: where it is, its words, and Edit, Send and Delete. */
+function paintNote(el: HTMLElement, cm: ReviewComment) {
+  el.classList.toggle('is-active', looking === el.dataset.key);
+  if (editingHere(el, cm.id)) { keepTyping(el, () => el.replaceChildren(editing!.form)); return; }
+  const c = find(cm.id)?.c;
+  const at = c ? placeOf(c, cm) : cm;
+  fill(el,
+    h('div', { class: 'gr-note-head' },
+      h('span', { class: 'gr-note-what', text: placeLabel(at ?? cm) }),
+      at ? null : h('span', { class: 'gr-chip is-outdated', text: 'Outdated', title: `Written on ${cm.head.slice(0, 7)}. The code it was on has changed since.` }),
+      h('span', { class: 'gr-chip is-pending', text: 'Pending' }), h('span', { class: 'gr-spacer' }),
+      btn('Edit', { 'data-note-edit': cm.id }),
+      btn(sendWord(), { 'data-note-now': cm.id, title: sendTitle('this comment') }),
+      btn('Delete', { 'data-note-del': cm.id, 'aria-label': 'Delete comment', title: 'Delete' }, ICON.x)),
+    c && showsCode({ key: '', c, cm, at }) ? codeBlock(cm.code!) : null,
+    h('p', { class: 'gr-note-text', text: cm.text }));
+}
 
-function build(aside: HTMLElement) {
-  const general = h('textarea', { class: 'gr-field', rows: 2, maxlength: 2000, 'aria-label': 'A general comment' });
-  general.value = store.get<string>('gr:comments-general') ?? '';
-  general.placeholder = ctxs.length > 1 ? 'Comment on the pull request on screen as a whole' : 'Comment on the pull request as a whole';
-  general.addEventListener('input', () => store.set('gr:comments-general', general.value));
-  const form = h('form', { class: 'gr-side-general' }, general,
-    h('div', { class: 'gr-composer-foot' }, hint(), h('button', { class: 'k-btn is-sm', type: 'submit' }, 'Add')));
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const text = general.value.trim();
-    if (!text) { general.focus(); return; }
-    general.value = '';
-    store.set('gr:comments-general', '');
-    add(active(), { kind: 'general' }, text);
+// ---------------------------------------------------------------- threads
+/** Resolved threads the reader opened again to read. */
+const unfolded = new Set<string>();
+function threadEl(id: string) {
+  const el = h('div', { class: 'gr-note gr-thread', 'data-thread-id': id, 'data-key': `t:${id}`, 'data-uncommentable': '' });
+  paintThread(el);
+  return el;
+}
+const when = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(+d) ? '' : d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
+function postEl(p: Post, threadHead: string) {
+  return h('li', { class: `gr-post${p.by === 'claude' ? ' is-claude' : ''}` },
+    h('div', { class: 'gr-post-by' }, h('b', { text: authorOf(p.by, p.uid) }), h('time', { datetime: p.at, text: when(p.at) }),
+      p.by === 'claude' && p.head && p.head !== threadHead ? h('span', { class: 'gr-post-head', title: 'The head commit it answers on', text: p.head.slice(0, 7) }) : null),
+    h('p', { class: 'gr-note-text', text: p.text }));
+}
+function pendingPost(el: HTMLElement, r: ReviewComment) {
+  if (editingHere(el, r.id)) return h('li', { class: 'gr-post is-editing', 'data-note-id': r.id }, editing!.form);
+  return h('li', { class: 'gr-post is-pending', 'data-note-id': r.id },
+    h('div', { class: 'gr-post-by' }, h('b', { text: 'You' }), h('span', { class: 'gr-chip is-pending', text: 'Pending' }), h('span', { class: 'gr-spacer' }),
+      btn('Edit', { 'data-note-edit': r.id }),
+      btn(sendWord(), { 'data-note-now': r.id, title: sendTitle('this reply') }),
+      btn('Delete', { 'data-note-del': r.id, 'aria-label': 'Delete reply', title: 'Delete' }, ICON.x)),
+    h('p', { class: 'gr-note-text', text: r.text }));
+}
+/** A thread: where it is, its comment and what came after, the replies waiting to be sent, and its Reply box. A
+    resolved one folds to one line until the reader opens it. */
+function paintThread(el: HTMLElement) {
+  const t = threadOf(el.dataset.threadId);
+  el.hidden = !t;
+  if (!t) { if (draft?.thread === el) draft = null; el.replaceChildren(); return; }
+  el.classList.toggle('is-active', looking === el.dataset.key);
+  const at = placeOf(t.c, t.cm);
+  // A thread being replied to stays open, even when it is resolved meanwhile.
+  const folded = t.resolved && !unfolded.has(t.id) && draft?.thread !== el;
+  const pending = listOf(t.c).filter((x) => x.kind === 'reply' && x.thread === t.id);
+  el.classList.toggle('is-resolved', t.resolved);
+  el.classList.toggle('is-folded', folded);
+  const what = h('span', { class: 'gr-note-what', text: placeLabel(at ?? t.cm) });
+  const chips = [
+    at ? null : h('span', { class: 'gr-chip is-outdated', text: 'Outdated', title: `Written on ${t.cm.head.slice(0, 7)}. The code it was on has changed since.` }),
+    t.resolved ? h('span', { class: 'gr-chip is-resolved', text: 'Resolved' }) : null,
+  ];
+  if (folded) {
+    keepTyping(el, () => fill(el, h('div', { class: 'gr-note-head' }, what, ...chips,
+      h('span', { class: 'gr-thread-gist', text: firstLine(t.posts.at(-1)?.text ?? t.cm.text) }), btn('Show', { 'data-thread-fold': t.id }))));
+    return;
+  }
+  const code = showsCode({ key: '', c: t.c, cm: t.cm, at, t }) ? codeBlock(t.cm.code!) : null;
+  const reply = draft?.thread === el ? draft.form : h('button', { class: 'gr-reply', type: 'button', 'data-thread-reply': t.id }, 'Reply…');
+  keepTyping(el, () => fill(el,
+    h('div', { class: 'gr-note-head' }, what, ...chips, h('span', { class: 'gr-spacer' }),
+      t.resolved ? btn('Hide', { 'data-thread-fold': t.id }) : null, btn(t.resolved ? 'Reopen' : 'Resolve', { 'data-thread-resolve': t.id })),
+    code,
+    h('ol', { class: 'gr-posts' },
+      postEl({ id: t.id, by: 'reader', uid: t.uid, text: t.cm.text, at: t.cm.at, head: t.cm.head }, t.cm.head),
+      ...t.posts.map((p) => postEl(p, t.cm.head)), ...pending.map((r) => pendingPost(el, r))),
+    h('div', { class: 'gr-thread-reply' }, reply)));
+}
+function codeBlock(code: NonNullable<ReviewComment['code']>) {
+  return h('pre', { class: 'gr-note-code' }, ...code.slice(0, 4).map(([op, s]) => h('span', { class: op === '+' ? 'add' : op === '-' ? 'del' : '', text: `${op === ' ' ? ' ' : op === '-' ? '−' : '+'} ${s}` })),
+    code.length > 4 ? h('span', { class: 'more', text: `${code.length - 4} more lines` }) : null);
+}
+async function resolve(id: string) {
+  const t = threadOf(id);
+  if (!t) return;
+  const to = !t.resolved;
+  if (!to) unfolded.add(id); else unfolded.delete(id);
+  if (await mark(t, to)) sound.play(to ? 'select' : 'deselect');
+  else toast('Could not save that. Try again.');
+}
+function fold(id: string) {
+  if (unfolded.has(id)) unfolded.delete(id); else unfolded.add(id);
+  for (const el of $$<HTMLElement>('.gr-thread')) if (el.dataset.threadId === id) paintThread(el);
+  relayout();
+  sound.play('toggle');
+}
+// A thread that changes in the database (an answer from Claude, a send, a mark) is drawn again where it shows.
+onThreads((ch) => { for (const [c, { ids, paths }] of ch) repaint(c, paths, ids); });
+
+// ---------------------------------------------------------------- the margin
+// Each pull request's panel holds a margin layer at its right, and the boxes of the view on screen are laid in it,
+// each level with what it is on. Laying out reads where those are and writes only the boxes' tops, once a frame.
+const layers = new Map<Ctx, HTMLElement>();
+function layerOf(c: Ctx) {
+  let l = layers.get(c);
+  if (!l) { c.root.append(l = h('div', { class: 'gr-margin', 'data-uncommentable': '' })); layers.set(c, l); }
+  return l;
+}
+const GAP = 8;
+let queued = false;
+/** Lay the margin out in the next frame. */
+export function relayout() {
+  if (queued) return;
+  queued = true;
+  requestAnimationFrame(() => { queued = false; layout(active()); });
+}
+/** A card drew its code: its rows are where the boxes beside it go. */
+export function noteMounted(st: CardState) {
+  if (inMargin() && itemsOf(st.ctx).some((it) => it.cm.path === st.f.path)) relayout();
+}
+function layout(c: Ctx) {
+  const items = inMargin() ? itemsOf(c) : [];
+  const on = items.length > 0;
+  if (on !== document.body.classList.contains('gr-notes-on')) keepPlace(c, () => document.body.classList.toggle('gr-notes-on', on));
+  for (const [x, l] of layers) if (x !== c) l.replaceChildren();
+  if (!on) { layers.get(c)?.replaceChildren(); c.root.style.minHeight = ''; return; }
+  const layer = layerOf(c);
+  const had = new Map($$<HTMLElement>(':scope > [data-key]', layer).map((el) => [el.dataset.key!, el]));
+  const boxes = items.map((it) => {
+    let el = had.get(it.key), fresh = false;
+    if (el) had.delete(it.key);
+    else { el = boxEl(it); fresh = true; }
+    el.classList.add('gr-box');
+    if (fresh) el.style.transition = 'none';
+    if (el.parentElement !== layer) layer.append(el);
+    return { it, el, fresh };
   });
-  form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); form.requestSubmit(); } });
-  parts = {
-    list: h('div', { class: 'gr-side-list' }), general, meta: h('span', { class: 'gr-side-meta' }),
-    send: h('button', { class: 'k-btn is-primary', type: 'button', 'data-note-send': '' }), why: h('p', { class: 'gr-side-why', hidden: true }),
-  };
-  aside.append(
-    h('header', { class: 'gr-side-head' }, h('b', {}, 'Comments'), parts.meta,
-      h('button', { class: 'k-btn is-ghost is-icon is-sm', type: 'button', 'data-side-close': '', 'aria-label': 'Close comments', title: 'Close', html: ICON.x })),
-    h('div', { class: 'gr-side-body' }, form, parts.list),
-    h('footer', { class: 'gr-side-foot' }, parts.why, parts.send));
+  for (const el of had.values()) el.remove();
+  // Reads, then writes.
+  const scope = viewOf(c);
+  const base = layer.getBoundingClientRect().top;
+  const head = $('.gr-head h1', c.root)?.getBoundingClientRect().top ?? base;
+  const placed = boxes.map((b, i) => ({ ...b, i, y: 0, want: topOf(spotOf(b.it, scope), head) - base, hgt: b.el.offsetHeight }));
+  const order = [...placed].sort((a, b) => a.want - b.want || a.i - b.i);
+  const k = order.findIndex((p) => p.it.key === looking);
+  // The box the reader looks at sits level with what it is on; the others make room above and below it.
+  const down = (from: number, y: number) => { for (let i = from; i < order.length; i++) { order[i].y = Math.max(order[i].want, y); y = order[i].y + order[i].hgt + GAP; } };
+  if (k < 0) down(0, 0);
+  else {
+    order[k].y = Math.max(order[k].want, 0);
+    down(k + 1, order[k].y + order[k].hgt + GAP);
+    let y = order[k].y - GAP;
+    for (let i = k - 1; i >= 0; i--) { order[i].y = Math.min(order[i].want, y - order[i].hgt); y = order[i].y - GAP; }
+    if (order[0].y < 0) down(0, 0);
+  }
+  for (const p of placed) p.el.style.top = `${Math.round(p.y)}px`;
+  const bottom = Math.max(...placed.map((p) => p.y + p.hgt));
+  c.root.style.minHeight = `${Math.ceil(bottom + 24)}px`;
+  // A box new to the margin appears in its place; after that, it moves.
+  requestAnimationFrame(() => { for (const p of placed) if (p.fresh) p.el.style.transition = ''; });
+}
+/** Where a box's spot is on screen, from the top of the viewport. A card that has not drawn its code yet keeps room
+    for its rows, 20 px each, and 28 px for each fold. */
+function topOf(s: Spot, head: number) {
+  if (s.at === 'head') return head;
+  if (s.at === 'card') return s.card.getBoundingClientRect().top;
+  const card = s.st.el as HTMLElement;
+  if (card.classList.contains('collapsed')) return card.getBoundingClientRect().top;
+  const row = rowOf(s.st, s.line, s.side);
+  if (row) return row.getBoundingClientRect().top;
+  const rows = rowsIn(s.st), i = Math.max(0, rowAt(rows, s.line, s.side));
+  let n = 0, hunk = 0;
+  for (const hk of s.st.hunks) { if (n + hk.lines.length > i) break; n += hk.lines.length; hunk++; }
+  return ($('.gr-code', card) ?? card).getBoundingClientRect().top + i * 20 + (hunk + 1) * 28;
+}
+/** Change the layout without moving what the reader is reading: the card at the reading line, or the one a new
+    comment is on, stays where it is on screen. */
+function keepPlace(c: Ctx, change: () => void) {
+  const scope = viewOf(c);
+  const y = innerHeight * 0.3;
+  const at = (draft?.st?.el as HTMLElement | undefined) ?? $$('.gr-card', scope).find((x) => { const r = x.getBoundingClientRect(); return r.top <= y && r.bottom > y; });
+  const top = at?.getBoundingClientRect().top ?? 0;
+  change();
+  if (at) scrollBy(0, at.getBoundingClientRect().top - top);
 }
 
-/** Open or close the sidebar. Returns whether the page has one. */
-export function toggleSide(open = !sideOpen()) {
-  const aside = side();
-  if (!aside) return false;
-  if (open && !parts) build(aside);
-  document.body.classList.toggle('gr-side-open', open);
-  aside.hidden = !open;
-  for (const b of $$('[data-side-toggle]')) b.setAttribute('aria-expanded', String(open));
-  store.set('gr:comments-open', open);
-  if (open) { paintSide(); void refreshCanSend(); }
-  return true;
+// ---------------------------------------------------------------- looking at a box
+// A click on a box brings it forward: it comes level with what it is on, a little nearer the code, and the lines it
+// is on are selected. A press anywhere else, or Escape, lets it go.
+let looking: string | null = null;
+let lit: CardState | null = null;
+function look(key: string | null, layoutNow = true) {
+  if (key === looking) return;
+  looking = key;
+  if (lit) { lit.inst?.setSelectedLines(null); lit = null; }
+  for (const el of $$<HTMLElement>('[data-key]')) el.classList.toggle('is-active', !!key && el.dataset.key === key);
+  if (key) void light(key);
+  if (layoutNow) relayout();
+}
+async function light(key: string) {
+  const c = active();
+  const it = itemsOf(c).find((x) => x.key === key);
+  if (!it?.at || it.at.kind !== 'line') return;
+  const s = spotOf(it, viewOf(c));
+  if (s.at !== 'row') return;
+  await mount(s.st.el);
+  if (looking !== key) return;
+  s.st.inst?.setSelectedLines(rangeOf(it.at));
+  lit = s.st;
 }
 
-function sideItem(c: Ctx, cm: ReviewComment) {
-  const stale = cm.head !== c.pr.head;
-  const go = cm.kind === 'general' ? null : h('button', { class: 'gr-side-go', type: 'button', 'data-note-go': cm.id, title: 'Show it in the code' }, cm.kind === 'line' ? lineLabel(cm) : 'The whole file');
-  return h('article', { class: 'gr-side-item', 'data-note-id': cm.id },
-    go || stale ? h('div', { class: 'gr-side-where' }, go, stale ? h('span', { class: 'gr-side-stale', text: `on ${cm.head.slice(0, 7)}, an older commit` }) : null) : null,
-    cm.code?.length ? h('pre', { class: 'gr-side-code' }, ...cm.code.slice(0, 4).map(([op, s]) => h('span', { class: op === '+' ? 'add' : op === '-' ? 'del' : '', text: `${op === ' ' ? ' ' : op === '-' ? '−' : '+'} ${s}` })),
-      cm.code.length > 4 ? h('span', { class: 'more', text: `${cm.code.length - 4} more lines` }) : null) : null,
-    h('p', { class: 'gr-note-text', text: cm.text }),
-    h('div', { class: 'gr-side-acts' },
-      h('button', { class: 'k-btn is-ghost is-sm', type: 'button', 'data-note-edit': cm.id }, 'Edit'),
-      h('button', { class: 'k-btn is-ghost is-sm', type: 'button', 'data-note-del': cm.id }, 'Delete')));
+// ---------------------------------------------------------------- showing and hiding
+/** Show or hide the comments. */
+export function toggleNotes(show = hidden) {
+  setHidden(!show);
 }
-interface Sent { at: string; items: { key: string; list: ReviewComment[] }[] }
-function paintSide() {
-  if (!parts || !sideOpen()) return;
-  const n = total();
-  const groups: HTMLElement[] = [];
+function setHidden(on: boolean) {
+  if (on === hidden) return;
+  hidden = on;
+  store.set('gr:notes-hidden', on);
+  if (on) look(null, false);
+  redrawAll();
+}
+/** Draw every pull request's comments again, after the screen narrows or widens or the reader hides or shows them. */
+function redrawAll() {
   for (const c of ctxs) {
-    const list = ordered(c);
-    if (!list.length) continue;
-    if (ctxs.length > 1) groups.push(h('h3', { class: 'gr-side-pr' }, c.pr.number != null ? h('span', { class: 'n', text: `#${c.pr.number}` }) : null, ` ${c.pr.title}`));
-    let at: string | null | undefined;
-    for (const cm of list) {
-      const key = cm.kind === 'general' ? null : cm.path;
-      if (key !== at) {
-        at = key;
-        const [name, dir] = key ? split(key) : ['General', ''];
-        groups.push(h('h4', { class: 'gr-side-file', title: key ?? '' }, h('span', { class: 'name', text: name }), dir ? h('span', { class: 'dir', text: dir }) : null));
-      }
-      groups.push(sideItem(c, cm));
-    }
+    for (const st of allDrawn(c)) redrawNotes(st);
+    for (const el of $$('.gr-file', c.root)) fileNotes(c, el);
+    headNotes(c);
   }
-  if (!groups.length) {
-    const last = store.get<Sent>('gr:comments-sent');
-    const k = last?.items.reduce((s, x) => s + x.list.length, 0) ?? 0;
-    groups.push(h('div', { class: 'gr-side-empty' },
-      h('p', { class: 'lead', text: 'No comments yet.' }),
-      h('p', {}, 'Hover a line and press ', h('b', {}, '+'), '. For a block of lines, click a line number, Shift-click another, and press ', h('b', {}, '+'), ', or drag the ', h('b', {}, '+'), ' over them. The speech bubble in a file’s header comments on the whole file; the box above, on the whole pull request. Send them to Claude together when you are done.'),
-      k ? h('button', { class: 'k-btn is-sm', type: 'button', 'data-note-restore': '' }, `Bring back the ${k} sent at ${new Date(last!.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`) : null));
-  }
-  parts.list.replaceChildren(...groups);
-  parts.meta.textContent = n ? `${n} pending` : '';
-  parts.send.textContent = n ? `Send ${plural(n)} to Claude` : 'Send to Claude';
-  parts.send.disabled = !n;
-  paintWhy();
+  paintBar();
+  relayout();
 }
-function paintWhy() {
-  if (!parts) return;
-  parts.why.hidden = canSend === 'available' || !total();
-  parts.why.textContent = canSend === 'writers_only' ? 'Only the page’s editors can send to Claude, so Send copies your comments to paste in your chat.'
-    : canSend === 'no_session' ? 'No Claude session is watching this page, so Send copies your comments to paste in your chat.'
-    : 'Send copies your comments, to paste in your chat with Claude.';
-}
-/** The count on the bar's Comments button. */
-function paintCount() {
-  const n = total();
-  for (const b of $$('[data-side-toggle]')) {
+wide.addEventListener('change', redrawAll);
+
+/** The bar: the Comments button, which shows or hides them, with their count; the Send button, while any wait. */
+function paintBar() {
+  const n = total(), m = ctxs.reduce((s, c) => s + sentOf(c).length, 0) + n;
+  for (const b of $$('[data-notes-toggle]')) {
     const badge = $('.gr-note-count', b);
-    if (badge) { badge.textContent = String(n); badge.hidden = !n; }
-    b.setAttribute('aria-label', n ? `Comments, ${n} pending` : 'Comments');
+    if (badge) { badge.textContent = String(m); badge.hidden = !m; }
+    b.setAttribute('aria-pressed', String(!hidden));
+    b.setAttribute('aria-label', `${hidden ? 'Show' : 'Hide'} comments${m ? `, ${m}` : ''}`);
+    b.title = `${hidden ? 'Show' : 'Hide'} comments (c)`;
+  }
+  for (const b of $$<HTMLButtonElement>('[data-note-send]')) {
+    b.hidden = !n;
+    b.disabled = sending;
+    $('.n', b)!.textContent = canSend === 'available' ? `Send ${n}` : `Copy ${n}`;
+    $('.long', b)!.textContent = canSend === 'available' ? 'to Claude' : 'for the chat';
+    b.title = canSend === 'available' ? `Send the ${plural(n)} waiting to Claude, together` : whyCopy();
   }
 }
-
-/** A comment's place in the code: its line in a card, or its file's card, on the tab the reader is on. */
-function go(id: string) {
-  const hit = find(id);
-  if (!hit) return;
-  const { c, cm } = hit;
-  if (c !== active()) choose(c);
-  if (overlay.matches) toggleSide(false);
-  const inDiff = view() === 'diff';
-  if (cm.kind === 'line' && cm.head === c.pr.head) void jump(c, cm.path!, cm.end!, cm.endSide!, null, inDiff ? diffOf(c) : null);
-  else toCard(c, cm.path!, inDiff ? diffOf(c) : guideOf(c));
-  sound.play('nav');
-}
-
-/** Put the last batch sent back on the page. */
-function restore() {
-  const last = store.get<Sent>('gr:comments-sent');
-  store.set('gr:comments-sent', null);
-  for (const it of last?.items ?? []) {
-    const c = ctxs.find((x) => x.pr.key === it.key);
-    if (!c) continue;
-    const have = new Set(listOf(c).map((x) => x.id));
-    listOf(c).push(...it.list.filter((x) => !have.has(x.id)));
-    changed(c, it.list.map((x) => x.path));
-  }
-  sound.play('reveal');
-}
+const whyCopy = () => (canSend === 'writers_only' ? 'Only the page’s editors can send to Claude, so this copies them to paste in your chat.'
+  : canSend === 'no_session' ? 'No Claude session is watching this page, so this copies them to paste in your chat.'
+  : 'This copies them, to paste in your chat with Claude.');
 
 // ---------------------------------------------------------------- send
-let comments: CommentsCap | null = null, db: DbCap | null = null, uid: string | null = null, canSend: CanSendToClaude = 'off';
+let comments: CommentsCap | null = null, canSend: CanSendToClaude = 'off';
 const use = <K extends keyof CapabilityMap>(n: K) => window.claude?.use(n).catch(() => null) ?? Promise.resolve(null);
 async function refreshCanSend() {
+  const was = canSend;
   canSend = comments ? await comments.canSendToClaude().catch(() => 'off' as const) : 'off';
-  paintWhy();
+  if (canSend !== was) for (const c of ctxs) repaint(c, [], listOf(c).map((cm) => cm.thread ?? cm.id));
 }
 
 type Batch = { c: Ctx; list: ReviewComment[] }[];
 const plural = (n: number) => `${n} comment${n === 1 ? '' : 's'}`;
 const prName = (c: Ctx) => `${c.pr.number != null ? `#${c.pr.number} ` : ''}${c.pr.title}, at ${c.pr.head.slice(0, 7)}`;
 /** The text Claude is sent: each comment's place, a few of its lines of code, and its words, numbered in reading
-    order. Within `limit` bytes it drops the code first, then the comments that do not fit, and says where the rest
-    are: in the page database at `ref`, or still on the page. Returns the comments it holds. */
+    order; a reply names its thread's place and quotes the comment that opened it. Within `limit` bytes it drops the
+    code first, then the comments that do not fit, and says where the rest are: in the page database at `ref`, or
+    still on the page. Returns the comments it holds. */
 function summary(batch: Batch, limit: number, ref: string | null) {
   const n = batch.reduce((s, b) => s + b.list.length, 0);
   const enc = new TextEncoder();
   const size = (s: string) => enc.encode(s).length;
   const top = batch.length === 1 ? `Review comments on ${prName(batch[0].c)}: ${plural(n)}` : `Review comments on ${batch.length} pull requests: ${plural(n)}`;
   const item = (c: Ctx, cm: ReviewComment, i: number, code: boolean) => {
-    const lines = [`${i}. ${where(cm)}${cm.head !== c.pr.head ? `, written on ${cm.head.slice(0, 7)}` : ''}`];
+    const t = cm.kind === 'reply' ? threadOf(cm.thread) : null;
+    const lines = cm.kind === 'reply'
+      ? [`${i}. Reply on ${t ? where(t.cm) : 'a thread'}`, ...(t ? [`   > ${firstLine(t.cm.text)}`] : [])]
+      : [`${i}. ${where(cm)}${cm.head !== c.pr.head ? `, written on ${cm.head.slice(0, 7)}` : ''}`];
     if (code) for (const [op, s] of cm.code?.slice(0, 3) ?? []) lines.push(`   | ${op} ${s}`);
     for (const t of cm.text.split('\n')) lines.push(`   ${t}`);
     return lines.join('\n');
@@ -446,96 +737,120 @@ function summary(batch: Batch, limit: number, ref: string | null) {
   const some = compose(false, limit - size(foot(n)));
   return { text: some.text + foot(n - some.held.size), held: some.held };
 }
-
-/** Take the comments sent off the page, and keep the batch to bring back. */
-function sent(batch: Batch, held: Set<ReviewComment> | null, msg: string) {
-  const items: Sent['items'] = batch.map(({ c, list }) => ({ key: c.pr.key, list: held ? list.filter((cm) => held.has(cm)) : list }));
-  store.set('gr:comments-sent', { at: new Date().toISOString(), items });
-  for (const [i, { c }] of batch.entries()) {
-    const gone = items[i].list;
-    lists.set(c, listOf(c).filter((cm) => !gone.includes(cm)));
-    changed(c, gone.map((cm) => cm.path));
-  }
-  sound.play('send');
-  toast(msg);
+/** The send as the database keeps it. A reply carries its thread as the reader saw it, so Claude reads it in one place. */
+function sendDoc(batch: Batch): SendDoc {
+  const withThread = (cm: ReviewComment): SentComment => {
+    const t = cm.kind === 'reply' ? threadOf(cm.thread) : null;
+    return t ? { ...cm, on: { where: where(t.cm), text: t.cm.text }, before: t.posts.slice(-8).map((p) => ({ by: p.by, text: p.text })) } : cm;
+  };
+  return { sentAt: now(), prs: batch.map(({ c, list }) => ({ key: c.pr.key, number: c.pr.number, title: c.pr.title, head: c.pr.head, comments: list.map(withThread) })) };
 }
 
-// Send never makes the reader wait on the page: the database write and the send run together, and a failure keeps
-// every comment where it was. The button stays off while a send is out (the first may wait on a consent prompt), so
-// one batch never opens two threads.
-let sending = false;
-async function send() {
-  const batch: Batch = ctxs.map((c) => ({ c, list: ordered(c) })).filter((b) => b.list.length);
+/** Keep the send (in the page database, else in this browser), so what it held stays on the page as threads, and
+    take the comments sent off the pending list. `held`: the comments the text holds, when it could not hold them all;
+    the rest went only if the database took the send, and stay pending if not. */
+async function sent(batch: Batch, send: string, held: Set<ReviewComment> | null, copied: boolean) {
   const n = batch.reduce((s, b) => s + b.list.length, 0);
-  if (!n || sending) return;
+  const inDb = await saveSend(send, sendDoc(batch));
+  const went = inDb ? null : held;
+  const kept = batch.map(({ c, list }) => ({ c, list: went ? list.filter((cm) => went.has(cm)) : list })).filter((b) => b.list.length);
+  if (!inDb) keepLocal(send, sendDoc(kept));
+  for (const { c, list } of kept) {
+    lists.set(c, listOf(c).filter((cm) => !list.includes(cm)));
+    // The box the reader was looking at is a thread now.
+    if (looking?.startsWith('n:') && list.some((cm) => `n:${cm.id}` === looking)) looking = `t:${looking.slice(2)}`;
+    changed(c, list.map((cm) => (cm.thread ? undefined : cm.path)), list.map((cm) => cm.thread));
+  }
+  sound.play('send');
+  toast(copied ? 'Copied. Paste it in your chat with Claude.' : went ? `Sent ${went.size} of ${n}. Send again for the rest.` : n === 1 ? 'Sent. Claude will answer in its thread.' : 'Sent. Claude will answer in each thread.');
+}
+
+// A send never makes the reader wait on the page: it goes out, then the database write. A failure keeps every comment
+// where it was. Sends go one at a time (the first may wait on a consent prompt), so one batch never opens two threads.
+let sending = false;
+/** Send the pending comments: `only` these, or all of them. */
+async function send(only?: ReviewComment[]) {
+  const batch: Batch = ctxs.map((c) => ({ c, list: ordered(c).filter((cm) => !only || only.includes(cm)) })).filter((b) => b.list.length);
+  const n = batch.reduce((s, b) => s + b.list.length, 0);
+  if (!n) return;
+  if (sending) { toast('A send is going out. This one waits with your pending comments.'); paintBar(); return; }
+  const id = `s${Date.now().toString(36)}`;
   if (canSend === 'available' && comments) {
     sending = true;
-    if (parts) parts.send.disabled = true;
-    try { await sendToClaude(batch, n, comments); } finally { sending = false; paintSide(); }
+    paintBar();
+    try { await sendToClaude(batch, n, comments, id); } finally { sending = false; paintBar(); }
     return;
   }
   // Still inside the click, so the clipboard allows it.
-  const { text } = summary(batch, Infinity, null);
+  const { text } = summary(batch, Infinity, refFor(id));
   copyText('# ' + text).then(
-    () => sent(batch, null, 'Copied. Paste it in your chat with Claude.'),
+    () => sent(batch, id, null, true),
     () => toast('Copy failed. Your comments are still here; try again.'),
   );
 }
-async function sendToClaude(batch: Batch, n: number, cap: CommentsCap) {
-  let doc: DocRef | null = null;
-  try { if (db && uid) doc = db.doc(`comments/${uid}/sends/s${Date.now().toString(36)}`); } catch { /* a path the database refuses: send the text alone */ }
-  const { text, held } = summary(batch, MAX_BYTES, doc?.path ?? null);
-  const data = { sentAt: new Date().toISOString(), prs: batch.map(({ c, list }) => ({ number: c.pr.number, title: c.pr.title, head: c.pr.head, comments: list })) };
+async function sendToClaude(batch: Batch, n: number, cap: CommentsCap, id: string) {
+  const { text, held } = summary(batch, MAX_BYTES, refFor(id));
   toast('Sending…');
   const anchor = $('.gr-head h1', active().root) ?? document.body;
-  const [wrote, posted] = await Promise.allSettled([
-    doc ? doc.set(data) : Promise.reject(new Error('no database')),
-    cap.anchorFor(anchor).then((a) => cap.sendToClaude({ anchor: a, text })),
-  ]);
-  if (posted.status === 'rejected') {
-    const code = (posted.reason as { code?: string })?.code;
+  try {
+    await cap.sendToClaude({ anchor: await cap.anchorFor(anchor), text });
+  } catch (e) {
+    const code = (e as { code?: string })?.code;
     if (code === 'consent_required') return toast('Not sent. Allow comments from this page to send them to Claude.');
     if (code === 'rate_limited') return toast('Too many sends. Wait a moment and try again.');
     canSend = 'off';
-    paintWhy();
+    paintBar();
     return toast('Could not reach Claude. Press Send again to copy your comments instead.');
   }
-  // Without the database, the comments that did not fit in the text stay on the page for the next send.
-  const all = wrote.status === 'fulfilled' || held.size === n;
-  sent(batch, all ? null : held, all ? 'Sent. Claude will reply in the comment thread.' : `Sent ${held.size} of ${n}. Send again for the rest.`);
+  await sent(batch, id, held.size === n ? null : held, false);
 }
 
 // ---------------------------------------------------------------- events
+/** Whether a box's key still names one: a click that closes a composer lands on a box on its way out. */
+const live = (key: string) => (key === 'draft' ? !!draft?.target : key.startsWith('n:') ? !!find(key.slice(2)) : !!threadOf(key.slice(2)));
 document.addEventListener('click', (e) => {
-  const t = (e.target as Element).closest<HTMLElement>('button');
+  const el = e.target as Element;
+  const box = el.closest<HTMLElement>('[data-key]');
+  if (box && box.dataset.key !== looking && live(box.dataset.key!)) look(box.dataset.key!);
+  const t = el.closest<HTMLElement>('button');
   if (!t) return;
-  if (t.hasAttribute('data-side-toggle')) { if (toggleSide()) sound.play('toggle'); }
-  else if (t.hasAttribute('data-side-close')) { toggleSide(false); $('[data-side-toggle]')?.focus(); }
+  if (t.hasAttribute('data-notes-toggle')) { toggleNotes(); sound.play('toggle'); }
   else if (t.hasAttribute('data-note-file')) openFile(t.closest<HTMLElement>('.gr-file')!);
-  else if (t.dataset.noteEdit) edit(t.closest<HTMLElement>('[data-note-id]')!, t.dataset.noteEdit);
+  else if (t.hasAttribute('data-note-general')) { const c = ctxOf(t); if (c) openGeneral(c); }
+  else if (t.dataset.noteEdit) edit(t, t.dataset.noteEdit);
   else if (t.dataset.noteDel) remove(t.dataset.noteDel);
-  else if (t.dataset.noteGo) go(t.dataset.noteGo);
+  else if (t.dataset.noteNow) { const hit = find(t.dataset.noteNow); if (hit) void send([hit.cm]); }
+  else if (t.dataset.threadReply) openReply(t.closest<HTMLElement>('.gr-thread')!);
+  else if (t.dataset.threadResolve) void resolve(t.dataset.threadResolve);
+  else if (t.dataset.threadFold) fold(t.dataset.threadFold);
   else if (t.hasAttribute('data-note-send')) void send();
-  else if (t.hasAttribute('data-note-restore')) restore();
 });
+// Before the code takes the press, so a line the reader starts to select is theirs.
+document.addEventListener('pointerdown', (e) => {
+  if (looking && !(e.target as Element).closest?.('[data-key]')) look(null);
+}, true);
 document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape' || !sideOpen() || !side()?.contains(document.activeElement)) return;
-  toggleSide(false);
-  $('[data-side-toggle]')?.focus();
+  if (e.key !== 'Escape' || !looking || (e.target as Element).closest?.('form')) return;
+  look(null);
 });
+document.addEventListener('gr:view', () => { look(null, false); for (const c of ctxs) headNotes(c); relayout(); });
 
-/** At start: the count, the sidebar as the reader left it, and the capabilities that send. */
+/** At start: the threads kept here, the bar, where the boxes go, and the capabilities that send and that bring the
+    threads in from the page database. */
 export function startComments() {
-  paintCount();
-  if (store.get<boolean>('gr:comments-open')) toggleSide(true);
+  startThreads();
+  paintBar();
+  const ro = new ResizeObserver(() => relayout());
+  for (const c of ctxs) { ro.observe(guideOf(c)); ro.observe(diffOf(c)); }
+  relayout();
   if (!window.claude) return;
   void (async () => {
     const [d, user, c] = await Promise.all([use('db'), use('user'), use('comments')]);
     comments = c;
     await refreshCanSend();
     document.addEventListener('visibilitychange', () => { if (!document.hidden) void refreshCanSend(); });
-    if (!d || !user || (await user.can('data.write')) === false) return;
-    uid = await user.id();
-    if (uid) db = d;
+    if (!d || !user) return;
+    const id = await user.id();
+    watchThreads(d, user, id, (await user.can('data.write')) !== false);
   })();
 }

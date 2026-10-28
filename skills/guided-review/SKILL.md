@@ -1,6 +1,6 @@
 ---
 name: guided-review
-description: Builds a guided code review of a pull request or branch, or of several (a stack, or any set to review together), as a Claude Artifact. The page opens with an overview and a before / after of the behavior, then walks the diff as short chapters, each explained in plain words beside its code, core change first and tests, database and generated files last, with review marks, a file tree and syntax-highlighted diffs; with several pull requests, the title is a menu of them. Readers comment on lines, blocks, files or the whole pull request and send the comments to Claude at once, which changes the code and rebuilds the page. Use when asked to walk someone through, explain or prepare a review of what a pull request, a branch or a stack of pull requests changed, to write a review guide, when review comments arrive from a guide page, or when a pull request you drive is green and about to merge.
+description: Builds a guided code review of a pull request or branch, or of several (a stack, or any set to review together), as a Claude Artifact. The page opens with an overview and a before / after of the behavior, then walks the diff as short chapters, each explained in plain words beside its code, core change first and tests, database and generated files last, with review marks, a file tree and syntax-highlighted diffs; with several pull requests, the title is a menu of them. Readers comment on lines, blocks, files or the whole pull request in a margin beside the code, and send each comment to Claude at once or a batch together, which changes the code and rebuilds the page; each sent comment stays as a thread, marked outdated when its code changes, where Claude answers and the reader replies. Use when asked to walk someone through, explain or prepare a review of what a pull request, a branch or a stack of pull requests changed, to write a review guide, when review comments arrive from a guide page, or when a pull request you drive is green and about to merge.
 license: Apache-2.0. Complete terms in LICENSE.txt
 compatibility: Claude Code, or another agent with a shell and git that can publish claude.ai Artifacts. Needs Bun 1.2 or newer; Chrome is optional, for screenshots.
 metadata:
@@ -81,10 +81,11 @@ request: rebuilding from the same `guide.json` and publishing the same file keep
    says so; otherwise call `ArtifactComments` with `action: "watch"`. With no way to publish, hand over
    `guide.preview.html` with its `guide.files/` folder.
 7. **Tell the user** the link in one or two sentences, and the head commit it was written for: they can comment on
-   any line, block, file or the whole pull request, and send the comments to you from the Comments sidebar. Post the
+   any line, block, file or the whole pull request, and send each comment to you at once or a batch together. Post the
    link on the pull request only when the user asks you to.
 8. **Rebuild for a new head** when the pull request moves on: gather again, update the chapters the new commits
    touch, keep the chapter ids, rebuild, and publish to the same link. The page says which commit it was written for.
+   Comment threads carry over on their own, and the page marks the ones whose code changed as outdated.
 
 ## Several pull requests
 
@@ -94,11 +95,13 @@ page for all of them: [stack.md](references/stack.md).
 ## Comments
 
 Readers comment on a line or a block of lines (the **+** in a card's gutter), on a file (the speech bubble in its
-header) or on the whole pull request (the Comments sidebar), and send them all at once. A send is one comment thread
-that starts `Review comments on`, and it wakes the session that published the page. Act on it as
-[comments.md](references/comments.md#act-on-it) says: answer the questions in the thread, make the changes asked for
-on the pull request's branch, rebuild the guide for the new head, publish it to the same link, and reply in one line
-per comment. A comment written with the Claude bar's own comment button wakes you too: read its thread
+header) or on the whole pull request (Comment, under the title), and send each at once or add it to a batch that the
+bar's Send sends together. On a wide screen the comments are boxes in a margin beside the code. Each sent comment stays
+on the page as a thread, and a reply in one is sent the same way. A send is one comment thread that starts `Review
+comments on`, and it wakes the session that published the page. Act on it as
+[comments.md](references/comments.md#act-on-it) says: make the changes asked for on the pull request's branch,
+rebuild the guide for the new head, publish it to the same link, answer each comment in its thread on the page (one
+`ArtifactData` document each), and reply in the comment thread in one line per comment. A comment written with the Claude bar's own comment button wakes you too: read its thread
 (`ArtifactComments` `read` with the `thread_id` that woke you) and act on it the same way.
 
 ## Rules

@@ -12,7 +12,7 @@ import { cards, setDiffStyle, setFold, startDiffStyle, STEP } from './cards';
 import { type Ctx, active, byId, byOwnId, ctxOf, ctxs, diffOf } from './ctx';
 import { markChapter, markFile, progress, saveMarks } from './marks';
 import { choose, current, go, jump, onScroll, pin, show, step, toCard, togglePanel, view } from './nav';
-import { startComments, toggleSide } from './comments';
+import { startComments, toggleNotes } from './comments';
 
 /** Mark a chapter from a click or a key, with its sound; the last chapter reviewed sounds its own. */
 function reviewChapter(c: Ctx, id: string, on: boolean) {
@@ -106,7 +106,7 @@ document.addEventListener('keydown', (e) => {
   const typing = /textarea|select/i.test(t.tagName) || (t.tagName === 'INPUT' && !/checkbox|radio|button/.test((t as HTMLInputElement).type));
   if (e.metaKey || e.ctrlKey || e.altKey || typing || e.composedPath().some((n) => (n as HTMLElement).isContentEditable)) return;
   if (e.key === '[' || e.key === ']') { if (step(e.key === ']' ? 1 : -1)) sound.play('nav'); return; }
-  if (e.key === 'c') { if (toggleSide()) sound.play('toggle'); return; }
+  if (e.key === 'c') { toggleNotes(); sound.play('toggle'); return; }
   if (e.key === 'b') { togglePanel(); sound.play('toggle'); return; }
   if (view() !== 'guide') return;
   if (e.key === 'j' || e.key === 'k') { if (go(e.key === 'j' ? 1 : -1)) sound.play('nav'); }

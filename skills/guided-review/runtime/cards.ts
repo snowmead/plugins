@@ -8,7 +8,7 @@ import { onTheme, themeType } from '../kit/web/theme';
 import { D, split, stat } from './dom';
 import { libs } from './libs';
 import { COMMENT } from './icons';
-import { type Note, commentNotes, fileNotes, noteEl, openLine } from './comments';
+import { type Note, commentNotes, fileNotes, noteEl, noteMounted, openLine } from './comments';
 import type { Ctx } from './ctx';
 
 /** Lines a click on a fold opens. */
@@ -249,12 +249,13 @@ export function mount(card: Element): Promise<void> | undefined {
     st.host = $('diffs-container', host);
     host.style.minHeight = '';
     mounted.add(st);
+    noteMounted(st);
   })();
   return st.mounting;
 }
 
-/** The drawn cards of a pull request that show a file: its chapter cards and its Diff tab card. */
-export const drawnCards = (ctx: Ctx, path: string) => [...mounted].filter((st) => st.ctx === ctx && st.f.path === path);
+/** The drawn cards of a pull request. */
+export const allDrawn = (ctx: Ctx) => [...mounted].filter((st) => st.ctx === ctx);
 /** Draw a card's notes again, after a comment on its file is added, changed or removed. */
 export function redrawNotes(st: CardState) {
   st.inst!.setLineAnnotations(notesOf(st));
@@ -325,7 +326,7 @@ export function setFold(el: Element | null, folded: boolean) {
 // ---------------------------------------------------------------- rows
 /** The row of a line in a rendered card: a removed line by its old number, any other by its new one. Split cards
     number each column by its own side, so the line is looked up in the deletions or the additions column. */
-function rowOf(st: CardState, line: number, side: 'o' | 'n') {
+export function rowOf(st: CardState, line: number, side: 'o' | 'n') {
   const root = st.host?.shadowRoot;
   if (!root) return null;
   if (root.querySelector('[data-diff-type="split"]')) return root.querySelector(`[data-${side === 'o' ? 'deletions' : 'additions'}] [data-line="${line}"]`);

@@ -38,6 +38,8 @@ export function show(v: View) {
   $('.gr-rail')?.toggleAttribute('hidden', v !== 'guide');
   paintPanel();
   if (v === 'diff') renderDiff(c);
+  // The comments' margin follows the view on screen.
+  document.dispatchEvent(new Event('gr:view'));
 }
 
 // ---------------------------------------------------------------- the left column

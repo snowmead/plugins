@@ -6,7 +6,8 @@
    1. scripts: gather.ts and build.ts against a scratch repository: the diff GitHub shows, kinds, scope labels,
       emptied, deleted, renamed, binary and moved code, refs, escaping, and every check that refuses a guide.
    2. page: builds the demo (scripts/demo.ts) and drives it in headless Chrome over DevTools: what the reader sees
-      after each action, review comments (the gutter's "+" dragged with real mouse events, the sidebar, the send), no
+      after each action, review comments (the gutter's "+" dragged with real mouse events, the margin, the sends, the
+      threads sent comments leave, outdated ones, and the page database through a stand-in for the viewer), no
       console errors, and timing budgets (boot ≤ 30 ms, each interaction ≤ 12 ms, a redraw of the cards on screen ≤
       one frame). */
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -382,10 +383,14 @@ async function runPage(name: string, file: string, run: string, expect: Record<s
   }
 }
 
-// Review comments: a line and a file comment kept from an earlier visit draw in their cards and the sidebar; three
-// lines selected by their numbers (a click, then a Shift-click), and the gutter's "+" dragged over three others, each
-// with real mouse events, open a composer for them; a general comment comes from the sidebar; Send (copied here, with
-// no Claude to send to) holds every comment and clears them, and the batch can be brought back.
+// Review comments, in the margin of a wide page: a line and a file comment kept from an earlier visit are boxes level
+// with their line and their file's header; three lines selected by their numbers (a click, then a Shift-click), and
+// the gutter's "+" dragged over three others, each with real mouse events, open a composer beside them; a general
+// comment comes from the Comment button under the title; Add to batch keeps each one pending. The bar's Send (copied
+// here, with no Claude to send to) holds every comment and takes them off the pending list, and they stay as threads,
+// kept in this browser. A click on a box brings it forward and selects its lines. A reply waits with the next send
+// and names its thread; a composer's Send sends at once; Resolve folds a thread; the bar hides and shows the margin;
+// a narrow screen draws the boxes in the code instead.
 async function runComments(file: string) {
   const name = 'comments';
   const tab = await browser(join(dirname(file), `profile-${name}`), { warnings: true });
@@ -405,6 +410,11 @@ async function runComments(file: string) {
       return JSON.stringify(u ? { x: u.left + u.width / 2, y: u.top + u.height / 2 } : null); })()`)) as { x: number; y: number } | null;
   /** The lines the card shows selected. */
   const picked = `[...${root}.querySelectorAll('[data-content] [data-line][data-selected-line]')].map((e) => e.dataset.line).join(' ')`;
+  // A box in the margin, how far its top is from a line's row (0: level with it), and the bar's Send.
+  const helpers = `const box = (key) => document.querySelector('.gr-margin > [data-key="' + key + '"]');
+      const boxBy = (text) => [...document.querySelectorAll('.gr-margin > [data-key]')].find((x) => x.textContent.includes(text));
+      const off = (el, line) => Math.round(el.getBoundingClientRect().top - ${num(0).replace('"0"', '"\' + line + \'"')}.getBoundingClientRect().top);
+      const sendBar = () => $('[data-note-send]').hidden ? '' : $('[data-note-send]').textContent;`;
   try {
     await tab.open('file://' + file);
     await inPage(tab, `const head = window.GR_DATA.prs[0].head;
@@ -414,22 +424,29 @@ async function runComments(file: string) {
       ]));`);
     await tab.open('about:blank');
     await tab.open('file://' + file);
-    take(await inPage(tab, `await sleep(300);
-      r.badge = $('.gr-note-count').textContent;
+    take(await inPage(tab, `await sleep(300); ${helpers}
+      r.bar = $('.gr-note-count').textContent + ' ' + sendBar();
       $('#c-retry-decision').scrollIntoView();
-      r.lineNote = await until(() => card('#c-retry-decision', 'src/webhooks/deliver.ts')?.querySelector('diffs-container .gr-note')?.textContent.includes('Seeded line comment'));
-      r.fileNote = card('#c-retry-decision', 'src/webhooks/backoff.ts').querySelector('.gr-notes .gr-note-text')?.textContent;
-      ms.side = t(() => $('[data-side-toggle]').click());
-      r.sideItems = document.querySelectorAll('.gr-side-item').length;
-      const box = $('.gr-side-general textarea');
-      box.focus();
-      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }));
-      r.typingKeepsKeys = document.body.classList.contains('gr-side-open');
-      box.value = 'Seeded general comment';
-      ms.add = t(() => box.form.requestSubmit());
-      r.added = $('.gr-note-count').textContent + ' ' + document.querySelectorAll('.gr-side-item').length;
+      r.lineNote = await until(() => box('n:cseed1')?.textContent.includes('Seeded line comment'));
+      await until(() => ${root}?.querySelector('[data-line="27"]'));
+      await sleep(300);
+      r.lineLevel = off(box('n:cseed1'), 27);
+      const backoff = card('#c-retry-decision', 'src/webhooks/backoff.ts');
+      r.fileLevel = box('n:cseed2') && Math.round(box('n:cseed2').getBoundingClientRect().top - backoff.getBoundingClientRect().top) + ' ' + box('n:cseed2').querySelector('.gr-note-text').textContent;
+      r.margin = document.body.classList.contains('gr-notes-on') && !card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('.gr-note');
+      ms.general = t(() => $('[data-note-general]').click());
+      await sleep(50);
+      const general = box('draft');
+      const field = general?.querySelector('textarea');
+      r.generalFocused = document.activeElement === field;
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }));
+      r.typingKeepsKeys = $('[data-notes-toggle]').getAttribute('aria-pressed');
+      field.value = 'Seeded general comment';
+      ms.add = t(() => general.querySelector('[data-composer-add]').click());
+      await sleep(50);
+      r.added = sendBar() + ' ' + document.querySelectorAll('.gr-margin > [data-key]').length + ' ' + !!boxBy('Seeded general comment');
       ${num(31)}.scrollIntoView({ block: 'center' });
-      await sleep(100);`));
+      await sleep(150);`));
     // A click on line 37's number, then a Shift-click on 35's, selects 35–37 and puts the "+" on 37. The clicks land on
     // the digits, left of where the "+" shows.
     const digits = (line: number) => `${num(line)}.querySelector('[data-line-number-content]')`;
@@ -440,14 +457,17 @@ async function runComments(file: string) {
       r.plusOnLast = ${root}.querySelector('[data-utility-button]')?.closest('[data-column-number]')?.dataset.columnNumber;`));
     const onLast = await centre(`${root}.querySelector('[data-utility-button]')`);
     if (onLast) await click(onLast);
-    take(await inPage(tab, `await sleep(100);
-      const form = card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('.gr-composer');
+    take(await inPage(tab, `await sleep(150); ${helpers}
+      const form = box('draft');
       r.pickedComposer = form?.querySelector('.gr-composer-where')?.textContent;
+      r.pickedBeside = form && off(form, 35);
       r.pickedKept = ${picked};
-      if (form) { form.querySelector('textarea').value = 'Selected by their numbers'; form.requestSubmit(); }
+      if (form) { form.querySelector('textarea').value = 'Selected by their numbers'; form.querySelector('[data-composer-add]').click(); }
       const saved = JSON.parse(localStorage.getItem('gr:42:comments')).find((c) => c.text === 'Selected by their numbers');
       r.pickedSaved = saved ? saved.start + '-' + saved.end + ' ' + saved.side + saved.endSide + ' ' + saved.code.map((l) => l[0]).join('') : null;
-      r.pickedCleared = await until(() => !${root}.querySelector('[data-selected-line]'));`));
+      await sleep(50);
+      // the comment stays the box the reader looks at, its lines still selected
+      r.pickedLooked = !!boxBy('Selected by their numbers')?.classList.contains('is-active') && ${picked};`));
     const at = JSON.parse(await tab.run(`(() => { const card = (s, p) => [...document.querySelectorAll(s + ' .gr-file')].find((c) => c.dataset.path === p);
       const a = ${num(31)}.getBoundingClientRect(), b = ${num(33)}.getBoundingClientRect();
       return JSON.stringify({ x: a.left + a.width / 2, y: a.top + a.height / 2, y2: b.top + b.height / 2 }); })()`));
@@ -461,25 +481,74 @@ async function runComments(file: string) {
       await mouse('mouseMoved', plus.x, at.y2, true);
       await mouse('mouseReleased', plus.x, at.y2);
     }
-    take(await inPage(tab, `await sleep(100);
-      const form = card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('.gr-composer');
+    take(await inPage(tab, `await sleep(150); ${helpers}
+      r.lookLetGo = !document.querySelector('.gr-margin .is-active:not([data-key="draft"])');
+      const form = box('draft');
       r.composer = form?.querySelector('.gr-composer-where')?.textContent;
       r.composerFocused = document.activeElement === form?.querySelector('textarea');
-      if (form) { form.querySelector('textarea').value = 'Dragged over three lines'; ms.lineAdd = t(() => form.requestSubmit()); }
+      if (form) { form.querySelector('textarea').value = 'Dragged over three lines'; ms.lineAdd = t(() => form.querySelector('[data-composer-add]').click()); }
       const saved = JSON.parse(localStorage.getItem('gr:42:comments')).find((c) => c.text === 'Dragged over three lines');
       r.dragged = saved ? saved.start + '-' + saved.end + ' ' + saved.side + saved.endSide + ' ' + saved.code.map((l) => l[0]).join('') : null;
-      r.draggedDrawn = await until(() => [...card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelectorAll('diffs-container .gr-note-text')].some((p) => p.textContent === 'Dragged over three lines'));
+      r.draggedDrawn = await until(() => boxBy('Dragged over three lines'));
+      r.pending = sendBar();
       let copied = null;
       navigator.clipboard.writeText = (text) => { copied = text; return Promise.resolve(); };
       $('[data-note-send]').click();
       await until(() => copied);
+      await sleep(150);
       r.sent = !!copied && copied.startsWith('# Review comments on #42 ') && copied.includes(': 5 comments')
         && copied.includes('1. General\\n   Seeded general comment') && copied.includes('src/webhooks/backoff.ts (the file)')
         && copied.includes('src/webhooks/deliver.ts:27\\n') && copied.includes('src/webhooks/deliver.ts:31-33\\n   | + ')
         && copied.includes('src/webhooks/deliver.ts:35-37\\n');
-      r.cleared = $('.gr-note-count').hidden && !document.querySelector('.gr-guide .gr-note') && localStorage.getItem('gr:42:comments') === '[]';
-      $('[data-note-restore]')?.click();
-      r.restored = JSON.parse(localStorage.getItem('gr:42:comments')).length;`));
+      r.cleared = sendBar() === '' && !document.querySelector('.gr-margin > .gr-note:not(.gr-thread)') && localStorage.getItem('gr:42:comments') === '[]';
+      r.kept = JSON.parse(localStorage.getItem('gr:sent') ?? '[]').map((s) => s.prs[0].comments.length).join();
+      r.threads = document.querySelectorAll('.gr-margin > .gr-thread').length + ' ' + $('.gr-note-count').textContent;
+      const drawn = () => [...document.querySelectorAll('.gr-margin > .gr-thread')].find((x) => x.textContent.includes('Dragged over three lines'));
+      // a click on a box brings it forward and selects its lines; a press elsewhere lets it go
+      ms.look = t(() => drawn().querySelector('.gr-note-text').click());
+      await sleep(300);
+      r.looked = drawn().classList.contains('is-active') + ' ' + off(drawn(), 31) + ' ' + ${picked};
+      $('.gr-head h1').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      r.letGo = !drawn().classList.contains('is-active') && ${picked} === '';
+      // a reply waits with the next send, and names its thread
+      drawn().querySelector('[data-thread-reply]').click();
+      const reply = drawn().querySelector('.gr-composer');
+      r.replyFocused = document.activeElement === reply?.querySelector('textarea');
+      if (reply) { reply.querySelector('textarea').value = 'And the 503 case?'; reply.querySelector('[data-composer-add]').click(); }
+      r.replyPending = sendBar() + ' ' + !!drawn().querySelector('.gr-post.is-pending');
+      copied = null;
+      $('[data-note-send]').click();
+      await until(() => copied);
+      r.replySent = !!copied && copied.includes(': 1 comment\\n') && copied.includes('1. Reply on src/webhooks/deliver.ts:31-33\\n   > Dragged over three lines\\n   And the 503 case?');
+      r.replyPosted = await until(() => [...drawn().querySelectorAll('.gr-post:not(.is-pending) .gr-note-text')].map((p) => p.textContent).join('|') === 'Dragged over three lines|And the 503 case?');
+      // a composer's Send sends that one comment at once
+      card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('[data-note-file]').click();
+      await sleep(50);
+      const now = box('draft');
+      now.querySelector('textarea').value = 'Split this file?';
+      copied = null;
+      now.querySelector('[data-composer-send]').click();
+      await until(() => copied);
+      await sleep(150);
+      r.sentNow = copied.includes(': 1 comment\\n') && copied.includes('1. src/webhooks/deliver.ts (the file)\\n   Split this file?') && sendBar() === '' && !!boxBy('Split this file?')?.classList.contains('gr-thread');
+      const tid = drawn().dataset.threadId;
+      drawn().querySelector('[data-thread-resolve]').click();
+      r.resolved = await until(() => box('t:' + tid)?.classList.contains('is-folded')) && JSON.parse(localStorage.getItem('gr:msgs')).at(-1).resolved;
+      // the bar hides the comments and the code takes the width; c shows them again
+      ms.hide = t(() => $('[data-notes-toggle]').click());
+      await sleep(100);
+      r.hidden = !document.body.classList.contains('gr-notes-on') && !document.querySelector('.gr-margin > *') && $('[data-notes-toggle]').getAttribute('aria-pressed');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }));
+      await sleep(100);
+      r.shown = document.body.classList.contains('gr-notes-on') && document.querySelectorAll('.gr-margin > .gr-thread').length;`));
+    // Narrow, there is no margin: the boxes sit in the code, under their line, their file's header, the title.
+    await tab.send('Emulation.setDeviceMetricsOverride', { width: 900, height: 900, deviceScaleFactor: 1, mobile: false });
+    take(await inPage(tab, `await sleep(300);
+      $('#c-retry-decision').scrollIntoView();
+      const deliver = () => card('#c-retry-decision', 'src/webhooks/deliver.ts');
+      r.narrow = [await until(() => deliver().querySelectorAll('diffs-container .gr-thread').length === 3),
+        !document.querySelector('.gr-margin > *'), !!deliver().querySelector('.gr-notes .gr-thread'), !!document.querySelector('.gr-head-notes .gr-thread')].join();`));
+    await tab.send('Emulation.clearDeviceMetricsOverride');
   } catch (e) {
     console.log(`fail  ${name}: ${(e as Error).message}`);
     failed++;
@@ -488,10 +557,143 @@ async function runComments(file: string) {
     tab.close();
   }
   report(name, tab, got, ms, {
-    badge: '2', lineNote: true, fileNote: 'Seeded file comment', sideItems: 2, typingKeepsKeys: true, added: '3 3',
-    picked: '35 36 37', plusOnLast: '37', pickedComposer: 'Comment on lines 35–37', pickedKept: '35 36 37', pickedSaved: '35-37 nn ++ ', pickedCleared: true,
-    plus: true, composer: 'Comment on lines 31–33', composerFocused: true, dragged: '31-33 nn +++', draggedDrawn: true, sent: true, cleared: true, restored: 5,
-  }, { side: BUDGET.interaction, add: BUDGET.interaction, lineAdd: BUDGET.frame });
+    bar: '2 Copy 2for the chat', lineNote: true, lineLevel: 0, fileLevel: '0 Seeded file comment', margin: true,
+    generalFocused: true, typingKeepsKeys: 'true', added: 'Copy 3for the chat 3 true',
+    picked: '35 36 37', plusOnLast: '37', pickedComposer: 'Comment on lines 35–37', pickedBeside: 0, pickedKept: '35 36 37', pickedSaved: '35-37 nn ++ ', pickedLooked: '35 36 37',
+    plus: true, lookLetGo: true, composer: 'Comment on lines 31–33', composerFocused: true, dragged: '31-33 nn +++', draggedDrawn: true, pending: 'Copy 5for the chat',
+    sent: true, cleared: true, kept: '5', threads: '5 5', looked: 'true 0 31 32 33', letGo: true,
+    replyFocused: true, replyPending: 'Copy 1for the chat true', replySent: true, replyPosted: true, sentNow: true, resolved: true,
+    hidden: 'false', shown: 6, narrow: 'true,true,true,true',
+  }, { general: BUDGET.interaction, add: BUDGET.interaction, lineAdd: BUDGET.frame, look: BUDGET.interaction, hide: BUDGET.frame });
+}
+
+// A stand-in for the claude.ai viewer: the page database in memory (documents by path, a collection's listeners
+// told of each write), a comments capability that records what it sends, and a reader "u_me". It holds, from before
+// the page opened, the sends of another reader, "u_other": a line comment, written on an older head, whose code is
+// not in the diff any more, and a send whose comments are not whole, which the page leaves out.
+const VIEWER = `(() => {
+  const docs = new Map(), subs = [];
+  const parent = (p) => p.split('/').slice(0, -1).join('/');
+  const tell = (coll) => { for (const s of subs) if (s.coll === coll) setTimeout(s.fire); };
+  const put = (path, data) => { docs.set(path, JSON.parse(JSON.stringify(data))); tell(parent(path)); };
+  const db = {
+    doc: (path) => ({ path, set: async (d) => put(path, d), delete: async () => { docs.delete(path); tell(parent(path)); } }),
+    collection: (coll) => ({ path: coll, onSnapshot(next) {
+      const s = { coll, had: new Set(), fire() {
+        const list = [...docs].filter(([p]) => parent(p) === coll).sort(([a], [b]) => (a < b ? -1 : 1)).map(([p, d]) => ({ id: p.split('/').pop(), exists: true, data: () => d }));
+        const added = list.filter((d) => !s.had.has(d.id)).map((doc) => ({ type: 'added', doc }));
+        s.had = new Set(list.map((d) => d.id));
+        next({ docs: list, docChanges: () => added, metadata: { fromCache: false } });
+      } };
+      subs.push(s);
+      setTimeout(s.fire);
+      return () => subs.splice(subs.indexOf(s), 1);
+    } }),
+  };
+  put('comments/u_other', { at: '2026-01-01T00:00:00Z' });
+  put('comments/u_other/sends/s0', { sentAt: '2026-01-01T00:00:00Z', prs: [{ number: 42, title: 'Retry', head: 'a0a0a0a', comments: [
+    { id: 'cother', kind: 'line', path: 'src/webhooks/deliver.ts', start: 27, side: 'n', end: 27, endSide: 'n', code: [['+', '  const gone = true;']], text: 'Is this still needed?', head: 'a0a0a0a', at: '2026-01-01T00:00:00Z' },
+  ] }] });
+  put('comments/u_other/sends/s1', { sentAt: 3, prs: [null, { number: 42, comments: [null, 'x',
+    { id: 'bad1', kind: 'line', path: 'src/webhooks/deliver.ts', code: 'oops', text: 'No lines', head: 'a0a0a0a' },
+    { id: 'bad2', kind: 'file', text: 7, head: 'a0a0a0a' }, { id: 'bad3', kind: 'reply', text: 'No thread', head: 'a0a0a0a' }] }] });
+  window.__viewer = { docs, put, sent: [] };
+  const comments = {
+    canSendToClaude: async () => 'available',
+    anchorFor: async () => ({ path: 'h1', x: 0, y: 0 }),
+    sendToClaude: async (t) => { window.__viewer.sent.push(t.text); return { threadId: 'th' + window.__viewer.sent.length, commentId: 'x' }; },
+  };
+  const user = { id: async () => 'u_me', can: async () => true, profiles: async (ids) => Object.fromEntries([].concat(ids).map((i) => [i, { name: '' }])) };
+  window.claude = { use: async (name) => ({ db, comments, user })[name] ?? null };
+})();`;
+
+// Threads: kept in this browser from an earlier visit on an older head, one is level with its own lines while they
+// hold its code, one with the lines its code moved to, and one, whose code is gone, sits by its file's header, marked
+// Outdated, with its code. A click on the moved one selects the lines it is on now. With the viewer's database:
+// another reader's thread shows; Send writes the send for Claude to read; an answer Claude writes comes into its
+// thread at once; a reply sent at once carries its thread to Claude; Resolve writes a mark.
+async function runThreads(file: string) {
+  const name = 'threads';
+  const tab = await browser(join(dirname(file), `profile-${name}`), { warnings: true });
+  const got: Record<string, unknown> = {}, ms: Record<string, number> = {};
+  const take = (x: { r: Record<string, unknown>; ms: Record<string, number> }) => { Object.assign(got, x.r); Object.assign(ms, x.ms); return x.r; };
+  const root = `card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('diffs-container')?.shadowRoot`;
+  const helpers = `const box = (key) => document.querySelector('.gr-margin > [data-key="' + key + '"]');
+      const row = (line) => ${root}?.querySelector('[data-line="' + line + '"]:not([data-line-type="change-deletion"])');
+      const off = (el, line) => Math.round(el.getBoundingClientRect().top - row(line).getBoundingClientRect().top);`;
+  try {
+    await tab.open('file://' + file);
+    await inPage(tab, `const line = (id, start, code, text) => ({ id, kind: 'line', path: 'src/webhooks/deliver.ts', start, side: 'n', end: start, endSide: 'n', code: [['+', code]], text, head: 'b1b1b1b', at: '2026-01-01T00:00:00Z' });
+      localStorage.setItem('gr:sent', JSON.stringify([{ id: 'sold', sentAt: '2026-01-01T00:00:00Z', prs: [{ key: 'gr:42', number: 42, title: 'Retry', head: 'b1b1b1b', comments: [
+        line('tsame', 31, '  if (retryable(code) && attempts < MAX_ATTEMPTS) {', 'On its own lines'),
+        line('tmoved', 40, "    return { status: 'retrying', code };", 'Its code moved'),
+        line('tgone', 31, '  const gone = true;', 'Its code is gone'),
+      ] }] }]));`);
+    await tab.open('about:blank');
+    await tab.open('file://' + file);
+    take(await inPage(tab, `await sleep(300); ${helpers}
+      $('#c-retry-decision').scrollIntoView();
+      await until(() => row(33) && box('t:tmoved'));
+      await sleep(300);
+      // the moved one waits below the box above it, until the reader looks at it
+      r.level = off(box('t:tsame'), 31) + ' ' + (off(box('t:tmoved'), 33) > 0);
+      const header = card('#c-retry-decision', 'src/webhooks/deliver.ts');
+      r.goneBeside = Math.round(box('t:tgone').getBoundingClientRect().top - header.getBoundingClientRect().top);
+      r.outdated = ['tsame', 'tmoved', 'tgone'].map((id) => !!box('t:' + id)?.querySelector('.gr-chip.is-outdated')).join();
+      r.goneCode = box('t:tgone')?.querySelector('.gr-note-code')?.textContent.trim();
+      r.movedLabel = box('t:tmoved')?.querySelector('.gr-note-what')?.textContent;
+      ms.look = t(() => box('t:tmoved').querySelector('.gr-note-text').click());
+      r.movedLit = await until(() => row(33)?.matches('[data-selected-line]')) && !row(31).matches('[data-selected-line]');
+      await sleep(300);
+      r.movedLevel = off(box('t:tmoved'), 33) + ' ' + (off(box('t:tsame'), 31) < 0);`));
+    await tab.send('Page.addScriptToEvaluateOnNewDocument', { source: VIEWER });
+    await tab.open('about:blank');
+    await tab.open('file://' + file);
+    take(await inPage(tab, `${helpers}
+      r.otherReader = await until(() => box('t:cother')) && box('t:cother').querySelector('.gr-post-by b').textContent + ' ' + !!box('t:cother').querySelector('.gr-chip.is-outdated');
+      r.notWhole = !box('t:bad1') && !box('t:bad2') && document.querySelectorAll('.gr-margin > .gr-thread').length === 4;
+      $('[data-note-general]').click();
+      await sleep(50);
+      const general = box('draft');
+      general.querySelector('textarea').value = 'Is the backoff capped?';
+      general.querySelector('[data-composer-add]').click();
+      r.sendWord = $('[data-note-send]').textContent;
+      $('[data-note-send]').click();
+      const { docs, put, sent } = window.__viewer;
+      await until(() => sent.length && [...docs.keys()].some((p) => p.startsWith('comments/u_me/sends/')));
+      const ref = [...docs.keys()].find((p) => p.startsWith('comments/u_me/sends/'));
+      r.sentRef = sent[0]?.endsWith('Every comment, with its code: ' + ref + ' in the page database.') && docs.get(ref).prs[0].key === 'gr:42' && docs.has('comments/u_me');
+      const mine = docs.get(ref).prs[0].comments[0].id;
+      r.mineShows = await until(() => box('t:' + mine)) && box('t:' + mine).querySelector('.gr-post-by b').textContent;
+      put('comments/u_me/msgs/m1', { thread: mine, by: 'claude', text: 'Capped at an hour (backoff.ts:12).', at: new Date().toISOString(), head: 'c2c2c2c' });
+      r.answer = await until(() => box('t:' + mine)?.querySelector('.gr-post.is-claude')) && [...box('t:' + mine).querySelectorAll('.gr-post-by b')].map((b) => b.textContent).join() + ' ' + box('t:' + mine).querySelector('.gr-post.is-claude .gr-note-text').textContent;
+      r.answerToast = $('#k-toast')?.textContent;
+      box('t:' + mine).querySelector('[data-thread-reply]').click();
+      const form = box('t:' + mine).querySelector('.gr-composer');
+      form.querySelector('textarea').value = 'Make it configurable?';
+      r.replyWord = form.querySelector('[data-composer-send]').textContent;
+      form.querySelector('[data-composer-send]').click();
+      await until(() => sent.length === 2);
+      r.replyText = sent[1]?.includes(': 1 comment\\n') && sent[1]?.includes('1. Reply on General\\n   > Is the backoff capped?\\n   Make it configurable?');
+      await sleep(100);
+      const ref2 = [...docs.keys()].filter((p) => p.startsWith('comments/u_me/sends/')).sort().at(-1);
+      const rc = docs.get(ref2)?.prs[0].comments[0];
+      r.replyDoc = rc && [rc.kind, rc.thread === mine, rc.on?.text, rc.before?.map((b) => b.by).join()].join(' ');
+      r.replyShows = await until(() => box('t:' + mine)?.querySelectorAll('.gr-post:not(.is-pending)').length === 3);
+      box('t:' + mine).querySelector('[data-thread-resolve]').click();
+      r.mark = await until(() => [...docs].some(([p, d]) => p.startsWith('comments/u_me/msgs/') && d.thread === mine && d.resolved === true)) && await until(() => box('t:' + mine)?.classList.contains('is-folded'));`));
+  } catch (e) {
+    console.log(`fail  ${name}: ${(e as Error).message}`);
+    failed++;
+    return;
+  } finally {
+    tab.close();
+  }
+  report(name, tab, got, ms, {
+    level: '0 true', movedLevel: '0 true', goneBeside: 0, outdated: 'false,false,true', goneCode: '+   const gone = true;', movedLabel: 'Line 33', movedLit: true,
+    otherReader: 'Reviewer true', notWhole: true, sendWord: 'Send 1to Claude', sentRef: true, mineShows: 'You', answer: 'You,Claude Capped at an hour (backoff.ts:12).', answerToast: 'Claude answered in a thread.',
+    replyWord: 'Send', replyText: true, replyDoc: 'reply true Is the backoff capped? claude', replyShows: true, mark: true,
+  }, { look: BUDGET.interaction });
 }
 
 const dir = mkdtempSync(join(tmpdir(), 'guided-review-page-'));
@@ -501,6 +703,7 @@ try {
   if (demo.code || stack.code) { console.log(demo.log + stack.log); process.exit(1); }
   await runPage('page', join(dir, 'demo.preview.html'), RUN, expect, budget);
   await runComments(join(dir, 'demo.preview.html'));
+  await runThreads(join(dir, 'demo.preview.html'));
   await runPage('stack', join(dir, 'stack.preview.html'), STACK_RUN, STACK_EXPECT, { boot: BUDGET.boot, pick: BUDGET.interaction, back: BUDGET.interaction }, async (tab, r) => {
     // A link with #pr43-c-docs opens on #43, at that chapter.
     // Another document first: a navigation that changes only the anchor fires no load.

@@ -311,18 +311,29 @@ body.gr-diff-panel-closed .gr-tree { display: none; }
 .gr-foot kbd { font-size: 11px; color: var(--muted-fg); }
 
 /* ---------- review comments ---------- */
-/* The bar's Comments button opens a sidebar at the right: beside the page on a wide screen, over it on a narrow one.
-   Comments sit under the line they end on (slotted into the card's code) or under a card's header, and wait there,
-   marked Pending, until the reader sends them; c1 marks them as comments everywhere. */
-:root { --side-w: 380px; }
+/* On a wide screen comments are boxes in a margin at the right of the code, each level with the line, file header or
+   title it is on; the panel makes room for the margin while the pull request on screen has any. The box the reader
+   looks at comes a little nearer the code. Narrower, the boxes sit in the code: under their line (slotted into the
+   card's code), under a card's header, or under the title. c1 marks comments everywhere; c2 an outdated one, ok a
+   resolved one. */
+:root { --notes-w: 340px; }
 .gr-note-toggle .gr-note-count {
-  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--c1); color: #fff;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--muted); color: var(--muted-fg);
   font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums;
 }
-.gr-note-toggle[aria-expanded="true"] { background: var(--muted); }
+.gr-note-toggle[aria-pressed="false"] { color: var(--muted-fg); }
+.gr-note-toggle[aria-pressed="false"] svg { opacity: .55; }
+.gr-send { gap: .3em; background: var(--c1); border-color: var(--c1); color: #fff; }
+.gr-send:hover { background: var(--c1); filter: brightness(1.08); }
+.gr-send[hidden] { display: none; }
 .gr-note-btn { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 5px; color: var(--muted-fg); }
 .gr-note-btn:hover { background: var(--muted); color: var(--fg); }
 .gr-note-btn svg { width: 14px; height: 14px; }
+.gr-head-note { color: var(--muted-fg); }
+.gr-head-note:hover { color: var(--fg); }
+.gr-head-note svg { width: 13px; height: 13px; }
+.gr-head-notes { display: grid; gap: 8px; margin-top: 14px; }
+.gr-head-notes[hidden] { display: none; }
 
 .gr-field {
   display: block; width: 100%; padding: 8px 10px; border: 1px solid var(--input); border-radius: 8px; background: var(--bg); color: var(--fg);
@@ -330,7 +341,7 @@ body.gr-diff-panel-closed .gr-tree { display: none; }
 }
 .gr-field:focus { outline: 2px solid var(--ring); outline-offset: 1px; }
 .gr-composer, .gr-note {
-  font: 13.5px/1.5 var(--font); color: var(--fg); white-space: normal; font-variant-ligatures: normal;
+  font: 13.5px/1.5 var(--font); color: var(--fg); white-space: normal; font-variant-ligatures: normal; text-align: left;
   background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--c1); border-radius: 8px;
 }
 .gr-composer { display: grid; gap: 8px; padding: 10px; }
@@ -340,59 +351,64 @@ body.gr-diff-panel-closed .gr-tree { display: none; }
 .gr-composer:focus-within { outline: 2px solid var(--ring); outline-offset: 1px; }
 .gr-composer-where { font-size: 12.5px; color: var(--muted-fg); }
 .gr-composer-foot { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
-.gr-composer-hint { margin-right: auto; display: flex; gap: 3px; color: var(--muted-fg); }
-.gr-composer-hint kbd { font-size: 11px; color: var(--muted-fg); }
+.gr-composer-foot .k-btn:first-child { margin-right: auto; margin-left: -6px; }
 .gr-note { padding: 6px 6px 8px 12px; }
 .gr-note-head { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 12.5px; color: var(--muted-fg); }
-.gr-note-what { margin-right: auto; }
-.gr-note-pending { font-size: 11px; font-weight: 500; color: var(--c1); border: 1px solid currentColor; border-radius: 999px; padding: 0 7px; line-height: 17px; }
-.gr-note-head .k-btn { height: 24px; }
-.gr-note-head .k-btn.is-icon { width: 24px; }
-.gr-note-head .k-btn svg { width: 14px; height: 14px; }
+.gr-note-what { white-space: nowrap; }
+.gr-chip { flex: none; font-size: 11px; font-weight: 500; color: var(--c1); border: 1px solid currentColor; border-radius: 999px; padding: 0 7px; line-height: 17px; }
+.gr-chip.is-outdated { color: var(--c2); }
+.gr-chip.is-resolved { color: var(--ok); }
+.gr-note-head .k-btn, .gr-post-by .k-btn { height: 24px; padding-inline: 7px; }
+.gr-note-head .k-btn.is-icon, .gr-post-by .k-btn.is-icon { width: 24px; padding: 0; }
+.gr-note-head .k-btn svg, .gr-post-by .k-btn svg { width: 14px; height: 14px; }
 .gr-note-text { margin: 2px 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.gr-note:has(form) { border: 0; padding: 0; background: none; }
+.gr-note:has(> form) { border: 0; padding: 0; background: none; }
+.gr-note-code { margin: 4px 6px 6px 0; padding: 4px 0; border-radius: 6px; background: var(--muted); font: 11.5px/1.6 var(--mono); overflow-x: auto; font-variant-ligatures: none; }
+.gr-note-code span { display: block; padding: 0 8px; white-space: pre; min-width: max-content; }
+.gr-note-code .add { background: var(--add-bg); color: var(--fg); }
+.gr-note-code .del { background: var(--del-bg); color: var(--fg); }
+.gr-note-code .more { color: var(--muted-fg); font-family: var(--font); }
+/* the box the reader looks at */
+[data-key].is-active { box-shadow: 0 0 0 1px var(--border-strong), var(--shadow); }
 /* under a line: the row spans the code (or one column of a split card), so the note is held to a reading width */
 .gr-code .gr-note, .gr-code .gr-composer { margin: 8px 12px 10px; max-width: 720px; }
-.gr-code .gr-note:has(form) { margin: 0; max-width: none; }
+.gr-code .gr-note:has(> form) { margin: 0; max-width: none; }
 .gr-notes { display: grid; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
 
-.gr-side {
-  position: fixed; z-index: 30; top: 0; right: 0; bottom: 0; width: min(var(--side-w), 100vw); display: flex; flex-direction: column;
-  background: var(--bg); border-left: 1px solid var(--border); padding-top: env(safe-area-inset-top, 0px); padding-right: env(safe-area-inset-right, 0px);
+/* A thread: its comment and what came after, one post under another, and a Reply box at its foot. The box is part of
+   the thread's card: it has no border of its own, and the card shows its focus. */
+.gr-thread { padding-bottom: 4px; }
+.gr-thread.is-resolved { border-left-color: var(--ok); }
+.gr-thread.is-folded { padding-bottom: 6px; }
+.gr-thread:has(.gr-composer:focus-within) { outline: 2px solid var(--ring); outline-offset: 1px; }
+.gr-thread-gist { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); }
+.gr-thread .gr-note-head { flex-wrap: wrap; row-gap: 0; }
+.gr-posts { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 8px; }
+.gr-post + .gr-post { border-top: 1px solid var(--border); padding-top: 8px; }
+.gr-post-by { display: flex; align-items: center; gap: 8px; min-height: 22px; font-size: 12.5px; color: var(--muted-fg); }
+.gr-post-by b { color: var(--fg); font-weight: 600; }
+.gr-post.is-claude .gr-post-by b { color: var(--c1); }
+.gr-post-head { font: 11.5px var(--mono); color: var(--faint); }
+.gr-post .gr-note-text { margin-top: 0; }
+.gr-thread-reply { margin: 8px 6px 0 0; border-top: 1px solid var(--border); padding-top: 6px; }
+.gr-reply { display: block; width: 100%; padding: 4px 0; text-align: left; color: var(--muted-fg); font-size: 13px; cursor: text; }
+.gr-reply:hover { color: var(--fg); }
+.gr-thread .gr-composer { padding: 2px 0 4px; border: 0; border-radius: 0; background: none; }
+.gr-thread .gr-composer:focus-within { outline: none; }
+.gr-code .gr-thread .gr-composer { margin: 0; max-width: none; }
+.gr-post.is-editing .gr-composer { margin-right: 6px; }
+
+/* the margin: a layer at the right of the panel, the boxes laid in it by their tops */
+.gr-pr { position: relative; }
+.gr-margin { position: absolute; top: 0; right: 0; width: var(--notes-w); height: 0; }
+.gr-margin > [data-key] {
+  position: absolute; left: 28px; width: calc(var(--notes-w) - 28px); margin: 0; max-width: none; font-size: 13px;
+  transition: top .2s ease, left .2s ease, box-shadow .15s ease;
 }
-@media (min-width: 1200px) { body.gr-side-open { padding-right: var(--side-w); } }
-@media (max-width: 1199px) { .gr-side { box-shadow: var(--shadow); } }
-.gr-side-head { flex: none; display: flex; align-items: center; gap: 8px; height: var(--bar-h); padding: 0 10px 0 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
-.gr-side-head b { font-weight: 600; }
-.gr-side-meta { margin-right: auto; color: var(--muted-fg); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.gr-side-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; }
-.gr-side-general { display: grid; gap: 8px; }
-.gr-side-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.gr-side-pr { margin: 10px 0 0; font-size: 13.5px; font-weight: 600; line-height: 1.4; }
-.gr-side-pr .n { color: var(--muted-fg); font-weight: 400; font-variant-numeric: tabular-nums; }
-.gr-side-file { display: flex; align-items: baseline; gap: 6px; margin: 8px 0 0; font-size: 13px; font-weight: 500; min-width: 0; }
-.gr-side-file .dir { color: var(--faint); font-weight: 400; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.gr-side-item { padding: 8px 10px 4px 12px; border: 1px solid var(--border); border-left: 3px solid var(--c1); border-radius: 8px; background: var(--card); font-size: 13.5px; }
-.gr-side-item:has(form) { padding: 0; border: 0; background: none; }
-.gr-side-where { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 12.5px; color: var(--muted-fg); }
-.gr-side-go { color: var(--fg); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
-.gr-side-go:hover { text-decoration-color: var(--fg); }
-.gr-side-stale { color: var(--c2); }
-.gr-side-code { margin: 6px 0 2px; padding: 4px 0; border-radius: 6px; background: var(--muted); font: 11.5px/1.6 var(--mono); overflow-x: auto; font-variant-ligatures: none; }
-.gr-side-code span { display: block; padding: 0 8px; white-space: pre; min-width: max-content; }
-.gr-side-code .add { background: var(--add-bg); color: var(--fg); }
-.gr-side-code .del { background: var(--del-bg); color: var(--fg); }
-.gr-side-code .more { color: var(--muted-fg); font-family: var(--font); }
-.gr-side-item .gr-note-text { margin-top: 4px; }
-.gr-side-acts { display: flex; justify-content: flex-end; gap: 2px; margin-right: -6px; }
-.gr-side-acts .k-btn { height: 24px; color: var(--muted-fg); }
-.gr-side-acts .k-btn:hover { color: var(--fg); }
-.gr-side-empty { color: var(--muted-fg); font-size: 13px; }
-.gr-side-empty p { margin: 0 0 10px; }
-.gr-side-empty .lead { color: var(--fg); font-weight: 500; }
-.gr-side-empty b { color: var(--fg); font-family: var(--mono); }
-.gr-side-foot { flex: none; display: grid; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--border); }
-.gr-side-why { margin: 0; color: var(--muted-fg); font-size: 12.5px; }
+.gr-margin > .is-active { left: 12px; z-index: 1; }
+@media (prefers-reduced-motion: reduce) { .gr-margin > [data-key] { transition: none; } }
+@media (min-width: 1180px) { body.gr-notes-on .gr-pr { padding-right: var(--notes-w); } }
+@media (max-width: 1179px) { .gr-margin { display: none; } }
 
 @media (max-width: 1500px) { .gr-rail { display: none; } }
 /* where the rail shows, the page keeps a gutter for it */

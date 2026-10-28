@@ -117,12 +117,19 @@ export interface PageData {
 // ---------------------------------------------------------------- review comments
 /** The side a line number counts on: the old file ('o', a removed line) or the new one ('n', every other line). */
 export type Side = 'o' | 'n';
-/** One comment the reader writes on the page for Claude. Kept in their browser until they send the batch. */
+/** One comment the reader writes on the page for Claude. Kept in their browser until they send the batch; then it
+    opens a thread, or, as a reply, goes on one. */
 export interface ReviewComment {
   id: string;
-  /** line: a line or a block of lines; file: a file as a whole; general: the pull request as a whole. */
-  kind: 'line' | 'file' | 'general';
+  /** line: a line or a block of lines; file: a file as a whole; general: the pull request as a whole; reply: the next
+      message in a thread a sent comment opened. */
+  kind: 'line' | 'file' | 'general' | 'reply';
+  /** A reply's thread: the id of the comment that opened it. */
+  thread?: string;
+  /** The file, for a line or file comment, and for a reply on one. */
   path?: string;
+  /** For a file comment: the chapter whose card it was written on, so it stays beside that card. */
+  chapter?: string;
   /** A line comment's first and last line, each on its own side. */
   start?: number;
   side?: Side;
@@ -135,6 +142,20 @@ export interface ReviewComment {
   head: string;
   at: string;
 }
+/** A comment as a send holds it. A reply also carries the thread it answers, as the reader saw it. */
+export interface SentComment extends ReviewComment {
+  on?: { where: string; text: string };
+  before?: { by: Author; text: string }[];
+}
+/** One send, as the page database keeps it at comments/<uid>/sends/<send id>. Written once, never changed. */
+export interface SendDoc {
+  sentAt: string;
+  prs: { key?: string; number: number | null; title: string; head: string; comments: SentComment[] }[];
+}
+export type Author = 'reader' | 'claude';
+/** One message in a thread, at comments/<uid>/msgs/<msg id>: an answer of Claude's, or a mark that resolves the
+    thread or opens it again. One document per message, so the reader and Claude never write the same one. */
+export interface ThreadMsg { thread: string; by: Author; text?: string; resolved?: boolean; at: string; head?: string }
 
 // ---------------------------------------------------------------- artifact capabilities (runtime contract 0.2.x)
 export type CanSendToClaude = 'available' | 'writers_only' | 'no_session' | 'off';
@@ -143,9 +164,17 @@ export interface CommentsCap {
   anchorFor(el: Element): Promise<unknown>;
   sendToClaude(target: { anchor: unknown; text: string }): Promise<{ threadId: string }>;
 }
+export interface DocSnap { id: string; exists: boolean; data(): Record<string, unknown> | undefined }
+export interface QuerySnap { docs: DocSnap[]; docChanges(): { type: 'added' | 'modified' | 'removed'; doc: DocSnap }[]; metadata?: { fromCache: boolean } }
 export interface DocRef { path: string; set(data: Record<string, unknown>): Promise<void> }
-export interface DbCap { doc(path: string): DocRef }
-export interface UserCap { can(name: string): Promise<boolean | null>; id(): Promise<string | null> }
+export interface CollectionRef { path: string; onSnapshot(next: (s: QuerySnap) => void, error?: (e: { code: string }) => void): () => void }
+export interface DbCap { doc(path: string): DocRef; collection(path: string): CollectionRef }
+export interface UserCap {
+  can(name: string): Promise<boolean | null>;
+  id(): Promise<string | null>;
+  /** Names are "" without the "profile" scope. */
+  profiles(ids: string[]): Promise<Record<string, { name: string }>>;
+}
 export interface CapabilityMap { comments: CommentsCap; db: DbCap; user: UserCap }
 
 declare global {
