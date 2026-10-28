@@ -323,6 +323,42 @@ body.gr-diff-panel-closed .gr-tree { display: none; }
 }
 .gr-note-toggle[aria-pressed="false"] { color: var(--muted-fg); }
 .gr-note-toggle[aria-pressed="false"] svg { opacity: .55; }
+/* the bell, and its list of the threads with an answer not read yet */
+.gr-bell-wrap { position: relative; display: inline-flex; }
+.gr-bell { position: relative; }
+.gr-bell svg { width: 16px; height: 16px; }
+.gr-bell-n {
+  position: absolute; top: -3px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  background: var(--c1); color: #fff; font-size: 10.5px; font-weight: 600; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums;
+}
+.gr-bell-n[hidden] { display: none; }
+.gr-inbox {
+  position: absolute; top: calc(100% + 8px); right: -8px; z-index: 30; width: min(380px, calc(100vw - 24px)); max-height: min(70vh, 560px);
+  display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow);
+  font-size: 13px; text-align: left;
+}
+.gr-inbox[hidden] { display: none; }
+.gr-inbox-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--border); }
+.gr-inbox-head b { font-weight: 600; }
+.gr-inbox-list { overflow-y: auto; padding: 4px; display: grid; gap: 2px; }
+.gr-inbox-item { display: grid; gap: 3px; width: 100%; padding: 8px 10px; border-radius: 8px; text-align: left; }
+.gr-inbox-item:hover, .gr-inbox-item:focus-visible { background: var(--muted); outline: none; }
+.gr-inbox-item .where { display: flex; align-items: baseline; gap: 8px; min-width: 0; color: var(--muted-fg); font-size: 12px; }
+.gr-inbox-item .where b { color: var(--fg); font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gr-inbox-item .where .n { font-variant-numeric: tabular-nums; }
+.gr-inbox-item .where time { margin-left: auto; white-space: nowrap; }
+.gr-inbox-item .ask { color: var(--muted-fg); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gr-inbox-item .gist { color: var(--fg); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.gr-inbox-item .gist b { color: var(--c1); font-weight: 600; }
+.gr-inbox-item .more { color: var(--c1); font-size: 12px; }
+.gr-inbox-empty { margin: 0; padding: 16px 14px; color: var(--muted-fg); }
+/* a phone: the list spans the screen under the bar, and the bar keeps room for the bell and Send by leaving out the
+   sound, the left column's button (the chapter text sits above the code there anyway) and the comments' count */
+@media (max-width: 560px) {
+  .gr-inbox { position: fixed; top: calc(var(--bar-h) + env(safe-area-inset-top, 0px) + 4px); left: 12px; right: 12px; width: auto; }
+  .gr-bar .k-sound, .gr-bar .gr-panel-toggle, .gr-note-toggle .gr-note-count { display: none; }
+}
+
 .gr-send { gap: .3em; background: var(--c1); border-color: var(--c1); color: #fff; }
 .gr-send:hover { background: var(--c1); filter: brightness(1.08); }
 .gr-send[hidden] { display: none; }
@@ -358,6 +394,7 @@ body.gr-diff-panel-closed .gr-tree { display: none; }
 .gr-chip { flex: none; font-size: 11px; font-weight: 500; color: var(--c1); border: 1px solid currentColor; border-radius: 999px; padding: 0 7px; line-height: 17px; }
 .gr-chip.is-outdated { color: var(--c2); }
 .gr-chip.is-resolved { color: var(--ok); }
+.gr-chip.is-new { color: #fff; background: var(--c1); border-color: var(--c1); }
 .gr-note-head .k-btn, .gr-post-by .k-btn { height: 24px; padding-inline: 7px; }
 .gr-note-head .k-btn.is-icon, .gr-post-by .k-btn.is-icon { width: 24px; padding: 0; }
 .gr-note-head .k-btn svg, .gr-post-by .k-btn svg { width: 14px; height: 14px; }

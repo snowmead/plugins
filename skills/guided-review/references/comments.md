@@ -1,7 +1,7 @@
 # Review comments
 
 A guide is also where its reader asks for changes. They comment on the code while they read it, send each comment to
-Claude at once or a batch of them together, and get the next version of the pull request, and of the guide, back on
+Claude at once or queue them to send together, and get the next version of the pull request, and of the guide, back on
 the same link. Each comment they send stays on the page as a thread, where Claude answers it and the conversation goes
 on. This file covers the capabilities that make that work, what a send holds, and how to act on it.
 
@@ -15,28 +15,35 @@ on. This file covers the capabilities that make that work, what a send holds, an
 | The pull request as a whole | Presses **Comment** under the title. |
 | A thread, to answer Claude | Presses **Reply…** at the foot of the thread. |
 
-Each opens a composer with three buttons: **Cancel**; **Add to batch**, which keeps the comment pending; and **Send**
-(or ⌘↵), which sends that one comment to Claude at once. A pending comment has its own **Send** too, and **Edit** and
-**Delete**. While any are pending, the bar shows **Send N to Claude**, which sends them all together.
+Each opens a composer with three buttons: **Cancel**; **Add to queue**, which keeps the comment, marked **Queued**;
+and **Send** (or ⌘↵), which sends that one comment to Claude at once. A queued comment has its own **Send** too, and
+**Edit** and **Delete**. While any are queued, the bar shows **Send N to Claude**, which sends the queue.
 
 On a wide screen every comment is a box in a margin at the right of the code, level with what it is on: a line
 comment with its first line, a file comment with its file's header, a general one with the title. Boxes that would
-overlap stack down the margin. A click on a box brings it forward: it comes level with its line, moves a little nearer
-the code, and the lines it is on are selected; a click anywhere else, or Escape, lets it go. The margin opens while the
+overlap stack down the margin. A click on a comment goes to its code: a card folded or marked reviewed opens, the
+Diff tab opens when only its card of the whole file can show the line, and the code comes on screen. The box comes
+level with its line, moves a little nearer the code, and the lines it is on are selected; a click anywhere else, or
+Escape, lets it go. The margin opens while the
 pull request on screen has any comment, and the **Comments** button in the bar (or the `c` key) hides it and gives the
 code the whole width. On a narrow screen there is no margin: each box sits in the code, under its last line, under its
 file's header, or under the title.
 
-Pending comments stay in the reader's browser, per pull request like the review marks, until they send them. A sent
+Queued comments stay in the reader's browser, per pull request like the review marks, until they send them. A sent
 comment stays where it was as a **thread**: the comment, Claude's answers, the replies after them and the replies still
-pending, oldest first, and a Reply box. **Resolve** folds a thread to one line (its latest message); **Show** opens it,
+queued, oldest first, and a Reply box. **Resolve** folds a thread to one line (its latest message); **Show** opens it,
 **Reopen** unresolves it.
 
 Threads outlive a new head, as on GitHub. A line comment written on an older head than the page's (its `head`) shows
 on its own lines while they still hold the code it was written on, else on the lines in the diff that hold that code
 now, nearest its own. When no lines do, it is **Outdated**: it sits by its file's header, marked so, with the code as
-it was. A file comment is outdated when its file is no longer in the pull request, and sits by the title. A pending
+it was. A file comment is outdated when its file is no longer in the pull request, and sits by the title. A queued
 comment is placed the same way.
+
+Claude's answers are marked **New** until the reader looks at their thread. The bell in the bar counts the threads
+with an answer not read yet, and opens a list of them, newest first: each with its place, the comment and Claude's
+latest answer. A click on one goes to it and marks it read; **Mark all read** clears the list. What the reader has
+read is kept in their browser.
 
 **Send** goes to Claude only for an editor of the artifact while a Claude session watches it. For anyone else it reads
 **Copy**, and copies the same text, starting `# Review comments on`, to paste in the chat; its tooltip says why. Either
@@ -75,7 +82,7 @@ After the first publish, do one functional check: `ArtifactData` `list` of `comm
 
 ## What arrives
 
-A send is one comment thread on the pull request's title, whether it holds one comment or a batch. Its text:
+A send is one comment thread on the pull request's title, whether it holds one comment or the whole queue. Its text:
 
 ```
 Review comments on #42 Retry failed webhook deliveries, at 1a2b3c4: 4 comments

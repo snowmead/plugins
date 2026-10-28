@@ -23,12 +23,12 @@ them:
   number, Shift-click another and press the **+**, or drag the **+** over the lines;
   the speech bubble in a file's header comments on the whole file, and **Comment** under the title on the whole pull
   request. Each comment is a box in a margin beside the code, level with its line, like comments beside a document;
-  click one to bring it forward and select its lines. **Send** sends a comment to Claude at once; **Add to batch**
-  keeps it pending, and the bar's **Send N to Claude** sends the batch. Claude changes the code on the branch and
+  click one to go to its code, opening its file if it is folded or marked reviewed, with its lines selected. **Send**
+  sends a comment to Claude at once; **Add to queue** queues it, and the bar's **Send N to Claude** sends the queue. Claude changes the code on the branch and
   republishes the guide for the new head. `c` hides the margin. Without a Claude session to send to, Send copies the
   comments for the chat. On a narrow screen the boxes sit in the code instead.
 - **Comment threads**: a sent comment stays as a thread, with Claude's answer. Reply in it to keep the conversation
-  going. As on GitHub, a thread follows its code to a new head, is marked **Outdated** when that code is gone, and
+  going. The bell in the bar lists the answers you have not read; click one to go to it. As on GitHub, a thread follows its code to a new head, is marked **Outdated** when that code is gone, and
   folds away when resolved.
 - **Stacks**: one page can hold several pull requests, a stack or any set to review together. The title becomes a
   menu of them, a stack drawn from its base up, each with its branches, size and review progress; `[` and `]` move
@@ -68,8 +68,8 @@ Ask in plain words:
 - "Review the stack #140 to #142 as one guide."
 
 Claude gathers the diff, reads the change, writes the chapters, checks and builds the page, publishes it, and gives
-you the link. Comment on lines, files or the whole pull request, and send each comment at once or a batch from the
-bar: Claude answers each comment in its thread, makes the changes you asked for, and puts the next version of the guide
+you the link. Comment on lines, files or the whole pull request, and send each comment at once or queue them and send
+them from the bar: Claude answers each comment in its thread, makes the changes you asked for, and puts the next version of the guide
 on the same link. Reply in a thread to go on. Claude pushes only when you say so.
 
 ## Maintain

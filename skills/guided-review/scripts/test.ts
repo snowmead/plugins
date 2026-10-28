@@ -534,6 +534,17 @@ async function runComments(file: string) {
       const tid = drawn().dataset.threadId;
       drawn().querySelector('[data-thread-resolve]').click();
       r.resolved = await until(() => box('t:' + tid)?.classList.contains('is-folded')) && JSON.parse(localStorage.getItem('gr:msgs')).at(-1).resolved;
+      // a click on a comment whose file is marked reviewed opens the file, and brings the line on screen
+      const deliver = card('#c-retry-decision', 'src/webhooks/deliver.ts');
+      deliver.querySelector('input[data-review-file]').click();
+      await sleep(100);
+      const folded = deliver.classList.contains('collapsed');
+      scrollTo(0, 0);
+      await sleep(100);
+      box('t:cseed1').querySelector('.gr-note-text').click();
+      await sleep(600);
+      const r27 = ${num(27)}?.getBoundingClientRect();
+      r.reveal = folded + ' ' + !deliver.classList.contains('collapsed') + ' ' + (!!r27 && r27.top > 60 && r27.bottom < innerHeight) + ' ' + box('t:cseed1').classList.contains('is-active') + ' ' + ${picked};
       // the bar hides the comments and the code takes the width; c shows them again
       ms.hide = t(() => $('[data-notes-toggle]').click());
       await sleep(100);
@@ -562,7 +573,7 @@ async function runComments(file: string) {
     picked: '35 36 37', plusOnLast: '37', pickedComposer: 'Comment on lines 35–37', pickedBeside: 0, pickedKept: '35 36 37', pickedSaved: '35-37 nn ++ ', pickedLooked: '35 36 37',
     plus: true, lookLetGo: true, composer: 'Comment on lines 31–33', composerFocused: true, dragged: '31-33 nn +++', draggedDrawn: true, pending: 'Copy 5for the chat',
     sent: true, cleared: true, kept: '5', threads: '5 5', looked: 'true 0 31 32 33', letGo: true,
-    replyFocused: true, replyPending: 'Copy 1for the chat true', replySent: true, replyPosted: true, sentNow: true, resolved: true,
+    replyFocused: true, replyPending: 'Copy 1for the chat true', replySent: true, replyPosted: true, sentNow: true, resolved: true, reveal: 'true true true true 27',
     hidden: 'false', shown: 6, narrow: 'true,true,true,true',
   }, { general: BUDGET.interaction, add: BUDGET.interaction, lineAdd: BUDGET.frame, look: BUDGET.interaction, hide: BUDGET.frame });
 }
@@ -624,10 +635,12 @@ async function runThreads(file: string) {
   try {
     await tab.open('file://' + file);
     await inPage(tab, `const line = (id, start, code, text) => ({ id, kind: 'line', path: 'src/webhooks/deliver.ts', start, side: 'n', end: start, endSide: 'n', code: [['+', code]], text, head: 'b1b1b1b', at: '2026-01-01T00:00:00Z' });
+      const head = window.GR_DATA.prs[0].head;
       localStorage.setItem('gr:sent', JSON.stringify([{ id: 'sold', sentAt: '2026-01-01T00:00:00Z', prs: [{ key: 'gr:42', number: 42, title: 'Retry', head: 'b1b1b1b', comments: [
         line('tsame', 31, '  if (retryable(code) && attempts < MAX_ATTEMPTS) {', 'On its own lines'),
         line('tmoved', 40, "    return { status: 'retrying', code };", 'Its code moved'),
         line('tgone', 31, '  const gone = true;', 'Its code is gone'),
+        { ...line('tfold', 16, '', 'On a folded line'), code: [[' ', '    const res = await fetch(endpoint.url, {']], head },
       ] }] }]));`);
     await tab.open('about:blank');
     await tab.open('file://' + file);
@@ -637,21 +650,27 @@ async function runThreads(file: string) {
       await sleep(300);
       // the moved one waits below the box above it, until the reader looks at it
       r.level = off(box('t:tsame'), 31) + ' ' + (off(box('t:tmoved'), 33) > 0);
+      // the outdated one and the one on a folded line sit by the file's header, one under the other
       const header = card('#c-retry-decision', 'src/webhooks/deliver.ts');
-      r.goneBeside = Math.round(box('t:tgone').getBoundingClientRect().top - header.getBoundingClientRect().top);
+      const by = (id) => Math.round(box('t:' + id).getBoundingClientRect().top - header.getBoundingClientRect().top);
+      r.goneBeside = Math.min(by('tgone'), by('tfold')) + ' ' + (Math.max(by('tgone'), by('tfold')) > 0);
       r.outdated = ['tsame', 'tmoved', 'tgone'].map((id) => !!box('t:' + id)?.querySelector('.gr-chip.is-outdated')).join();
       r.goneCode = box('t:tgone')?.querySelector('.gr-note-code')?.textContent.trim();
       r.movedLabel = box('t:tmoved')?.querySelector('.gr-note-what')?.textContent;
       ms.look = t(() => box('t:tmoved').querySelector('.gr-note-text').click());
       r.movedLit = await until(() => row(33)?.matches('[data-selected-line]')) && !row(31).matches('[data-selected-line]');
       await sleep(300);
-      r.movedLevel = off(box('t:tmoved'), 33) + ' ' + (off(box('t:tsame'), 31) < 0);`));
+      r.movedLevel = off(box('t:tmoved'), 33) + ' ' + (off(box('t:tsame'), 31) < 0);
+      // a click on the one on a folded line opens the Diff tab's card of the whole file to that line
+      box('t:tfold').querySelector('.gr-note-text').click();
+      const whole = () => card('.gr-diff', 'src/webhooks/deliver.ts')?.querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line="16"]:not([data-line-type="change-deletion"])');
+      r.foldReveal = await until(() => !$('.gr-diff').hidden && whole()?.matches('[data-selected-line]'));`));
     await tab.send('Page.addScriptToEvaluateOnNewDocument', { source: VIEWER });
     await tab.open('about:blank');
     await tab.open('file://' + file);
     take(await inPage(tab, `${helpers}
       r.otherReader = await until(() => box('t:cother')) && box('t:cother').querySelector('.gr-post-by b').textContent + ' ' + !!box('t:cother').querySelector('.gr-chip.is-outdated');
-      r.notWhole = !box('t:bad1') && !box('t:bad2') && document.querySelectorAll('.gr-margin > .gr-thread').length === 4;
+      r.notWhole = !box('t:bad1') && !box('t:bad2') && document.querySelectorAll('.gr-margin > .gr-thread').length === 5;
       $('[data-note-general]').click();
       await sleep(50);
       const general = box('draft');
@@ -668,6 +687,21 @@ async function runThreads(file: string) {
       put('comments/u_me/msgs/m1', { thread: mine, by: 'claude', text: 'Capped at an hour (backoff.ts:12).', at: new Date().toISOString(), head: 'c2c2c2c' });
       r.answer = await until(() => box('t:' + mine)?.querySelector('.gr-post.is-claude')) && [...box('t:' + mine).querySelectorAll('.gr-post-by b')].map((b) => b.textContent).join() + ' ' + box('t:' + mine).querySelector('.gr-post.is-claude .gr-note-text').textContent;
       r.answerToast = $('#k-toast')?.textContent;
+      // the bell counts the thread, and its list goes to the answer and marks it read
+      r.unread = $('.gr-bell-n').textContent + ' ' + !!box('t:' + mine).querySelector('.gr-post.is-unread .gr-chip.is-new');
+      ms.bell = t(() => $('[data-bell]').click());
+      const items = [...document.querySelectorAll('.gr-inbox-item')];
+      r.inbox = !$('#gr-inbox').hidden && items.length + ' ' + items[0]?.querySelector('.gist').textContent + ' | ' + (document.activeElement === items[0]);
+      scrollTo(0, document.body.scrollHeight);
+      items[0].click();
+      await sleep(600);
+      const mb = box('t:' + mine);
+      r.bellGo = [$('#gr-inbox').hidden, $('.gr-bell-n').hidden, mb.classList.contains('is-active'), !mb.querySelector('.is-unread'),
+        mb.getBoundingClientRect().top < innerHeight && mb.getBoundingClientRect().bottom > 0, JSON.parse(localStorage.getItem('gr:read')).includes('m1')].join();
+      $('[data-bell]').click();
+      r.inboxEmpty = $('.gr-inbox-empty')?.textContent.startsWith('No unread answers');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      r.inboxClosed = $('#gr-inbox').hidden;
       box('t:' + mine).querySelector('[data-thread-reply]').click();
       const form = box('t:' + mine).querySelector('.gr-composer');
       form.querySelector('textarea').value = 'Make it configurable?';
@@ -690,10 +724,11 @@ async function runThreads(file: string) {
     tab.close();
   }
   report(name, tab, got, ms, {
-    level: '0 true', movedLevel: '0 true', goneBeside: 0, outdated: 'false,false,true', goneCode: '+   const gone = true;', movedLabel: 'Line 33', movedLit: true,
-    otherReader: 'Reviewer true', notWhole: true, sendWord: 'Send 1to Claude', sentRef: true, mineShows: 'You', answer: 'You,Claude Capped at an hour (backoff.ts:12).', answerToast: 'Claude answered in a thread.',
+    level: '0 true', movedLevel: '0 true', goneBeside: '0 true', foldReveal: true, outdated: 'false,false,true', goneCode: '+   const gone = true;', movedLabel: 'Line 33', movedLit: true,
+    otherReader: 'Reviewer true', notWhole: true, unread: '1 true', inbox: '1 Claude Capped at an hour (backoff.ts:12). | true',
+    bellGo: 'true,true,true,true,true,true', inboxEmpty: true, inboxClosed: true, sendWord: 'Send 1to Claude', sentRef: true, mineShows: 'You', answer: 'You,Claude Capped at an hour (backoff.ts:12).', answerToast: 'Claude answered in a thread.',
     replyWord: 'Send', replyText: true, replyDoc: 'reply true Is the backoff capped? claude', replyShows: true, mark: true,
-  }, { look: BUDGET.interaction });
+  }, { look: BUDGET.interaction, bell: BUDGET.interaction });
 }
 
 const dir = mkdtempSync(join(tmpdir(), 'guided-review-page-'));

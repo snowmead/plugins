@@ -1,6 +1,7 @@
 /* Review comments. The reader writes comments for Claude on a line or a block of lines, on a file, or on the pull
-   request as a whole, and sends each at once or adds it to a batch they send together. A sent comment stays on the
-   page as a thread (threads.ts), where Claude's answers come back and the reader replies.
+   request as a whole, and sends each at once or queues it to send with the others. A sent comment stays on the page
+   as a thread (threads.ts), where Claude's answers come back and the reader replies. The bell in the bar lists the
+   threads with an answer the reader has not read, and a click on one, or on any comment, goes to its code.
 
    - A line comment starts from the "+" @pierre/diffs shows beside the line under the pointer (drag it to take a block
      of lines), or beside the last of the lines the reader selected by their numbers (a click, then a Shift-click on
@@ -12,8 +13,9 @@
    On a wide screen every comment is a box in a margin at the right of the code, as comments sit beside a document: a
    box for each thread, each pending comment and the comment being written, level with the line, file header or title
    it is on. Boxes that would meet stack down the margin. The box the reader clicks comes level with its line, a
-   little nearer the code, and its lines are selected. On a narrow screen there is no margin: each box sits in the
-   code instead, under its line, under its file's header, or under the title.
+   little nearer the code, and its lines are selected; a card folded or marked reviewed opens, and the code comes on
+   screen. On a narrow screen there is no margin: each box sits in the code instead, under its line, under its file's
+   header, or under the title.
 
    Pending comments and replies stay in the reader's browser, per pull request like the review marks, until they are
    sent. A send posts a summary with Send to Claude, which wakes the session that published the page: one comment
@@ -27,9 +29,9 @@ import { ICON } from '../kit/web/icons';
 import { sound } from '../kit/web/sound';
 import { toast } from '../kit/web/toast';
 import { split } from './dom';
-import { type CardState, allDrawn, cards, mount, redrawNotes, rowOf, setFold } from './cards';
+import { type CardState, allDrawn, cards, findRow, mount, redrawNotes, rowOf, setFold } from './cards';
 import { type Ctx, active, ctxOf, ctxs, diffOf, guideOf } from './ctx';
-import { view } from './nav';
+import { choose, pin, renderDiff, show, view } from './nav';
 import { type Post, type Target, type Thread, authorOf, codeOf, keepLocal, mark, newId, onThreads, placeOf, refFor, rowAt, rowsOf, saveSend, startThreads, threadOf, threadsOf, watchThreads } from './threads';
 
 const MAX_BYTES = 3900; // a comment holds 4 KiB
@@ -143,7 +145,7 @@ function remove(id: string) {
   changed(hit.c, hit.cm.thread ? [] : [hit.cm.path], [hit.cm.thread]);
   sound.play('deselect');
 }
-/** A new comment or reply is kept: added to the batch, or sent at once. */
+/** A new comment or reply is kept: queued, or sent at once. */
 function kept(cm: ReviewComment, now: boolean) {
   if (now) void send([cm]);
   else { sound.play('select'); paintBar(); }
@@ -152,7 +154,7 @@ function kept(cm: ReviewComment, now: boolean) {
 // ---------------------------------------------------------------- composers
 const sendWord = () => (canSend === 'available' ? 'Send' : 'Copy');
 const sendTitle = (what: string) => (canSend === 'available' ? `Send ${what} to Claude now (${MAC ? '⌘' : 'Ctrl'}↵)` : `${whyCopy()} (${MAC ? '⌘' : 'Ctrl'}↵)`);
-/** A comment box. A new comment or reply has Cancel, Add to batch and Send (⌘↵); an edit has Cancel and Save.
+/** A comment box. A new comment or reply has Cancel, Add to queue and Send (⌘↵); an edit has Cancel and Save.
     Escape cancels. */
 function composer(o: { label?: string; text?: string; placeholder?: string; edit?: boolean; reply?: boolean; save(text: string, now: boolean): void; cancel(): void }) {
   const box = h('textarea', { class: 'gr-field', rows: 3, maxlength: 2000, placeholder: o.placeholder ?? 'Leave a comment for Claude', 'aria-label': o.label ?? o.placeholder ?? 'Comment' });
@@ -163,7 +165,7 @@ function composer(o: { label?: string; text?: string; placeholder?: string; edit
     o.label ? h('div', { class: 'gr-composer-where', text: o.label }) : null, box,
     h('div', { class: 'gr-composer-foot' },
       button('Cancel', 'is-ghost', () => o.cancel()),
-      o.edit ? null : button('Add to batch', '', () => take(false), 'Keep it with your other pending comments, to send them together', 'data-composer-add'),
+      o.edit ? null : button('Add to queue', '', () => take(false), 'Queue it with your other comments, to send them together from the bar', 'data-composer-add'),
       h('button', { class: 'k-btn is-primary is-sm', type: 'submit', 'data-composer-send': '', title: o.edit ? `Save (${MAC ? '⌘' : 'Ctrl'}↵)` : sendTitle(o.reply ? 'this reply' : 'this comment') }, o.edit ? 'Save' : sendWord())));
   form.addEventListener('submit', (e) => { e.preventDefault(); take(!o.edit); });
   form.addEventListener('keydown', (e) => {
@@ -423,7 +425,7 @@ function noteCard(cm: ReviewComment) {
 }
 const btn = (text: string, attrs: Record<string, string>, icon?: string) =>
   h('button', { class: `k-btn is-ghost is-sm${icon ? ' is-icon' : ''}`, type: 'button', ...attrs, html: icon }, icon ? null : text);
-/** A pending comment's box: where it is, its words, and Edit, Send and Delete. */
+/** A queued comment's box: where it is, its words, and Edit, Send and Delete. */
 function paintNote(el: HTMLElement, cm: ReviewComment) {
   el.classList.toggle('is-active', looking === el.dataset.key);
   if (editingHere(el, cm.id)) { keepTyping(el, () => el.replaceChildren(editing!.form)); return; }
@@ -433,7 +435,7 @@ function paintNote(el: HTMLElement, cm: ReviewComment) {
     h('div', { class: 'gr-note-head' },
       h('span', { class: 'gr-note-what', text: placeLabel(at ?? cm) }),
       at ? null : h('span', { class: 'gr-chip is-outdated', text: 'Outdated', title: `Written on ${cm.head.slice(0, 7)}. The code it was on has changed since.` }),
-      h('span', { class: 'gr-chip is-pending', text: 'Pending' }), h('span', { class: 'gr-spacer' }),
+      h('span', { class: 'gr-chip is-pending', text: 'Queued' }), h('span', { class: 'gr-spacer' }),
       btn('Edit', { 'data-note-edit': cm.id }),
       btn(sendWord(), { 'data-note-now': cm.id, title: sendTitle('this comment') }),
       btn('Delete', { 'data-note-del': cm.id, 'aria-label': 'Delete comment', title: 'Delete' }, ICON.x)),
@@ -454,15 +456,17 @@ const when = (iso: string) => {
   return Number.isNaN(+d) ? '' : d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 function postEl(p: Post, threadHead: string) {
-  return h('li', { class: `gr-post${p.by === 'claude' ? ' is-claude' : ''}` },
+  const fresh = p.by === 'claude' && !read.has(p.id);
+  return h('li', { class: `gr-post${p.by === 'claude' ? ' is-claude' : ''}${fresh ? ' is-unread' : ''}` },
     h('div', { class: 'gr-post-by' }, h('b', { text: authorOf(p.by, p.uid) }), h('time', { datetime: p.at, text: when(p.at) }),
-      p.by === 'claude' && p.head && p.head !== threadHead ? h('span', { class: 'gr-post-head', title: 'The head commit it answers on', text: p.head.slice(0, 7) }) : null),
+      p.by === 'claude' && p.head && p.head !== threadHead ? h('span', { class: 'gr-post-head', title: 'The head commit it answers on', text: p.head.slice(0, 7) }) : null,
+      fresh ? h('span', { class: 'gr-chip is-new', text: 'New' }) : null),
     h('p', { class: 'gr-note-text', text: p.text }));
 }
 function pendingPost(el: HTMLElement, r: ReviewComment) {
   if (editingHere(el, r.id)) return h('li', { class: 'gr-post is-editing', 'data-note-id': r.id }, editing!.form);
   return h('li', { class: 'gr-post is-pending', 'data-note-id': r.id },
-    h('div', { class: 'gr-post-by' }, h('b', { text: 'You' }), h('span', { class: 'gr-chip is-pending', text: 'Pending' }), h('span', { class: 'gr-spacer' }),
+    h('div', { class: 'gr-post-by' }, h('b', { text: 'You' }), h('span', { class: 'gr-chip is-pending', text: 'Queued' }), h('span', { class: 'gr-spacer' }),
       btn('Edit', { 'data-note-edit': r.id }),
       btn(sendWord(), { 'data-note-now': r.id, title: sendTitle('this reply') }),
       btn('Delete', { 'data-note-del': r.id, 'aria-label': 'Delete reply', title: 'Delete' }, ICON.x)),
@@ -481,6 +485,7 @@ function paintThread(el: HTMLElement) {
   const pending = listOf(t.c).filter((x) => x.kind === 'reply' && x.thread === t.id);
   el.classList.toggle('is-resolved', t.resolved);
   el.classList.toggle('is-folded', folded);
+  el.classList.toggle('has-unread', unreadIn(t).length > 0);
   const what = h('span', { class: 'gr-note-what', text: placeLabel(at ?? t.cm) });
   const chips = [
     at ? null : h('span', { class: 'gr-chip is-outdated', text: 'Outdated', title: `Written on ${t.cm.head.slice(0, 7)}. The code it was on has changed since.` }),
@@ -618,6 +623,7 @@ let lit: CardState | null = null;
 function look(key: string | null, layoutNow = true) {
   if (key === looking) return;
   looking = key;
+  if (key?.startsWith('t:')) markRead(key.slice(2));
   if (lit) { lit.inst?.setSelectedLines(null); lit = null; }
   for (const el of $$<HTMLElement>('[data-key]')) el.classList.toggle('is-active', !!key && el.dataset.key === key);
   if (key) void light(key);
@@ -633,6 +639,102 @@ async function light(key: string) {
   if (looking !== key) return;
   s.st.inst?.setSelectedLines(rangeOf(it.at));
   lit = s.st;
+}
+
+// ---------------------------------------------------------------- going to a comment
+/** The pull request a box is on. */
+function ctxOfKey(key: string) {
+  if (key === 'draft') return draft?.c ?? null;
+  return key.startsWith('t:') ? threadOf(key.slice(2))?.c ?? null : find(key.slice(2))?.c ?? null;
+}
+const onScreen = (el: Element) => { const r = el.getBoundingClientRect(); return r.top >= 60 && r.bottom <= innerHeight; };
+/** Go to a comment's code: open its card when it is folded or marked reviewed, show the Diff tab when only that tab
+    can show its line, and bring the code on screen when it is not (`always`: even when it is). Then look at its box. */
+async function reveal(key: string, always: boolean) {
+  const c = ctxOfKey(key);
+  if (!c) return;
+  if (c !== active()) choose(c);
+  const it = itemsOf(c).find((x) => x.key === key);
+  if (!it) return;
+  let s = spotOf(it, viewOf(c));
+  if (it.at?.kind === 'line' && s.at !== 'row') {
+    // A line no card of this view shows, as one in a fold of the guide: the Diff tab's card of the whole file opens to it.
+    renderDiff(c);
+    const whole = $$('.gr-file', diffOf(c)).find((x) => x.dataset.path === it.at!.path);
+    const st = whole && cards.get(whole);
+    if (st) { if (view() !== 'diff') show('diff'); s = { at: 'row', st, line: it.at.start!, side: it.at.side! }; }
+  }
+  const card = s.at === 'row' ? (s.st.el as HTMLElement) : s.at === 'card' ? s.card : null;
+  const folded = !!card?.classList.contains('collapsed');
+  if (card) setFold(card, false);
+  const target = s.at === 'row' ? (await findRow(s.st.el, s.line, s.side)) ?? card : card ?? $('.gr-head', c.root);
+  if (looking === key) void light(key); else look(key);
+  if (key.startsWith('t:')) markRead(key.slice(2));
+  if (target && (always || folded || !onScreen(target))) pin(target, s.at === 'row' ? 'center' : 'start');
+  relayout();
+}
+
+// ---------------------------------------------------------------- unread answers and the bell
+// An answer of Claude's is unread until the reader looks at its thread: a click on its box, or on it in the bell's
+// list. What they have read is kept in this browser, like the review marks. The bell in the bar counts the threads
+// with an unread answer and opens a list of them, newest first; a click on one goes to it.
+const READ = 'gr:read';
+const read = new Set<string>((() => { const got = store.get<string[]>(READ); return Array.isArray(got) ? got : []; })());
+const unreadIn = (t: Thread) => t.posts.filter((p) => p.by === 'claude' && !read.has(p.id));
+function unread() {
+  return ctxs.flatMap((c) => sentOf(c).map((t) => ({ t, posts: unreadIn(t) })).filter((x) => x.posts.length))
+    .sort((a, b) => (a.posts.at(-1)!.at < b.posts.at(-1)!.at ? 1 : -1));
+}
+function markRead(id: string) {
+  const t = threadOf(id);
+  const fresh = t ? unreadIn(t) : [];
+  if (!fresh.length) return;
+  for (const p of fresh) read.add(p.id);
+  store.set(READ, [...read].slice(-2000));
+  for (const el of $$<HTMLElement>('.gr-thread')) if (el.dataset.threadId === id) paintThread(el);
+  paintBell();
+  relayout();
+}
+const inbox = () => document.getElementById('gr-inbox');
+const bellOpen = () => inbox()?.hidden === false;
+function paintBell() {
+  const list = unread();
+  for (const b of $$('[data-bell]')) {
+    const n = $('.gr-bell-n', b);
+    if (n) { n.textContent = String(list.length); n.hidden = !list.length; }
+    b.setAttribute('aria-label', list.length ? `Unread answers from Claude: ${list.length}` : 'Unread answers from Claude: none');
+  }
+  if (bellOpen()) paintInbox(list);
+}
+function paintInbox(list = unread()) {
+  const box = inbox();
+  if (!box) return;
+  const item = ({ t, posts }: { t: Thread; posts: Post[] }) => {
+    const last = posts.at(-1)!;
+    return h('button', { class: 'gr-inbox-item', type: 'button', 'data-inbox': t.id },
+      h('span', { class: 'where' },
+        ctxs.length > 1 && t.c.pr.number != null ? h('span', { class: 'n', text: `#${t.c.pr.number}` }) : null,
+        h('b', { text: t.cm.path ? split(t.cm.path)[0] : 'The pull request' }),
+        t.cm.kind === 'general' ? null : h('span', { text: placeLabel(placeOf(t.c, t.cm) ?? t.cm) }),
+        h('time', { datetime: last.at, text: when(last.at) })),
+      h('span', { class: 'ask', text: firstLine(t.cm.text, 90) }),
+      h('span', { class: 'gist' }, h('b', { text: 'Claude ' }), last.text),
+      posts.length > 1 ? h('span', { class: 'more', text: `${posts.length} new answers` }) : null);
+  };
+  box.replaceChildren(
+    h('div', { class: 'gr-inbox-head' }, h('b', { text: 'Unread answers' }),
+      list.length ? h('button', { class: 'k-btn is-ghost is-sm', type: 'button', 'data-inbox-all': '' }, 'Mark all read') : null),
+    list.length ? h('div', { class: 'gr-inbox-list' }, ...list.map(item))
+      : h('p', { class: 'gr-inbox-empty', text: 'No unread answers. When Claude answers one of your comments, it shows here until you read it.' }));
+}
+function setBell(open: boolean, focusBell = false) {
+  const box = inbox();
+  if (!box || open === bellOpen()) return;
+  if (open) paintInbox();
+  box.hidden = !open;
+  for (const b of $$('[data-bell]')) b.setAttribute('aria-expanded', String(open));
+  if (open) (box.querySelector<HTMLElement>('.gr-inbox-item') ?? box.querySelector<HTMLElement>('button'))?.focus();
+  else if (focusBell) $<HTMLElement>('[data-bell]')?.focus();
 }
 
 // ---------------------------------------------------------------- showing and hiding
@@ -659,7 +761,8 @@ function redrawAll() {
 }
 wide.addEventListener('change', redrawAll);
 
-/** The bar: the Comments button, which shows or hides them, with their count; the Send button, while any wait. */
+/** The bar: the Comments button, which shows or hides them, with their count; the Send button, while any are queued;
+    the bell. */
 function paintBar() {
   const n = total(), m = ctxs.reduce((s, c) => s + sentOf(c).length, 0) + n;
   for (const b of $$('[data-notes-toggle]')) {
@@ -674,8 +777,9 @@ function paintBar() {
     b.disabled = sending;
     $('.n', b)!.textContent = canSend === 'available' ? `Send ${n}` : `Copy ${n}`;
     $('.long', b)!.textContent = canSend === 'available' ? 'to Claude' : 'for the chat';
-    b.title = canSend === 'available' ? `Send the ${plural(n)} waiting to Claude, together` : whyCopy();
+    b.title = canSend === 'available' ? `Send the ${plural(n)} in the queue to Claude, together` : whyCopy();
   }
+  paintBell();
 }
 const whyCopy = () => (canSend === 'writers_only' ? 'Only the page’s editors can send to Claude, so this copies them to paste in your chat.'
   : canSend === 'no_session' ? 'No Claude session is watching this page, so this copies them to paste in your chat.'
@@ -773,7 +877,7 @@ async function send(only?: ReviewComment[]) {
   const batch: Batch = ctxs.map((c) => ({ c, list: ordered(c).filter((cm) => !only || only.includes(cm)) })).filter((b) => b.list.length);
   const n = batch.reduce((s, b) => s + b.list.length, 0);
   if (!n) return;
-  if (sending) { toast('A send is going out. This one waits with your pending comments.'); paintBar(); return; }
+  if (sending) { toast('A send is going out. This one stays in the queue.'); paintBar(); return; }
   const id = `s${Date.now().toString(36)}`;
   if (canSend === 'available' && comments) {
     sending = true;
@@ -810,11 +914,20 @@ async function sendToClaude(batch: Batch, n: number, cap: CommentsCap, id: strin
 const live = (key: string) => (key === 'draft' ? !!draft?.target : key.startsWith('n:') ? !!find(key.slice(2)) : !!threadOf(key.slice(2)));
 document.addEventListener('click', (e) => {
   const el = e.target as Element;
+  if (bellOpen() && !el.closest('.gr-bell-wrap')) setBell(false);
+  // A click on a comment goes to its code; one on its buttons or in its text box only looks at it.
   const box = el.closest<HTMLElement>('[data-key]');
-  if (box && box.dataset.key !== looking && live(box.dataset.key!)) look(box.dataset.key!);
+  const key = box?.dataset.key;
+  if (key && live(key)) {
+    if (!el.closest('button, a, textarea, input, select, label, form') && !getSelection()?.toString()) void reveal(key, false);
+    else if (key !== looking) look(key);
+  }
   const t = el.closest<HTMLElement>('button');
   if (!t) return;
-  if (t.hasAttribute('data-notes-toggle')) { toggleNotes(); sound.play('toggle'); }
+  if (t.hasAttribute('data-bell')) { setBell(!bellOpen()); sound.play('toggle'); }
+  else if (t.dataset.inbox) { setBell(false); void reveal(`t:${t.dataset.inbox}`, true); sound.play('nav'); }
+  else if (t.hasAttribute('data-inbox-all')) { for (const { t: th } of unread()) markRead(th.id); sound.play('select'); }
+  else if (t.hasAttribute('data-notes-toggle')) { toggleNotes(); sound.play('toggle'); }
   else if (t.hasAttribute('data-note-file')) openFile(t.closest<HTMLElement>('.gr-file')!);
   else if (t.hasAttribute('data-note-general')) { const c = ctxOf(t); if (c) openGeneral(c); }
   else if (t.dataset.noteEdit) edit(t, t.dataset.noteEdit);
@@ -830,6 +943,16 @@ document.addEventListener('pointerdown', (e) => {
   if (looking && !(e.target as Element).closest?.('[data-key]')) look(null);
 }, true);
 document.addEventListener('keydown', (e) => {
+  // The bell's list: the arrows move between its answers, Escape closes it.
+  if (bellOpen()) {
+    if (e.key === 'Escape') { e.preventDefault(); setBell(false, true); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const items = $$<HTMLElement>('.gr-inbox-item');
+      const i = items.indexOf(document.activeElement as HTMLElement);
+      if (items.length) { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+      return;
+    }
+  }
   if (e.key !== 'Escape' || !looking || (e.target as Element).closest?.('form')) return;
   look(null);
 });
