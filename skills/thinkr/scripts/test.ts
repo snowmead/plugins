@@ -35,10 +35,29 @@ const PLAN_V2: [string | RegExp, string][] = [
 // in ms: t(fn) times the synchronous work a click or input does before the browser can paint the result. An
 // interaction must fit well inside one 60 Hz frame (16.7 ms), so the next frame already shows its result.
 const BUDGET = { boot: 30, interaction: 12 };
-// `prime` runs on a first load and the page is opened again, as a reader coming back would open it.
-const cases: Record<string, { prime?: string; run: string; expect: Record<string, unknown>; budget: Record<string, number> }> = {
+// `prime` runs on a first load and the page is opened again, as a reader coming back would open it. `viewer` runs
+// before the page's own scripts on every load.
+const cases: Record<string, { viewer?: string; prime?: string; run: string; expect: Record<string, unknown>; budget: Record<string, number> }> = {
   plan: {
-    prime: `localStorage.setItem('thinkr:api-rate-limits:plan:seen', '1')`, // this reader last saw version 1
+    // A stand-in for the claude.ai viewer: the page database in memory, a reader "u_me", and a comments capability
+    // that records each send's text, or fails once with rate_limited when __fail is set.
+    viewer: `(() => {
+      const docs = new Map();
+      window.__sent = [];
+      const db = { doc: (path) => ({ path, get: async () => ({ exists: docs.has(path) }), set: async (d) => { docs.set(path, d); } }) };
+      const comments = {
+        canSendToClaude: async () => 'available',
+        anchorFor: async () => ({}),
+        sendToClaude: async ({ text }) => {
+          if (window.__fail) { window.__fail = false; throw { code: 'rate_limited' }; }
+          window.__sent.push(text);
+          return { threadId: 't' + window.__sent.length };
+        },
+      };
+      const user = { id: async () => 'u_me', can: async () => true };
+      window.claude = { use: async (name) => ({ db, comments, user })[name] ?? null };
+    })();`,
+    prime:`localStorage.setItem('thinkr:api-rate-limits:plan:seen', '1')`, // this reader last saw version 1
     budget: { boot: BUDGET.boot, select: BUDGET.interaction, step: BUDGET.interaction, panel: BUDGET.interaction, toc: BUDGET.interaction, change: BUDGET.interaction },
     run: `
       ms.select = t(() => $('#algorithm--bucket').click());
@@ -147,7 +166,23 @@ const cases: Record<string, { prime?: string; run: string; expect: Record<string
       r.chgFold = $('.t-chg-items').hidden;
       $('.t-chg-vbtn').click();
       r.chgUnfold = !$('.t-chg-items').hidden;
-      r.chgSeen = JSON.parse(localStorage.getItem('thinkr:api-rate-limits:plan:seen'));`,
+      r.chgSeen = JSON.parse(localStorage.getItem('thinkr:api-rate-limits:plan:seen'));
+
+      // sends: each lists the answers that changed since the last send that reached Claude, and names the rest
+      const submit = async (approve) => {
+        if (!$('#t-composer').classList.contains('is-open')) $(approve ? '.t-dock > .k-btn.is-primary' : '.t-dock > .k-btn:not(.is-primary)').click();
+        $('#t-composer').requestSubmit();
+        await new Promise((ok) => setTimeout(ok, 100));
+        return window.__sent.at(-1).split('\\n\\n').map((b) => b.split('\\n')[0]).join(' | ');
+      };
+      r.sendFirst = await submit(false);
+      r.sendApprove = await submit(true);
+      $('#algorithm--sliding').click();
+      r.sendChanged = await submit(false);
+      $('#redis-down--closed').click();
+      window.__fail = true;
+      r.sendFailed = (await submit(false)) === r.sendChanged && $('#t-composer').classList.contains('is-open');
+      r.sendRetry = await submit(false);`,
     expect: {
       badge: 'Answered', count: '1/4', maxDisabled: true, otherShown: true, otherHidden: true, offAtStep1: true, onAtStep2: true, saved: 4, refHost: 'redis.io', fitsContent: true, zoomed: '150%', reset: '100%', taller: true,
       panel: 'Approve plan', panelWarn: '1 question is still open.', draft: 'Ship it after the load test.', escCloses: true,
@@ -156,6 +191,11 @@ const cases: Record<string, { prime?: string; run: string; expect: Record<string
       chgEntries: 2, chgNew: '2 2', chgRail: 'sticky', chgMarked: 4, chgQuiet: true, chgHeading: 'How a request is checked', chgPos: '1 / 3', chgLit: 3, chgShown: true,
       chgBar: 'Two weeks of shadow mode', chgNext: '2 / 3', chgSwitch: '1 / 1 1', chgQA: 'When Redis does not answer within 20 ms, what should the gateway do? | Let the request through',
       chgReclick: true, chgCleared: true, chgFold: true, chgUnfold: true, chgSeen: 2,
+      sendFirst: 'Feedback on: API Rate Limits (v2) | Q1 Which algorithm should count requests? | Q2 What should each limit be counted against? | Q3 When Redis does not answer within 20 ms, what should the gateway do? | Q4 Which customers need a higher limit from day one? | Message: | Full answers: responses/u_me in the page database.',
+      sendApprove: 'Approved: API Rate Limits (v2) | Q4 Which customers need a higher limit from day one? | Answers unchanged since the last send: Q1, Q2, Q3. | Full answers: responses/u_me in the page database.',
+      sendChanged: 'Feedback on: API Rate Limits (v2) | Q1 Which algorithm should count requests? | Q4 Which customers need a higher limit from day one? | Answers unchanged since the last send: Q2, Q3. | Full answers: responses/u_me in the page database.',
+      sendFailed: true,
+      sendRetry: 'Feedback on: API Rate Limits (v2) | Q3 When Redis does not answer within 20 ms, what should the gateway do? | Q4 Which customers need a higher limit from day one? | Answers unchanged since the last send: Q1, Q2. | Full answers: responses/u_me in the page database.',
     },
   },
   explain: {
@@ -206,6 +246,7 @@ try {
     const chromeTab = await browser(join(tmp, 'profile-' + name));
     try {
       const url = 'file://' + join(tmp, `${name}.preview.html`);
+      if (c.viewer) await chromeTab.send('Page.addScriptToEvaluateOnNewDocument', { source: c.viewer });
       await chromeTab.open(url);
       if (c.prime) { await chromeTab.run(c.prime); await chromeTab.open(url); }
       const raw = await chromeTab.run(`(async () => {

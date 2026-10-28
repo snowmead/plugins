@@ -3,7 +3,7 @@
    the page database at responses/<user id> (Claude reads them with ArtifactData); Submit posts a short summary
    with Send to Claude, which wakes the session. Where a viewer cannot send, the summary is copied for the chat. */
 import type { CanSendToClaude, CapabilityMap, CommentsCap, DocRef } from './types';
-import type { Question } from './questions';
+import type { AnswerReport, Question } from './questions';
 import { copyText, h, store } from '../kit/web/dom';
 import { sound } from '../kit/web/sound';
 import { toast } from '../kit/web/toast';
@@ -126,13 +126,20 @@ export function createDock({ page, version, key, questions, onChange, jump }: Do
   })();
 
   // ---------------------------------------------------------------- send
-  const summary = (approved: boolean) => {
+  // An answer an earlier send delivered, unchanged since, is named instead of repeated, so Send feedback and then
+  // Approve plan do not send every answer twice. Only with the page database, which still holds it for Claude.
+  const sentKey = key + ':sent';
+  const summary = (approved: boolean, reports: AnswerReport[], answers: Record<string, string>) => {
+    const before = (docRef && store.get<Record<string, string>>(sentKey)) || {};
     const lines = [`${approved ? 'Approved' : 'Feedback on'}: ${title} (v${version})`];
+    const same: string[] = [];
     questions.forEach((q, i) => {
-      const r = q.report();
+      if (q.done() && before[q.id] === answers[q.id]) return void same.push(`Q${i + 1}`);
+      const r = reports[i];
       const ans = r.type === 'text' ? r.text : r.labels.join('; ');
       lines.push(`Q${i + 1} ${r.question}\n→ ${ans || '(unanswered)'}${r.note ? `\n  note: ${r.note}` : ''}`);
     });
+    if (same.length) lines.push(`Answers unchanged since the last send: ${same.join(', ')}.`);
     if (message.trim()) lines.push(`Message:\n${message.trim()}`);
     let text = lines.join('\n\n');
     if (docRef) text += `\n\nFull answers: ${docRef.path} in the page database.`;
@@ -152,7 +159,9 @@ export function createDock({ page, version, key, questions, onChange, jump }: Do
   // Submit never makes the reader wait: the panel closes at once, the database write and the send run in
   // parallel, and a failure reopens the panel with the message still in it.
   async function send(approved: boolean) {
-    const text = summary(approved);
+    const reports = questions.map((q) => q.report());
+    const answers = Object.fromEntries(questions.map((q, i) => [q.id, JSON.stringify(reports[i])]));
+    const text = summary(approved, reports, answers);
     const now = new Date().toISOString();
     const extra = { sentAt: now, ...(approved ? { approved: { version, at: now } } : {}) };
     const draft = message;
@@ -163,6 +172,7 @@ export function createDock({ page, version, key, questions, onChange, jump }: Do
       toast(approved ? 'Approving…' : 'Sending…');
       try {
         await Promise.all([write(extra), c.anchorFor(page.querySelector('h1') ?? page).then((anchor) => c.sendToClaude({ anchor, text }))]);
+        store.set(sentKey, answers); // only a send that reached Claude, with the answers as they were when it left
         return sent(approved ? 'Approved. Claude will reply in the comment thread.' : 'Sent. Claude will reply in the comment thread.');
       } catch (err) {
         const code = (err as { code?: string })?.code;
