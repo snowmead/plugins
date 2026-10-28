@@ -1,12 +1,14 @@
 /* Code cards. @pierre/diffs draws each card's code in its own shadow root: syntax highlighting, the words that
-   changed within a line, light and dark themes. The folds between hunks and the moved-code chips are ours, slotted
-   in. A card renders when it comes near the screen, so a long guide opens at once. */
-import type { DiffFile, DiffStyle, Hunk, Move, PageChapter, PierreAnnotation, PierreFileDiff, PierreFileDiffMeta, PierreHunkSeparator } from './types';
+   changed within a line, light and dark themes. The folds between hunks, the moved-code chips and the review comments
+   are ours, slotted in. A card renders when it comes near the screen, so a long guide opens at once. */
+import type { DiffFile, DiffStyle, Hunk, Move, PageChapter, PierreAnnotation, PierreFileDiff, PierreFileDiffMeta, PierreHunkSeparator, PierreLineRange } from './types';
 import { $, $$, esc, store } from '../kit/web/dom';
 import { ICON } from '../kit/web/icons';
 import { onTheme, themeType } from '../kit/web/theme';
 import { D, split, stat } from './dom';
 import { libs } from './libs';
+import { COMMENT } from './icons';
+import { type Note, commentNotes, fileNotes, noteEl, openLine } from './comments';
 import type { Ctx } from './ctx';
 
 /** Lines a click on a fold opens. */
@@ -19,7 +21,7 @@ export const firstNew = (h: Hunk) => (h.newLines === 0 ? h.newStart + 1 : h.newS
 export const firstOld = (h: Hunk) => (h.oldLines === 0 ? h.oldStart + 1 : h.oldStart);
 
 /** The old text of a changed file: the new text with each hunk put back. */
-function rebuildOld(f: DiffFile): string[] | null {
+export function rebuildOld(f: DiffFile): string[] | null {
   if (!f.new) return null;
   const out: string[] = [];
   let pos = 1;
@@ -177,13 +179,18 @@ function moveChip(f: DiffFile, mv: Move) {
   el.innerHTML = `<button type="button" data-jump="${esc(mv.other)}" data-line="${mv.otherFrom}" data-side="${mv.side === '-' ? 'n' : 'o'}">↑ ${mv.lines} lines moved ${mv.side === '-' ? 'to' : 'from'} ${place}</button>`;
   return el;
 }
+// The library keeps a slotted element across redraws while its note is the same object, so each move keeps one.
+const moveNotes = new WeakMap<Move, Note>();
+const moveNote = (mv: Move) => { let n = moveNotes.get(mv); if (!n) moveNotes.set(mv, n = { kind: 'move', mv }); return n; };
 /** A chip under the last line of each block of moved code the card shows. */
-function movesIn(f: DiffFile, hunks: Hunk[]): PierreAnnotation<Move>[] {
+function movesIn(f: DiffFile, hunks: Hunk[]): PierreAnnotation<Note>[] {
   const shown = { '-': new Set<number>(), '+': new Set<number>() };
   for (const h of hunks) for (const [op, o, n] of h.lines) if (op !== ' ') shown[op].add((op === '-' ? o : n)!);
   return f.moves.filter((mv) => shown[mv.side].has(mv.to))
-    .map((mv) => ({ side: mv.side === '-' ? 'deletions' : 'additions', lineNumber: mv.to, metadata: mv }));
+    .map((mv) => ({ side: mv.side === '-' ? 'deletions' : 'additions', lineNumber: mv.to, metadata: moveNote(mv) }));
 }
+/** What the card draws under its lines: moved-code chips, then review comments and an open composer. */
+const notesOf = (st: CardState) => [...movesIn(st.f, st.hunks), ...commentNotes(st)];
 
 /** Without the library: the hunks as plain text. */
 function plain(hunks: Hunk[]) {
@@ -226,16 +233,27 @@ export function mount(card: Element): Promise<void> | undefined {
       hunkSeparators: (h: PierreHunkSeparator) => separator(st, h),
       expansionLineCount: STEP,
       collapsedContextThreshold: fd.isPartial ? 0 : 3,
-      renderAnnotation: (a: PierreAnnotation<Move>) => moveChip(f, a.metadata),
+      renderAnnotation: (a: PierreAnnotation<Note>) => (a.metadata.kind === 'move' ? moveChip(f, a.metadata.mv) : noteEl(a.metadata)),
+      // The "+" beside the line under the pointer starts a comment; dragging it takes a block of lines.
+      enableGutterUtility: true,
+      onGutterUtilityClick: (range: PierreLineRange) => openLine(st, range),
       unsafeCSS: CODE_CSS,
     };
     st.inst = new diffs.FileDiff(st.opts);
-    st.inst.render({ fileDiff: fd, containerWrapper: host, lineAnnotations: movesIn(f, hunks) });
+    st.inst.render({ fileDiff: fd, containerWrapper: host, lineAnnotations: notesOf(st) });
     st.host = $('diffs-container', host);
     host.style.minHeight = '';
     mounted.add(st);
   })();
   return st.mounting;
+}
+
+/** The drawn cards of a pull request that show a file: its chapter cards and its Diff tab card. */
+export const drawnCards = (ctx: Ctx, path: string) => [...mounted].filter((st) => st.ctx === ctx && st.f.path === path);
+/** Draw a card's notes again, after a comment on its file is added, changed or removed. */
+export function redrawNotes(st: CardState) {
+  st.inst!.setLineAnnotations(notesOf(st));
+  st.inst!.rerender();
 }
 
 const mounter = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
@@ -280,11 +298,14 @@ export function card(ctx: Ctx, f: DiffFile, hunkIds: number[] | null, chapter: s
     + `<span class="gr-lang">${esc(chipOf(f))}</span><span class="fname">${esc(name)}</span>`
     + `<span class="fdir" title="${esc(f.path)}">${esc(dir)}${f.oldPath ? ` ← ${esc(f.oldPath)}` : ''}</span>`
     + `<span class="fstat">${part}${word ? `<span class="st">${word}</span>` : ''}${stat(a, d)}</span>`
-    + `<label class="gr-check"><input type="checkbox" data-review-file="${esc(f.path)}"${chapter ? ` data-review-ch="${esc(chapter)}"` : ''}><span class="rv">Reviewed</span></label></header>` + gen + body;
+    + `<button type="button" class="gr-note-btn" data-note-file aria-label="Comment on ${esc(name)}" title="Comment on this file">${COMMENT}</button>`
+    + `<label class="gr-check"><input type="checkbox" data-review-file="${esc(f.path)}"${chapter ? ` data-review-ch="${esc(chapter)}"` : ''}><span class="rv">Reviewed</span></label></header>`
+    + '<div class="gr-notes" hidden></div>' + gen + body;
   if (hunks.length && !f.binary) {
     cards.set(el, { el, ctx, f, hunks, whole, elsewhere: elsewhereOf(ctx, f, hunks) });
     if (mounter) mounter.observe(el); else void mount(el);
   }
+  fileNotes(ctx, el);
   if (f.kind === 'generated') setFold(el, true);
   return el;
 }

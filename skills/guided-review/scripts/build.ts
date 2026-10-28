@@ -25,6 +25,7 @@ import { dirname, join, resolve } from 'node:path';
 import type { BeforeAfter, Chapter, Diff, DiffFile, Guide, Kind, PageData, PagePr, Stack, StateTable, Text } from '../runtime/types';
 import { FONTS, ICON, assets, preview, publishLines, runtime, soundButton, styles } from '../kit/build/page';
 import { libs, preloads } from '../kit/build/libs';
+import { COMMENT } from '../runtime/icons';
 
 const ROOT = join(import.meta.dir, '..');
 const RT = join(ROOT, 'runtime');
@@ -371,7 +372,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     `<span>written for ${headLink}</span>`,
   ].filter(Boolean).join('');
   const ofWhat = pr.url ? `<a href="${esc(pr.url)}" target="_blank" rel="noopener">${num}</a>` : esc(branch ?? 'the branch');
-  const keys = `<kbd>j</kbd> <kbd>k</kbd> next and previous chapter · <kbd>r</kbd> mark the chapter reviewed${multi ? ' · <kbd>[</kbd> <kbd>]</kbd> previous and next pull request' : ''} · shift-click a fold to open it all`;
+  const keys = `<kbd>j</kbd> <kbd>k</kbd> next and previous chapter · <kbd>r</kbd> mark the chapter reviewed${multi ? ' · <kbd>[</kbd> <kbd>]</kbd> previous and next pull request' : ''} · <kbd>c</kbd> comments · shift-click a fold to open it all`;
   const hunkCount = diff.files.reduce((s, f) => s + f.hunks.length, 0);
   const report = [
     `guide ${num || esc(pr.title)}: ${n} chapters, ${diff.files.length} files, ${hunkCount} hunks, ${flows} flow${flows === 1 ? '' : 's'}`,
@@ -388,7 +389,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     links: (links ? `<span class="gr-links">${links}</span>` : '')
       + (pr.url ? `<a class="k-btn is-sm is-primary" href="${esc(pr.url)}" target="_blank" rel="noopener"><span>Open ${num}<span class="long"> on GitHub</span></span><span aria-hidden="true">↗</span></a>` : ''),
     data: {
-      id, prefix: P, key: `gr:${pr.number ?? branch ?? diff.head}`, number: pr.number ?? null, title: pr.title,
+      id, prefix: P, key: `gr:${pr.number ?? branch ?? diff.head}`, number: pr.number ?? null, title: pr.title, head: diff.head,
       chapters: chapters.map((c, i) => ({ id: c.id, title: c.title, files: sel[i] ?? [] })), files: diff.files,
     },
   };
@@ -431,12 +432,14 @@ function picker(self: Built, i: number) {
 }
 
 // Each pull request's parts carry data-pr, and only the chosen one's show: its progress and links in the bar, and its
-// panel (header, guide, diff, footer). The tabs, the layout switch and the sound stay.
+// panel (header, guide, diff, footer). The tabs, the layout switch, the sound and the comments stay. The comments
+// sidebar fills in when it first opens.
 const hide = (i: number) => (i ? ' hidden' : '');
 const markup = `<div class="k-bar gr-bar"><div class="gr-wrap">
 <div class="k-seg is-sm gr-tabs" role="tablist"><button type="button" class="gr-tab" role="tab" data-view="guide" aria-selected="true">Guide</button><button type="button" class="gr-tab" role="tab" data-view="diff" aria-selected="false">Diff</button></div>
-<span class="gr-spacer"></span>${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span>${soundButton('k-btn is-ghost is-icon is-sm')}${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
+<span class="gr-spacer"></span>${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span>${soundButton('k-btn is-ghost is-icon is-sm')}<button type="button" class="k-btn is-sm gr-note-toggle" data-side-toggle aria-controls="gr-side" aria-expanded="false" aria-label="Comments" title="Comments (c)">${COMMENT}<span class="long">Comments</span><span class="gr-note-count" hidden>0</span></button>${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
 </div></div>
+<aside class="gr-side" id="gr-side" aria-label="Comments" data-uncommentable hidden></aside>
 <div class="gr-wrap">
 ${prs.map((p, i) => `<div class="gr-pr" id="${multi ? p.id : 'gr-pr'}" data-pr="${p.id}"${hide(i)}>
 <header class="gr-head">${picker(p, i)}<div class="gr-meta">${p.meta}</div></header>
@@ -457,7 +460,7 @@ const data: PageData = {
   diffStyle,
   prs: prs.map((p) => p.data),
 };
-const [css, js] = await Promise.all([styles(join(RT, 'guide.css')), runtime(join(RT, 'index.ts'), ['select', 'deselect', 'nav', 'toggle', 'reveal'])]);
+const [css, js] = await Promise.all([styles(join(RT, 'guide.css')), runtime(join(RT, 'index.ts'), ['select', 'deselect', 'nav', 'toggle', 'reveal', 'send'])]);
 const { at, files } = await assets(stem, { 'guided-review.css': css, 'data.js': `window.GR_DATA = ${JSON.stringify(data)};\n`, 'guided-review.js': js });
 // The title first (the viewer reads it from the first 8 KB), then preloads so the libraries download while the page
 // parses; the data and the runtime go after the markup they fill.

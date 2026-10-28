@@ -16,6 +16,11 @@ them:
   and each reader can switch from the bar.
 - **Review marks**: tick a chapter or a file to fold it and count it toward "3 of 6 chapters reviewed". `j` and `k`
   move between chapters, `r` marks one. Marks stay in the reader's browser and survive a rebuild for a new head.
+- **Review comments**: press the **+** in a card's gutter to comment on a line, or drag it over a block of lines;
+  the speech bubble in a file's header comments on the whole file, and the **Comments** sidebar (`c`) on the whole
+  pull request. The sidebar lists every pending comment and sends them all to Claude at once, which answers in one
+  thread, changes the code on the branch and republishes the guide for the new head. Without a Claude session to
+  send to, Send copies the comments for the chat.
 - **Stacks**: one page can hold several pull requests, a stack or any set to review together. The title becomes a
   menu of them, a stack drawn from its base up, each with its branches, size and review progress; `[` and `]` move
   between them.
@@ -54,7 +59,9 @@ Ask in plain words:
 - "Review the stack #140 to #142 as one guide."
 
 Claude gathers the diff, reads the change, writes the chapters, checks and builds the page, publishes it, and gives
-you the link. Comment on any line with the comment button; Claude answers in the thread.
+you the link. Comment on lines, files or the whole pull request, then press **Send** in the Comments sidebar: Claude
+answers your questions, makes the changes you asked for, and puts the next version of the guide on the same link.
+Claude pushes only when you say so.
 
 ## Maintain
 
@@ -69,7 +76,7 @@ Run these in this folder, after `bun install`:
 
 ```
 SKILL.md                          what Claude reads first
-references/                       guide-format.md, writing.md, stack.md
+references/                       guide-format.md, writing.md, stack.md, comments.md
 examples/                         demo.guide.json, demo-43.guide.json, and demo/ (the demo's base, its head and the PR stacked on it)
 runtime/                          TypeScript runtime, CSS, library pins
 kit/                              link to the shared kit: tokens, sounds, UI parts, build helpers

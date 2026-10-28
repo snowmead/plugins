@@ -6,8 +6,9 @@
    1. scripts: gather.ts and build.ts against a scratch repository: the diff GitHub shows, kinds, scope labels,
       emptied, deleted, renamed, binary and moved code, refs, escaping, and every check that refuses a guide.
    2. page: builds the demo (scripts/demo.ts) and drives it in headless Chrome over DevTools: what the reader sees
-      after each action, no console errors, and timing budgets (boot ≤ 30 ms, each interaction ≤ 12 ms, a redraw of
-      the cards on screen ≤ one frame). */
+      after each action, review comments (the gutter's "+" dragged with real mouse events, the sidebar, the send), no
+      console errors, and timing budgets (boot ≤ 30 ms, each interaction ≤ 12 ms, a redraw of the cards on screen ≤
+      one frame). */
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -228,8 +229,6 @@ const expect: Record<string, unknown> = {
 };
 
 const RUN = `
-  const card = (scope, path) => [...document.querySelectorAll(scope + ' .gr-file')].find((c) => c.dataset.path === path);
-  const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (!fn() && Date.now() < end) await sleep(50); return !!fn(); };
   r.railButtons = document.querySelectorAll('.gr-rail button').length;
   r.generatedFolded = card('.gr-guide', 'src/api/schema.gen.ts').classList.contains('collapsed');
 
@@ -298,7 +297,6 @@ const RUN = `
 // opens #43, and a jump inside it.
 const STACK_RUN = `
   const vis = (q) => [...document.querySelectorAll(q)].filter((e) => !e.hidden && !e.closest('[hidden]'));
-  const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (!fn() && Date.now() < end) await sleep(50); return !!fn(); };
   r.startsOn = vis('.gr-pr')[0]?.dataset.pr; r.count = vis('.gr-pick-n')[0]?.textContent;
   r.stacked = !!vis('.gr-picklist.stacked, .gr-pick .stacked').length || !!document.querySelector('.gr-pr:not([hidden]) .gr-picklist.stacked');
   vis('.gr-pick-btn')[0].click();
@@ -327,32 +325,127 @@ const STACK_EXPECT: Record<string, unknown> = {
   ownMarks: 'true,false', pickerProgress: '1/3', jump: true, anchor: 'pr43', anchorAt: true,
 };
 
-async function runPage(name: string, file: string, run: string, expect: Record<string, unknown>, budget: Record<string, number>, after?: (tab: Awaited<ReturnType<typeof browser>>, r: Record<string, unknown>) => Promise<void>) {
+type Tab = Awaited<ReturnType<typeof browser>>;
+/** Runs `code` in the page with the helpers every run uses ($, sleep, until, t, card) and returns its { r, ms }. */
+async function inPage(tab: Tab, code: string) {
+  const raw = await tab.run(`(async () => {
+    const r = {}, ms = {}, $ = (s) => document.querySelector(s), sleep = (n) => new Promise((ok) => setTimeout(ok, n));
+    const t = (fn) => { const s = performance.now(); fn(); return +(performance.now() - s).toFixed(2); };
+    const until = async (fn, ms = 8000) => { const end = Date.now() + ms; while (!fn() && Date.now() < end) await sleep(50); return !!fn(); };
+    const card = (scope, path) => [...document.querySelectorAll(scope + ' .gr-file')].find((c) => c.dataset.path === path);
+    ${code}
+    return JSON.stringify({ r, ms });
+  })()`);
+  if (typeof raw !== 'string' || !raw.startsWith('{')) throw new Error(String(raw));
+  return JSON.parse(raw) as { r: Record<string, unknown>; ms: Record<string, number> };
+}
+function report(name: string, tab: Tab, got: Record<string, unknown>, ms: Record<string, number>, expect: Record<string, unknown>, budget: Record<string, number>) {
+  const bad = Object.entries(expect).filter(([k, v]) => got[k] !== v);
+  for (const [k, v] of bad) console.log(`fail  ${name}.${k}: expected ${JSON.stringify(v)}, got ${JSON.stringify(got[k])}`);
+  const slow = Object.entries(budget).filter(([k, max]) => !(ms[k] <= max));
+  for (const [k, max] of slow) console.log(`slow  ${name}.${k}: ${ms[k]} ms, budget ${max} ms`);
+  for (const e of tab.errors) console.log(`error ${name}: ${e.split('\n')[0]}`);
+  if (!bad.length && !slow.length && !tab.errors.length)
+    console.log(`ok    ${name} (${Object.keys(expect).length} checks, no errors; ${Object.entries(ms).map(([k, v]) => `${k} ${v}ms`).join(', ')})`);
+  failed += bad.length + slow.length + tab.errors.length;
+}
+
+async function runPage(name: string, file: string, run: string, expect: Record<string, unknown>, budget: Record<string, number>, after?: (tab: Tab, r: Record<string, unknown>) => Promise<void>) {
   const tab = await browser(join(dirname(file), `profile-${name}`), { warnings: true });
   try {
     await tab.open('file://' + file);
-    const raw = await tab.run(`(async () => {
-      const r = {}, ms = {}, $ = (s) => document.querySelector(s), sleep = (n) => new Promise((ok) => setTimeout(ok, n));
-      const t = (fn) => { const s = performance.now(); fn(); return +(performance.now() - s).toFixed(2); };
-      await sleep(300);
-      ms.boot = +performance.getEntriesByName('gr:boot')[0].duration.toFixed(2);
-      ${run}
-      return JSON.stringify({ r, ms });
-    })()`);
-    if (typeof raw !== 'string' || !raw.startsWith('{')) { console.log(`fail  ${name}: ${raw}`); failed++; return; }
-    const { r: got, ms } = JSON.parse(raw) as { r: Record<string, unknown>; ms: Record<string, number> };
+    let got: Record<string, unknown>, ms: Record<string, number>;
+    try {
+      ({ r: got, ms } = await inPage(tab, `await sleep(300);
+        ms.boot = +performance.getEntriesByName('gr:boot')[0].duration.toFixed(2);
+        ${run}`));
+    } catch (e) { console.log(`fail  ${name}: ${(e as Error).message}`); failed++; return; }
     if (after) await after(tab, got);
-    const bad = Object.entries(expect).filter(([k, v]) => got[k] !== v);
-    for (const [k, v] of bad) console.log(`fail  ${name}.${k}: expected ${JSON.stringify(v)}, got ${JSON.stringify(got[k])}`);
-    const slow = Object.entries(budget).filter(([k, max]) => !(ms[k] <= max));
-    for (const [k, max] of slow) console.log(`slow  ${name}.${k}: ${ms[k]} ms, budget ${max} ms`);
-    for (const e of tab.errors) console.log(`error ${name}: ${e.split('\n')[0]}`);
-    if (!bad.length && !slow.length && !tab.errors.length)
-      console.log(`ok    ${name} (${Object.keys(expect).length} checks, no errors; ${Object.entries(ms).map(([k, v]) => `${k} ${v}ms`).join(', ')})`);
-    failed += bad.length + slow.length + tab.errors.length;
+    report(name, tab, got, ms, expect, budget);
   } finally {
     tab.close();
   }
+}
+
+// Review comments: a line and a file comment kept from an earlier visit draw in their cards and the sidebar; the
+// gutter's "+", dragged over three lines with real mouse events, opens a composer for them; a general comment comes
+// from the sidebar; Send (copied here, with no Claude to send to) holds every comment and clears them, and the batch
+// can be brought back.
+async function runComments(file: string) {
+  const name = 'comments';
+  const tab = await browser(join(dirname(file), `profile-${name}`), { warnings: true });
+  const got: Record<string, unknown> = {}, ms: Record<string, number> = {};
+  const take = (x: { r: Record<string, unknown>; ms: Record<string, number> }) => { Object.assign(got, x.r); Object.assign(ms, x.ms); return x.r; };
+  const mouse = (type: string, x: number, y: number, down = false) => tab.send('Input.dispatchMouseEvent', { type, x, y, button: down || type !== 'mouseMoved' ? 'left' : 'none', buttons: down || type === 'mousePressed' ? 1 : 0, clickCount: 1 });
+  const root = `card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('diffs-container').shadowRoot`;
+  const num = (line: number) => `${root}.querySelector('[data-column-number="${line}"]:not([data-line-type="change-deletion"])')`;
+  try {
+    await tab.open('file://' + file);
+    await inPage(tab, `const head = window.GR_DATA.prs[0].head;
+      localStorage.setItem('gr:42:comments', JSON.stringify([
+        { id: 'cseed1', kind: 'line', path: 'src/webhooks/deliver.ts', start: 27, side: 'n', end: 27, endSide: 'n', code: [['+', 'x']], text: 'Seeded line comment', head, at: '2026-01-01T00:00:00Z' },
+        { id: 'cseed2', kind: 'file', path: 'src/webhooks/backoff.ts', text: 'Seeded file comment', head, at: '2026-01-01T00:00:00Z' },
+      ]));`);
+    await tab.open('about:blank');
+    await tab.open('file://' + file);
+    take(await inPage(tab, `await sleep(300);
+      r.badge = $('.gr-note-count').textContent;
+      $('#c-retry-decision').scrollIntoView();
+      r.lineNote = await until(() => card('#c-retry-decision', 'src/webhooks/deliver.ts')?.querySelector('diffs-container .gr-note')?.textContent.includes('Seeded line comment'));
+      r.fileNote = card('#c-retry-decision', 'src/webhooks/backoff.ts').querySelector('.gr-notes .gr-note-text')?.textContent;
+      ms.side = t(() => $('[data-side-toggle]').click());
+      r.sideItems = document.querySelectorAll('.gr-side-item').length;
+      const box = $('.gr-side-general textarea');
+      box.focus();
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }));
+      r.typingKeepsKeys = document.body.classList.contains('gr-side-open');
+      box.value = 'Seeded general comment';
+      ms.add = t(() => box.form.requestSubmit());
+      r.added = $('.gr-note-count').textContent + ' ' + document.querySelectorAll('.gr-side-item').length;
+      ${num(31)}.scrollIntoView({ block: 'center' });
+      await sleep(100);`));
+    const at = JSON.parse(await tab.run(`(() => { const card = (s, p) => [...document.querySelectorAll(s + ' .gr-file')].find((c) => c.dataset.path === p);
+      const a = ${num(31)}.getBoundingClientRect(), b = ${num(33)}.getBoundingClientRect();
+      return JSON.stringify({ x: a.left + a.width / 2, y: a.top + a.height / 2, y2: b.top + b.height / 2 }); })()`));
+    await mouse('mouseMoved', at.x, at.y);
+    const plus = JSON.parse(await tab.run(`(() => { const card = (s, p) => [...document.querySelectorAll(s + ' .gr-file')].find((c) => c.dataset.path === p);
+      const u = ${root}.querySelector('[data-utility-button]')?.getBoundingClientRect();
+      return JSON.stringify(u ? { x: u.left + u.width / 2, y: u.top + u.height / 2 } : null); })()`));
+    got.plus = !!plus;
+    if (plus) {
+      await mouse('mousePressed', plus.x, plus.y);
+      await mouse('mouseMoved', plus.x, at.y2, true);
+      await mouse('mouseReleased', plus.x, at.y2);
+    }
+    take(await inPage(tab, `await sleep(100);
+      const form = card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('.gr-composer');
+      r.composer = form?.querySelector('.gr-composer-where')?.textContent;
+      r.composerFocused = document.activeElement === form?.querySelector('textarea');
+      if (form) { form.querySelector('textarea').value = 'Dragged over three lines'; ms.lineAdd = t(() => form.requestSubmit()); }
+      const saved = JSON.parse(localStorage.getItem('gr:42:comments')).find((c) => c.text === 'Dragged over three lines');
+      r.dragged = saved ? saved.start + '-' + saved.end + ' ' + saved.side + saved.endSide + ' ' + saved.code.map((l) => l[0]).join('') : null;
+      r.draggedDrawn = await until(() => [...card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelectorAll('diffs-container .gr-note-text')].some((p) => p.textContent === 'Dragged over three lines'));
+      let copied = null;
+      navigator.clipboard.writeText = (text) => { copied = text; return Promise.resolve(); };
+      $('[data-note-send]').click();
+      await until(() => copied);
+      r.sent = !!copied && copied.startsWith('# Review comments on #42 ') && copied.includes(': 4 comments')
+        && copied.includes('1. General\\n   Seeded general comment') && copied.includes('src/webhooks/backoff.ts (the file)')
+        && copied.includes('src/webhooks/deliver.ts:27\\n') && copied.includes('src/webhooks/deliver.ts:31-33\\n   | + ');
+      r.cleared = $('.gr-note-count').hidden && !document.querySelector('.gr-guide .gr-note') && localStorage.getItem('gr:42:comments') === '[]';
+      $('[data-note-restore]')?.click();
+      r.restored = JSON.parse(localStorage.getItem('gr:42:comments')).length;`));
+  } catch (e) {
+    console.log(`fail  ${name}: ${(e as Error).message}`);
+    failed++;
+    return;
+  } finally {
+    tab.close();
+  }
+  report(name, tab, got, ms, {
+    badge: '2', lineNote: true, fileNote: 'Seeded file comment', sideItems: 2, typingKeepsKeys: true, added: '3 3', plus: true,
+    composer: 'Comment on lines 31–33', composerFocused: true, dragged: '31-33 nn +++', draggedDrawn: true, sent: true, cleared: true, restored: 4,
+  }, { side: BUDGET.interaction, add: BUDGET.interaction, lineAdd: BUDGET.frame });
 }
 
 const dir = mkdtempSync(join(tmpdir(), 'guided-review-page-'));
@@ -361,6 +454,7 @@ try {
   const stack = buildStackDemo(join(dir, 'stack'), true);
   if (demo.code || stack.code) { console.log(demo.log + stack.log); process.exit(1); }
   await runPage('page', join(dir, 'demo.preview.html'), RUN, expect, budget);
+  await runComments(join(dir, 'demo.preview.html'));
   await runPage('stack', join(dir, 'stack.preview.html'), STACK_RUN, STACK_EXPECT, { boot: BUDGET.boot, pick: BUDGET.interaction, back: BUDGET.interaction }, async (tab, r) => {
     // A link with #pr43-c-docs opens on #43, at that chapter.
     // Another document first: a navigation that changes only the anchor fires no load.

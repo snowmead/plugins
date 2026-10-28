@@ -1,4 +1,5 @@
-/* The guided review page: code cards, review marks, jumps, the chapter rail and keys, for one pull request or several.
+/* The guided review page: code cards, review marks, review comments, jumps, the chapter rail and keys, for one pull
+   request or several.
    With several, the title is a menu of them (a stack from its base up, or any set to review together), and the page
    shows one at a time. build.ts bundles this into one script, loaded after the page's markup and its data file (window.GR_DATA).
    Code renders with @pierre/diffs and the Diff tab's tree with @pierre/trees, both imported from the pinned jsDelivr
@@ -11,6 +12,7 @@ import { cards, setDiffStyle, setFold, startDiffStyle, STEP } from './cards';
 import { type Ctx, active, byId, byOwnId, ctxOf, ctxs, diffOf } from './ctx';
 import { markChapter, markFile, progress, saveMarks } from './marks';
 import { choose, current, go, jump, onScroll, pin, show, step, toCard, view } from './nav';
+import { startComments, toggleSide } from './comments';
 
 /** Mark a chapter from a click or a key, with its sound; the last chapter reviewed sounds its own. */
 function reviewChapter(c: Ctx, id: string, on: boolean) {
@@ -103,6 +105,7 @@ document.addEventListener('keydown', (e) => {
   const typing = /textarea|select/i.test(t.tagName) || (t.tagName === 'INPUT' && !/checkbox|radio|button/.test((t as HTMLInputElement).type));
   if (e.metaKey || e.ctrlKey || e.altKey || typing || e.composedPath().some((n) => (n as HTMLElement).isContentEditable)) return;
   if (e.key === '[' || e.key === ']') { if (step(e.key === ']' ? 1 : -1)) sound.play('nav'); return; }
+  if (e.key === 'c') { if (toggleSide()) sound.play('toggle'); return; }
   if (view() !== 'guide') return;
   if (e.key === 'j' || e.key === 'k') { if (go(e.key === 'j' ? 1 : -1)) sound.play('nav'); }
   else if (e.key === 'r') {
@@ -123,6 +126,7 @@ function start() {
   for (const x of ctxs) progress(x);
   choose(c);
   startDiffStyle();
+  startComments();
   if (rest === 'diff') show('diff');
   else if (rest && byOwnId(c, rest) && !byOwnId(c, rest)!.classList.contains('gr-pr')) pin(byOwnId(c, rest)!);
   performance.measure('gr:boot', { start: T0, end: performance.now() });

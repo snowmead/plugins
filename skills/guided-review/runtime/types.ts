@@ -103,6 +103,8 @@ export interface PagePr {
   key: string;
   number: number | null;
   title: string;
+  /** The head commit the guide was written for: line comments name it, so their line numbers can be read back. */
+  head: string;
   chapters: PageChapter[];
   files: DiffFile[];
 }
@@ -112,21 +114,60 @@ export interface PageData {
   prs: PagePr[];
 }
 
+// ---------------------------------------------------------------- review comments
+/** The side a line number counts on: the old file ('o', a removed line) or the new one ('n', every other line). */
+export type Side = 'o' | 'n';
+/** One comment the reader writes on the page for Claude. Kept in their browser until they send the batch. */
+export interface ReviewComment {
+  id: string;
+  /** line: a line or a block of lines; file: a file as a whole; general: the pull request as a whole. */
+  kind: 'line' | 'file' | 'general';
+  path?: string;
+  /** A line comment's first and last line, each on its own side. */
+  start?: number;
+  side?: Side;
+  end?: number;
+  endSide?: Side;
+  /** The lines a line comment is on, as the page showed them. */
+  code?: [op: ' ' | '-' | '+', text: string][];
+  text: string;
+  /** The head commit the comment was written on. */
+  head: string;
+  at: string;
+}
+
+// ---------------------------------------------------------------- artifact capabilities (runtime contract 0.2.x)
+export type CanSendToClaude = 'available' | 'writers_only' | 'no_session' | 'off';
+export interface CommentsCap {
+  canSendToClaude(): Promise<CanSendToClaude>;
+  anchorFor(el: Element): Promise<unknown>;
+  sendToClaude(target: { anchor: unknown; text: string }): Promise<{ threadId: string }>;
+}
+export interface DocRef { path: string; set(data: Record<string, unknown>): Promise<void> }
+export interface DbCap { doc(path: string): DocRef }
+export interface UserCap { can(name: string): Promise<boolean | null>; id(): Promise<string | null> }
+export interface CapabilityMap { comments: CommentsCap; db: DbCap; user: UserCap }
+
 declare global {
   interface Window {
     /** Set by the page's data file, which loads before the runtime. */
     GR_DATA?: PageData;
+    claude?: { use<K extends keyof CapabilityMap>(name: K): Promise<CapabilityMap[K] | null> };
   }
 }
 
 // ---------------------------------------------------------------- the library slices the runtime uses
 export interface PierreHunkSeparator { hunkIndex: number; lines: number; lineCountKnown?: boolean; expandable?: boolean }
 export interface PierreAnnotation<T> { side: 'additions' | 'deletions'; lineNumber: number; metadata: T }
+/** A range of lines the reader picked in the gutter, in the order dragged. An end on `deletions` is numbered on the old
+    side; any other end (an added or unchanged line) on the new side. */
+export interface PierreLineRange { start: number; end: number; side?: 'additions' | 'deletions'; endSide?: 'additions' | 'deletions' }
 export interface PierreFileDiffMeta { isPartial: boolean }
 export interface PierreFileDiff {
   setOptions(o: Record<string, unknown>): void;
   rerender(): void;
-  render(o: { fileDiff: PierreFileDiffMeta; containerWrapper: HTMLElement; lineAnnotations?: PierreAnnotation<Move>[] }): void;
+  render(o: { fileDiff: PierreFileDiffMeta; containerWrapper: HTMLElement; lineAnnotations?: PierreAnnotation<unknown>[] }): void;
+  setLineAnnotations(list: PierreAnnotation<unknown>[]): void;
   setThemeType(t: ThemeType): void;
   expandHunk(index: number, direction: 'up' | 'down' | 'both', lines?: number): void;
   setSelectedLines(range: { start: number; end: number; side: 'additions' | 'deletions' } | null): void;
