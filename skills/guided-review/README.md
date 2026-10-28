@@ -14,6 +14,9 @@ them:
   that name the function they hide, moved code marked at both ends. A **Diff** tab lists every file in a
   [`@pierre/trees`](https://trees.software) tree. Unified or split: the guide sets where it starts (`diffStyle`),
   and each reader can switch from the bar.
+- **Full width**: the page fills the window, so long lines show in full. The panel button at the left of the bar (`b`)
+  closes the chapter text in the guide, leaving each chapter's title above its code, and the file tree in the Diff
+  tab; each view remembers its own.
 - **Review marks**: tick a chapter or a file to fold it and count it toward "3 of 6 chapters reviewed". `j` and `k`
   move between chapters, `r` marks one. Marks stay in the reader's browser and survive a rebuild for a new head.
 - **Review comments**: press the **+** in a card's gutter to comment on a line. For a block of lines, click a line

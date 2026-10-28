@@ -1,6 +1,6 @@
-/* Moving around: the pull request on screen, its Guide and Diff views, jumps from a ref to its line, the chapter
-   rail, j and k. */
-import { $, $$, esc } from '../kit/web/dom';
+/* Moving around: the pull request on screen, its Guide and Diff views and their left columns, jumps from a ref to its
+   line, the chapter rail, j and k. */
+import { $, $$, esc, store } from '../kit/web/dom';
 import { type CardState, card, cards, findRow, setFold } from './cards';
 import { type Ctx, active, ctxs, diffOf, guideOf, setActive } from './ctx';
 import { buildTree, progress, restoreChapters, showFile } from './marks';
@@ -36,7 +36,35 @@ export function show(v: View) {
   guideOf(c).hidden = v !== 'guide';
   diffOf(c).hidden = v !== 'diff';
   $('.gr-rail')?.toggleAttribute('hidden', v !== 'guide');
+  paintPanel();
   if (v === 'diff') renderDiff(c);
+}
+
+// ---------------------------------------------------------------- the left column
+// Each view's left column, the chapter text or the file tree, opens and closes on its own, and stays as the reader
+// left it.
+const closed: Record<View, boolean> = { guide: false, diff: false, ...store.get<Record<View, boolean>>('gr:panel-closed') };
+function paintPanel() {
+  document.body.classList.toggle('gr-guide-panel-closed', closed.guide);
+  document.body.classList.toggle('gr-diff-panel-closed', closed.diff);
+  const label = `${closed[shown] ? 'Show' : 'Hide'} ${shown === 'guide' ? 'the chapter text' : 'the file tree'}`;
+  for (const b of $$('[data-panel-toggle]')) {
+    b.setAttribute('aria-expanded', String(!closed[shown]));
+    b.setAttribute('aria-label', label);
+    b.title = `${label} (b)`;
+  }
+}
+/** Open or close the left column of the view on screen. What is at the reading line stays where it is. */
+export function togglePanel(open = closed[shown]) {
+  const scope = shown === 'guide' ? guideOf(active()) : diffOf(active());
+  const y = innerHeight * 0.3;
+  const at = $$('.gr-card', scope).find((x) => { const r = x.getBoundingClientRect(); return r.top <= y && r.bottom > y; })
+    ?? (shown === 'guide' ? current() : null);
+  const top = at?.getBoundingClientRect().top ?? 0;
+  closed[shown] = !open;
+  store.set('gr:panel-closed', closed);
+  paintPanel();
+  if (at) scrollBy(0, at.getBoundingClientRect().top - top);
 }
 /** Put a pull request on screen: its bar items and panel show, the others hide. */
 export function choose(c: Ctx) {

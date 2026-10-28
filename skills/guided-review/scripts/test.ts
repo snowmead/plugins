@@ -220,12 +220,13 @@ findChrome();
 // paint the result. An interaction must fit well inside one 60 Hz frame (16.7 ms).
 // The diff layout switch answers in the click's frame and redraws the cards on screen in the next, which must fit one.
 const BUDGET = { boot: 30, interaction: 12, frame: 16.7 };
-const budget = { boot: BUDGET.boot, mark: BUDGET.interaction, key: BUDGET.interaction, tab: BUDGET.interaction, split: BUDGET.interaction, restyle: BUDGET.frame };
+const budget = { boot: BUDGET.boot, mark: BUDGET.interaction, key: BUDGET.interaction, tab: BUDGET.interaction, split: BUDGET.interaction, restyle: BUDGET.frame, panel: BUDGET.interaction };
 const expect: Record<string, unknown> = {
   railButtons: 8, generatedFolded: true, moveChip: '↑ 6 lines moved to src/webhooks/sign.ts line 3', code: true, plain: 0, flow: true,
   progress: '1 of 7 chapters reviewed', chapterFolds: true, saved: true, keyMoves: true, keyMarks: '2 of 7 chapters reviewed',
   jumpInGuide: true, jumpFoldToDiff: true, foldRow: true, diffCards: 10, tree: true, treeTick: true, soundOff: 'false', soundSaved: false,
   styleStart: 'true', split: true, styleSaved: 'split', splitJump: true, unified: true,
+  textShut: true, panelSaved: '{"guide":true,"diff":false}', treeOwn: 'true false', treeShut: true, panelsOpen: '{"guide":false,"diff":false}',
 };
 
 const RUN = `
@@ -291,7 +292,21 @@ const RUN = `
   ref(27).click();
   r.splitJump = await until(() => dcard()?.querySelector('[data-additions] [data-line="27"][data-selected-line]'));
   $('[data-diff-style="unified"]').click();
-  r.unified = await until(() => dcard()?.querySelector('[data-diff-type="single"]'));`;
+  r.unified = await until(() => dcard()?.querySelector('[data-diff-type="single"]'));
+
+  // the panel button closes the left column of the view on screen, each view's on its own, and remembers
+  const shut = (q) => getComputedStyle($(q)).display === 'none';
+  ms.panel = t(() => $('[data-panel-toggle]').click());
+  r.textShut = shut('#c-worker .gr-body') && getComputedStyle($('#c-worker')).gridTemplateColumns.split(' ').length === 1 && !shut('#c-worker h2');
+  r.panelSaved = localStorage.getItem('gr:panel-closed');
+  $('.gr-tab[data-view="diff"]').click();
+  r.treeOwn = $('[data-panel-toggle]').getAttribute('aria-expanded') + ' ' + shut('.gr-tree');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true }));
+  r.treeShut = shut('.gr-tree') && getComputedStyle($('.gr-diff')).gridTemplateColumns.split(' ').length === 1;
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true }));
+  $('.gr-tab[data-view="guide"]').click();
+  $('[data-panel-toggle]').click();
+  r.panelsOpen = !shut('.gr-tree') && !shut('#c-worker .gr-body') && localStorage.getItem('gr:panel-closed');`;
 
 // The stack: #42 and #43, based on it, on one page. The picker, [ and ], marks kept per pull request, an anchor that
 // opens #43, and a jump inside it.

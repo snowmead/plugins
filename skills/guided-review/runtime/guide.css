@@ -1,7 +1,8 @@
 /* Guided review · a pull request read as chapters: text on the left, its code on the right, in the kit's look
    (kit/tokens.css and kit/ui.css come first). Layout: a sticky bar of tabs, then one row per section (overview,
-   chapters), a mini-map rail at the left edge, and a Diff view with every file in path order. Only the diff colors
-   are the guide's own. */
+   chapters), a mini-map rail at the left edge, and a Diff view with every file in path order beside its tree. The
+   page takes the whole width, so long lines of code show in full, and each view's left column (the chapter text, the
+   file tree) closes to give the code more. Only the diff colors are the guide's own. */
 :root {
   --add-bg: #edfbf2;
   --add-bg-soft: #f5fcf8;
@@ -33,7 +34,6 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .del-n { color: var(--del-fg); font-variant-numeric: tabular-nums; }
 
 .gr-wrap {
-  max-width: 1440px; margin: 0 auto;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 
@@ -278,6 +278,19 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 }
 .gr-diff-cards { display: grid; gap: 16px; min-width: 0; align-content: start; }
 
+/* ---------- the left column, closed ---------- */
+/* The bar's panel button closes the left column of the view on screen, the chapter text or the file tree, and the
+   code takes its width. A section of the guide keeps its title, count and Reviewed box, as a row above its code. */
+.gr-panel-toggle[aria-expanded="false"] .gr-panel-fill { display: none; }
+body.gr-guide-panel-closed .gr-sec { grid-template-columns: minmax(0, 1fr); gap: 14px; padding-block: 28px; }
+body.gr-guide-panel-closed .gr-text {
+  position: static; max-height: none; overflow: visible; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px;
+}
+body.gr-guide-panel-closed .gr-chmeta { margin-top: 0; }
+body.gr-guide-panel-closed :is(.gr-body, .gr-table, .gr-filelist) { display: none; }
+body.gr-diff-panel-closed .gr-diff { grid-template-columns: minmax(0, 1fr); }
+body.gr-diff-panel-closed .gr-tree { display: none; }
+
 /* ---------- rail ---------- */
 .gr-rail {
   position: fixed; left: max(14px, env(safe-area-inset-left, 0px)); top: 50%; transform: translateY(-50%); z-index: 4;
@@ -382,6 +395,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .gr-side-why { margin: 0; color: var(--muted-fg); font-size: 12.5px; }
 
 @media (max-width: 1500px) { .gr-rail { display: none; } }
+/* where the rail shows, the page keeps a gutter for it */
+@media (min-width: 1501px) { .gr-wrap { padding-left: max(48px, env(safe-area-inset-left, 0px)); } }
 @media (max-width: 1100px) {
   :root { --text-col: 280px; }
   .gr-sec { gap: 28px; }

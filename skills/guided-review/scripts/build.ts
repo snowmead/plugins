@@ -25,7 +25,7 @@ import { dirname, join, resolve } from 'node:path';
 import type { BeforeAfter, Chapter, Diff, DiffFile, Guide, Kind, PageData, PagePr, Stack, StateTable, Text } from '../runtime/types';
 import { FONTS, ICON, assets, preview, publishLines, runtime, soundButton, styles } from '../kit/build/page';
 import { libs, preloads } from '../kit/build/libs';
-import { COMMENT } from '../runtime/icons';
+import { COMMENT, PANEL } from '../runtime/icons';
 
 const ROOT = join(import.meta.dir, '..');
 const RT = join(ROOT, 'runtime');
@@ -372,7 +372,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     `<span>written for ${headLink}</span>`,
   ].filter(Boolean).join('');
   const ofWhat = pr.url ? `<a href="${esc(pr.url)}" target="_blank" rel="noopener">${num}</a>` : esc(branch ?? 'the branch');
-  const keys = `<kbd>j</kbd> <kbd>k</kbd> next and previous chapter · <kbd>r</kbd> mark the chapter reviewed${multi ? ' · <kbd>[</kbd> <kbd>]</kbd> previous and next pull request' : ''} · <kbd>c</kbd> comments · shift-click a fold to open it all`;
+  const keys = `<kbd>j</kbd> <kbd>k</kbd> next and previous chapter · <kbd>r</kbd> mark the chapter reviewed${multi ? ' · <kbd>[</kbd> <kbd>]</kbd> previous and next pull request' : ''} · <kbd>b</kbd> chapter text or file tree · <kbd>c</kbd> comments · shift-click a fold to open it all`;
   const hunkCount = diff.files.reduce((s, f) => s + f.hunks.length, 0);
   const report = [
     `guide ${num || esc(pr.title)}: ${n} chapters, ${diff.files.length} files, ${hunkCount} hunks, ${flows} flow${flows === 1 ? '' : 's'}`,
@@ -436,6 +436,7 @@ function picker(self: Built, i: number) {
 // sidebar fills in when it first opens.
 const hide = (i: number) => (i ? ' hidden' : '');
 const markup = `<div class="k-bar gr-bar"><div class="gr-wrap">
+<button type="button" class="k-btn is-ghost is-icon is-sm gr-panel-toggle" data-panel-toggle aria-expanded="true" aria-label="Hide the chapter text" title="Hide the chapter text (b)">${PANEL}</button>
 <div class="k-seg is-sm gr-tabs" role="tablist"><button type="button" class="gr-tab" role="tab" data-view="guide" aria-selected="true">Guide</button><button type="button" class="gr-tab" role="tab" data-view="diff" aria-selected="false">Diff</button></div>
 <span class="gr-spacer"></span>${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span>${soundButton('k-btn is-ghost is-icon is-sm')}<button type="button" class="k-btn is-sm gr-note-toggle" data-side-toggle aria-controls="gr-side" aria-expanded="false" aria-label="Comments" title="Comments (c)">${COMMENT}<span class="long">Comments</span><span class="gr-note-count" hidden>0</span></button>${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
 </div></div>
