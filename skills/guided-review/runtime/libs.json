@@ -1,6 +1,6 @@
 {
  "note": "scripts/build.ts refreshes these to the newest release that is at least 14 days old (the artifact rule), within the same major unless --major. Stable releases only, unless the pinned version is itself a prerelease. modules lists each library's whole static import graph, so a page preloads it in one parallel round.",
- "checked": "2026-10-20",
+ "checked": "2026-10-28",
  "libs": {
   "diffs": {
    "pkg": "@pierre/diffs",
@@ -59,28 +59,28 @@
   },
   "mermaid": {
    "pkg": "mermaid",
-   "version": "12.1.0",
+   "version": "12.2.0",
    "url": "https://cdn.jsdelivr.net/npm/mermaid@{v}/dist/mermaid.esm.min.mjs",
    "modules": [
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/mermaid.esm.min.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-SQW7XO2P.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-GDOATIN3.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-JRPEA5MG.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-MFYRHTYG.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-I2GRRCP3.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-MOTMN5Z2.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-2Z4JPSLF.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-JUO4FS6R.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-F6PIGZHG.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-7PWWD3R6.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-VZ26ENTH.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-BZANPUPN.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-MIE3LDYP.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-YF46JFGZ.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-ZZ52EIBP.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-VSAMGZVZ.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-L2B47AAZ.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.1.0/dist/chunks/mermaid.esm.min/chunk-QVIEFLGF.mjs"
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-674HQBI4.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-GDOATIN3.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-IER4RZHT.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-MFYRHTYG.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-LGKD3V67.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-XUG7IRDC.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-4GHFHL4L.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-KJ5T2YZX.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-F6PIGZHG.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-MMC4O45A.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-XGFVAD2T.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-YX6CVSZ3.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-MIE3LDYP.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-GHI2JMQX.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-ZZ52EIBP.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-FWWDAFD2.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-L2B47AAZ.mjs",
+    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-QVIEFLGF.mjs"
    ]
   }
  }

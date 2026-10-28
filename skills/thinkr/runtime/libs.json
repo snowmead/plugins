@@ -1,22 +1,32 @@
 {
- "note": "scripts/build.ts refreshes these to the newest stable release that is at least 14 days old (the artifact rule), within the same major unless --major. Single-file builds (global) wherever the package ships one; for ESM, modules lists the whole import graph so pages preload it in one parallel round.",
- "checked": "2026-10-19",
+ "note": "scripts/build.ts refreshes these to the newest stable release that is at least 14 days old (the artifact rule), within the same major unless --major. Single-file builds (global) wherever the package ships one; for ESM, modules lists the whole import graph so pages preload it in one parallel round. vgpu-prepare is @vgpu/wgsl's prepareShader, which the runtime runs on each shader string (vgpu 0.6 takes only prepared shaders); keep it at vgpu's version.",
+ "checked": "2026-10-28",
  "libs": {
   "motion": {
    "pkg": "motion",
-   "version": "14.0.0",
+   "version": "14.2.0",
    "url": "https://cdn.jsdelivr.net/npm/motion@{v}/dist/motion.js",
    "global": "Motion"
   },
   "vgpu": {
    "pkg": "vgpu",
-   "version": "0.5.0",
+   "version": "0.6.0",
    "url": "https://cdn.jsdelivr.net/npm/vgpu@{v}/+esm",
+   "deps": [
+    "vgpu-prepare"
+   ],
    "modules": [
-    "https://cdn.jsdelivr.net/npm/vgpu@0.5.0/+esm",
-    "https://cdn.jsdelivr.net/npm/@vgpu/core@0.5.0/+esm",
-    "https://cdn.jsdelivr.net/npm/@vgpu/wgsl@0.5.0/+esm",
-    "https://cdn.jsdelivr.net/npm/@vgpu/wgsl@0.5.0/reflect-source/+esm"
+    "https://cdn.jsdelivr.net/npm/vgpu@0.6.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@vgpu/core@0.6.0/+esm",
+    "https://cdn.jsdelivr.net/npm/@vgpu/wgsl@0.6.0/+esm"
+   ]
+  },
+  "vgpu-prepare": {
+   "pkg": "@vgpu/wgsl",
+   "version": "0.6.0",
+   "url": "https://cdn.jsdelivr.net/npm/@vgpu/wgsl@{v}/prepare/+esm",
+   "modules": [
+    "https://cdn.jsdelivr.net/npm/@vgpu/wgsl@0.6.0/prepare/+esm"
    ]
   },
   "d3": {

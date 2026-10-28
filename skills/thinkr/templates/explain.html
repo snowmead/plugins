@@ -140,7 +140,6 @@
     const colors = () => ({ lo: fig.color('bg'), hi: fig.color('c1'), line: fig.color('fg') });
     try {
       const { gpu, surface, effect, frameLoop, target } = await fig.vgpu();
-      const surf = surface(gpu, fig.canvas(), { dpr: [1, 2] });
       const fx = effect(gpu, /* wgsl */ `
         struct Params { lo: vec4f, hi: vec4f, line: vec4f, width: f32, height: f32, pad0: f32, pad1: f32 }
         @group(0) @binding(0) var<uniform> params: Params;
@@ -155,6 +154,7 @@
           return vec4f(mix(base, params.line.rgb, contour), 1.0);
         }`, { set: { params: { ...colors(), width: 1, height: 1, pad0: 0, pad1: 0 } } });
       await fx.compile(target(gpu, { size: [1, 1] })); // a WGSL error rejects here, not silently in the loop
+      const surf = surface(gpu, fig.canvas(), { dpr: [1, 2] }); // after compile: on an error the 2D fallback still has the canvas
       // the field is still: draw a frame only when something changed, not 60 times a second
       let dirty = true;
       fig.onTheme(() => { fx.set({ params: colors() }); dirty = true; });

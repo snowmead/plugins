@@ -216,8 +216,10 @@ const cases: Record<string, { viewer?: string; prime?: string; run: string; expe
       r.output = $('#landscape output').textContent;
       r.math = !!$('mjx-container');
       r.code = !!$('.hljs-keyword');
-      r.motion = !!(await thinkr.motion());`,
-    expect: { checkDisabled: true, explainHidden: true, wrong: true, explainShown: true, verdict: 'Correct', noOther: true, output: '0.24', math: true, code: true, motion: true },
+      r.motion = !!(await thinkr.motion());
+      // where WebGPU runs, the field is the shader's, not the Canvas 2D fallback's
+      r.shader = !(await navigator.gpu?.requestAdapter()) || !!$('#landscape canvas').getContext('webgpu');`,
+    expect: { checkDisabled: true, explainHidden: true, wrong: true, explainShown: true, verdict: 'Correct', noOther: true, output: '0.24', math: true, code: true, motion: true, shader: true },
   },
 };
 

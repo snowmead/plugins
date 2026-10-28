@@ -65,9 +65,19 @@ function enter(p: Element, delay = 0) {
 }
 
 // ---------------------------------------------------------------- WebGPU
-// one device for every figure, requested at load when the page uses vgpu, so a shader figure never waits for it
+// one device for every figure, requested at load when the page uses vgpu, so a shader figure never waits for it.
+// vgpu takes only prepared shaders, which its .wgsl imports make at build; a figure writes its WGSL as a string at
+// run time, so effect, compute and draw prepare a string first (prepareShader, also handed to figures as `prepare`).
 let gpu: Promise<any> | null = null;
-export const startGpu = () => (gpu ??= load('vgpu').then(async (v) => ({ ...v, gpu: await v.init(), vgpu: v })));
+export const startGpu = () => (gpu ??= Promise.all([load('vgpu'), load('vgpu-prepare')]).then(async ([v, { prepareShader }]) => {
+  const prep = (s: unknown) => (typeof s === 'string' ? prepareShader(s) : s);
+  return {
+    ...v, gpu: await v.init(), vgpu: v, prepare: prepareShader,
+    effect: (g: unknown, s: unknown, o?: unknown) => v.effect(g, prep(s), o),
+    compute: (g: unknown, s: unknown, o?: unknown) => v.compute(g, prep(s), o),
+    draw: (g: unknown, o: { shader: unknown }) => v.draw(g, { ...o, shader: prep(o.shader) }),
+  };
+}));
 
 // ---------------------------------------------------------------- figures
 export function createFigures(page: HTMLElement) {

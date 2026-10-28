@@ -94,7 +94,7 @@ too slow for that, make the draw cheaper rather than delaying it.
 | `color(name)` | A token or any CSS color as `[r, g, b, a]` floats for a shader uniform |
 | `anim(el, keyframes, opts)`, `motion()` | motion's `animate()` with the page spring; `motion()` resolves the module (or null) |
 | `load(name)` | `motion`, `vgpu`, `d3`, `plot` (Plot loads d3 first), or `npm:pkg@x.y.z` (pinned). The build sees which ones a page loads and preloads them, so this usually resolves at once. |
-| `vgpu()` | vgpu with WebGPU started: `{ gpu, surface, effect, frameLoop, target, compute, storage, … }`. One device for the page, requested at load. |
+| `vgpu()` | vgpu with WebGPU started: `{ gpu, surface, effect, frameLoop, target, compute, storage, prepare, … }`. `effect`, `compute` and `draw` take WGSL as a string and prepare it (`prepare` does it by hand). One device for the page, requested at load. |
 | `reducedMotion`, `fail(err)` | Snap to end states when true; show an error in the stage |
 
 Rules: colors from tokens, redrawn in `onTheme`; labels as HTML or SVG over a canvas, never baked into pixels; lay

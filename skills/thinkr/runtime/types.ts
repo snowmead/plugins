@@ -50,8 +50,8 @@ export interface Fig {
   motion(): Promise<Motion | null>;
   /** motion's animate() with the page's spring; does nothing until motion loads or with reduced motion. */
   anim(el: Element | null | undefined, keyframes: Keyframes, opts?: AnimOpts): MotionAnimation | null;
-  /** vgpu with WebGPU started: `{ gpu, surface, effect, frameLoop, target, compute, storage, … }`. The page
-      starts it at load, so this usually resolves at once. */
+  /** vgpu with WebGPU started: `{ gpu, surface, effect, frameLoop, target, compute, storage, prepare, … }`, where
+      effect, compute and draw take WGSL as a string. The page starts it at load, so this usually resolves at once. */
   vgpu(): Promise<any>;
   /** requestAnimationFrame that runs only while the figure is on screen. Returns a stop function. */
   loop(fn: (seconds: number, dt: number) => void): () => void;
