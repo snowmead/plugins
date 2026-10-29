@@ -19,11 +19,12 @@
    header, or under the title.
 
    Pending comments and replies stay in the reader's browser, per pull request like the review marks, until they are
-   sent. A send posts a summary with Send to Claude, which wakes the session that published the page: one comment
-   thread per send, anchored at the pull request's title, since the shell cannot anchor inside a card's shadow root.
-   Then it writes the send to the page database at comments/<user id>/sends/<send id>, where Claude reads it with
-   ArtifactData and the page reads it back as threads. Where the reader cannot send, the summary is copied for the
-   chat. */
+   sent. Once Send is pressed they leave the queue and show as their threads at once; a send that fails puts them
+   back in the queue. A send posts a summary with Send to Claude, which wakes the session that published the page:
+   one comment thread per send, anchored at the pull request's title, since the shell cannot anchor inside a card's
+   shadow root. Then it writes the send to the page database at comments/<user id>/sends/<send id>, where Claude reads
+   it with ArtifactData and the page reads it back as threads. Where the reader cannot send, the summary is copied for
+   the chat. */
 import type { CanSendToClaude, CapabilityMap, CommentsCap, Line, Move, PierreAnnotation, PierreLineRange, ReviewComment, SendDoc, SentComment, Side } from './types';
 import { $, $$, copyText, h, store } from '../kit/web/dom';
 import { ICON } from '../kit/web/icons';
@@ -34,7 +35,7 @@ import { type CardState, allDrawn, cards, findRow, mount, previewOn, redrawNotes
 import { reveal as revealProse } from './prose';
 import { type Ctx, active, ctxOf, ctxs, diffOf, guideOf } from './ctx';
 import { choose, pin, renderDiff, show, view } from './nav';
-import { type Post, type Target, type Thread, authorOf, codeOf, keepLocal, mark, newId, onThreads, placeOf, refFor, rowAt, rowsOf, saveSend, startThreads, threadOf, threadsOf, watchThreads } from './threads';
+import { type Post, type Target, type Thread, authorOf, codeOf, keepLocal, mark, newId, onThreads, outgoing, placeOf, refFor, rowAt, rowsOf, saveSend, startThreads, threadOf, threadsOf, watchThreads } from './threads';
 
 const MAX_BYTES = 3900; // a comment holds 4 KiB
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -57,13 +58,18 @@ function listOf(c: Ctx) {
   }
   return l;
 }
-const total = () => ctxs.reduce((n, c) => n + listOf(c).length, 0);
+/** The comments in a send going out: they stay on the list until it lands, so a reload keeps them, and show as the
+    threads they open, or in them. */
+const going = new Set<string>();
+/** The comments in the queue: pending, and not going out. */
+const waiting = (c: Ctx) => listOf(c).filter((cm) => !going.has(cm.id));
+const total = () => ctxs.reduce((n, c) => n + waiting(c).length, 0);
 function find(id: string) {
   for (const c of ctxs) { const cm = listOf(c).find((x) => x.id === id); if (cm) return { c, cm }; }
   return null;
 }
-/** The threads a pull request shows: a comment still pending while its send goes out is not one yet. */
-const sentOf = (c: Ctx) => threadsOf(c).filter((t) => !listOf(c).some((cm) => cm.id === t.id));
+/** The threads a pull request shows: a comment still in the queue is not one, even where a send of it landed. */
+const sentOf = (c: Ctx) => threadsOf(c).filter((t) => !waiting(c).some((cm) => cm.id === t.id));
 
 /** Things in reading order, by the place each is on: general first, then by file in the diff's order, each file's own
     comments before its line comments, and those by line. A file the head no longer has comes last. */
@@ -77,7 +83,7 @@ function byPlace<T>(c: Ctx, list: T[], place: (x: T) => Target) {
 /** The place a comment is in: a reply's is its thread's. */
 const general: Target = { kind: 'general' };
 const placeIn = (cm: ReviewComment): Target => (cm.kind === 'reply' ? threadOf(cm.thread)?.cm ?? general : cm);
-const ordered = (c: Ctx) => byPlace(c, listOf(c), placeIn);
+const ordered = (c: Ctx) => byPlace(c, waiting(c), placeIn);
 
 const old = (s?: Side) => (s === 'o' ? ' (old)' : '');
 /** "Line 31", "Lines 31–33", "Line 12 (old)", "Lines 30 (old) to 32". */
@@ -322,7 +328,7 @@ interface Item { key: string; c: Ctx; cm: ReviewComment; at: Target | null; t?: 
 function itemsOf(c: Ctx): Item[] {
   const out: Item[] = [];
   for (const t of sentOf(c)) out.push({ key: `t:${t.id}`, c, cm: t.cm, at: placeOf(c, t.cm), t });
-  for (const cm of listOf(c)) if (cm.kind !== 'reply') out.push({ key: `n:${cm.id}`, c, cm, at: placeOf(c, cm) });
+  for (const cm of waiting(c)) if (cm.kind !== 'reply') out.push({ key: `n:${cm.id}`, c, cm, at: placeOf(c, cm) });
   if (draft?.c === c && draft.target) out.push({ key: 'draft', c, cm: { id: 'draft', ...draft.target, text: '', head: c.pr.head, at: '' }, at: draft.target });
   return byPlace(c, out, (x) => x.at ?? x.cm);
 }
@@ -522,7 +528,7 @@ function paintThread(el: HTMLElement) {
   const at = placeOf(t.c, t.cm);
   // A thread being replied to stays open, even when it is resolved meanwhile.
   const folded = t.resolved && !unfolded.has(t.id) && draft?.thread !== el;
-  const pending = listOf(t.c).filter((x) => x.kind === 'reply' && x.thread === t.id);
+  const pending = waiting(t.c).filter((x) => x.kind === 'reply' && x.thread === t.id);
   el.classList.toggle('is-resolved', t.resolved);
   el.classList.toggle('is-folded', folded);
   el.classList.toggle('has-unread', unreadIn(t).length > 0);
@@ -890,36 +896,54 @@ function summary(batch: Batch, limit: number, ref: string | null) {
   const some = compose(false, limit - size(foot(n)));
   return { text: some.text + foot(n - some.held.size), held: some.held };
 }
-/** The send as the database keeps it. A reply carries its thread as the reader saw it, so Claude reads it in one place. */
+/** The send as the database keeps it. A reply carries its thread as the reader saw it, so Claude reads it in one place:
+    without the replies going out, which the thread shows already. */
 function sendDoc(batch: Batch): SendDoc {
   const withThread = (cm: ReviewComment): SentComment => {
     const t = cm.kind === 'reply' ? threadOf(cm.thread) : null;
-    return t ? { ...cm, on: { where: where(t.cm), text: t.cm.text }, before: t.posts.slice(-8).map((p) => ({ by: p.by, text: p.text })) } : cm;
+    return t ? { ...cm, on: { where: where(t.cm), text: t.cm.text }, before: t.posts.filter((p) => !going.has(p.id)).slice(-8).map((p) => ({ by: p.by, text: p.text })) } : cm;
   };
   return { sentAt: now(), prs: batch.map(({ c, list }) => ({ key: c.pr.key, number: c.pr.number, title: c.pr.title, head: c.pr.head, comments: list.map(withThread) })) };
 }
 
+/** A send leaves: its comments show at once as the threads they open, or in their threads. */
+function launch(batch: Batch, send: string) {
+  for (const { list } of batch) for (const cm of list) going.add(cm.id);
+  // The box the reader was looking at is a thread now.
+  if (looking?.startsWith('n:') && going.has(looking.slice(2))) looking = `t:${looking.slice(2)}`;
+  outgoing(send, sendDoc(batch));
+}
+/** A send landed or failed: its comments are no longer going out, and those still pending are back in the queue. */
+function back(batch: Batch) {
+  for (const { list } of batch) for (const cm of list) going.delete(cm.id);
+  const id = looking?.startsWith('t:') ? looking.slice(2) : null;
+  if (id && find(id)) looking = `n:${id}`;
+}
+/** A send that did not go: its comments are back in the queue, as they were. */
+function ground(batch: Batch, send: string) {
+  back(batch);
+  outgoing(send, null);
+}
+
 /** Keep the send (in the page database, else in this browser), so what it held stays on the page as threads, and
     take the comments sent off the pending list. `held`: the comments the text holds, when it could not hold them all;
-    the rest went only if the database took the send, and stay pending if not. */
+    the rest went only if the database took the send, and go back to the queue if not. */
 async function sent(batch: Batch, send: string, held: Set<ReviewComment> | null, copied: boolean) {
   const n = batch.reduce((s, b) => s + b.list.length, 0);
   const inDb = await saveSend(send, sendDoc(batch));
   const went = inDb ? null : held;
   const kept = batch.map(({ c, list }) => ({ c, list: went ? list.filter((cm) => went.has(cm)) : list })).filter((b) => b.list.length);
   if (!inDb) keepLocal(send, sendDoc(kept));
-  for (const { c, list } of kept) {
-    lists.set(c, listOf(c).filter((cm) => !list.includes(cm)));
-    // The box the reader was looking at is a thread now.
-    if (looking?.startsWith('n:') && list.some((cm) => `n:${cm.id}` === looking)) looking = `t:${looking.slice(2)}`;
-    changed(c, list.map((cm) => (cm.thread ? undefined : cm.path)), list.map((cm) => cm.thread));
-  }
+  for (const { c, list } of kept) lists.set(c, listOf(c).filter((cm) => !list.includes(cm)));
+  back(batch);
+  for (const { c, list } of batch) changed(c, list.map((cm) => (cm.thread ? undefined : cm.path)), list.map((cm) => cm.thread ?? cm.id));
   sound.play('send');
   toast(copied ? 'Copied. Paste it in your chat with Claude.' : went ? `Sent ${went.size} of ${n}. Send again for the rest.` : n === 1 ? 'Sent. Claude will answer in its thread.' : 'Sent. Claude will answer in each thread.');
 }
 
-// A send never makes the reader wait on the page: it goes out, then the database write. A failure keeps every comment
-// where it was. Sends go one at a time (the first may wait on a consent prompt), so one batch never opens two threads.
+// A send never makes the reader wait on the page: its threads show at once, it goes out, then the database write. A
+// failure puts every comment back in the queue. Sends go one at a time (the first may wait on a consent prompt), so
+// one batch never opens two threads.
 let sending = false;
 /** Send the pending comments: `only` these, or all of them. */
 async function send(only?: ReviewComment[]) {
@@ -930,15 +954,17 @@ async function send(only?: ReviewComment[]) {
   const id = `s${Date.now().toString(36)}`;
   if (canSend === 'available' && comments) {
     sending = true;
+    launch(batch, id);
     paintBar();
     try { await sendToClaude(batch, n, comments, id); } finally { sending = false; paintBar(); }
     return;
   }
   // Still inside the click, so the clipboard allows it.
   const { text } = summary(batch, Infinity, refFor(id));
+  launch(batch, id);
   copyText('# ' + text).then(
     () => sent(batch, id, null, true),
-    () => toast('Copy failed. Your comments are still here; try again.'),
+    () => { ground(batch, id); toast('Copy failed. Your comments are still here; try again.'); },
   );
 }
 async function sendToClaude(batch: Batch, n: number, cap: CommentsCap, id: string) {
@@ -948,6 +974,7 @@ async function sendToClaude(batch: Batch, n: number, cap: CommentsCap, id: strin
   try {
     await cap.sendToClaude({ anchor: await cap.anchorFor(anchor), text });
   } catch (e) {
+    ground(batch, id);
     const code = (e as { code?: string })?.code;
     if (code === 'consent_required') return toast('Not sent. Allow comments from this page to send them to Claude.');
     if (code === 'rate_limited') return toast('Too many sends. Wait a moment and try again.');

@@ -7,7 +7,8 @@
      document per message, so the reader and Claude never write the same document.
    The owner and editors read every reader's subtree, found by the document each reader keeps at comments/<uid>;
    anyone else reads only their own. Without the database (a local preview, a reader who cannot write there), sends
-   and marks are kept in this browser in the same shape, and no answer comes back into them.
+   and marks are kept in this browser in the same shape, and no answer comes back into them. A send going out shows as
+   its threads from the moment it leaves, until one of these holds it.
 
    A thread written on an older head than the page's is placed as GitHub places one: on its own lines while they
    still hold the code it was written on, else where that code is in the diff now, else nowhere: it is outdated, and
@@ -100,6 +101,8 @@ export type Changes = Map<Ctx, { ids: Set<string>; paths: Set<string | undefined
 /** By reader id; LOCAL is this browser. */
 const LOCAL = '';
 const sources = new Map<string, Source>();
+/** Sends going out, by id, until a source holds them. */
+const flying = new Map<string, SendDoc>();
 let threads = new Map<string, Thread>();
 let sigs = new Map<string, string>();
 const listeners: ((ch: Changes) => void)[] = [];
@@ -137,17 +140,19 @@ function ctxFor(p: SendDoc['prs'][number]) {
 function rebuild() {
   const next = new Map<string, Thread>();
   const replies: { thread: string; post: Post }[] = [];
-  for (const [key, src] of sources) {
-    const uid = key || null;
-    for (const s of src.sends) for (const p of Array.isArray(s.prs) ? s.prs : []) {
-      const c = p && ctxFor(p);
-      if (!c || !Array.isArray(p.comments)) continue;
-      for (const raw of p.comments) {
-        const cm = clean(raw, str(s.sentAt) ? s.sentAt : '');
-        if (!cm) continue;
-        if (cm.kind === 'reply') replies.push({ thread: cm.thread!, post: { id: cm.id, by: 'reader', uid, text: cm.text, at: cm.at, head: cm.head } });
-        else if (!next.has(cm.id)) next.set(cm.id, { id: cm.id, c, cm, uid, send: s.id, posts: [], resolved: false });
-      }
+  const sends = [...sources].flatMap(([key, src]) => src.sends.map((s) => ({ s, uid: key || null })));
+  for (const [id, s] of flying) {
+    if (sends.some((x) => x.s.id === id)) flying.delete(id);
+    else sends.push({ s: { ...s, id }, uid: me });
+  }
+  for (const { s, uid } of sends) for (const p of Array.isArray(s.prs) ? s.prs : []) {
+    const c = p && ctxFor(p);
+    if (!c || !Array.isArray(p.comments)) continue;
+    for (const raw of p.comments) {
+      const cm = clean(raw, str(s.sentAt) ? s.sentAt : '');
+      if (!cm) continue;
+      if (cm.kind === 'reply') replies.push({ thread: cm.thread!, post: { id: cm.id, by: 'reader', uid, text: cm.text, at: cm.at, head: cm.head } });
+      else if (!next.has(cm.id)) next.set(cm.id, { id: cm.id, c, cm, uid, send: s.id, posts: [], resolved: false });
     }
   }
   for (const r of replies) next.get(r.thread)?.posts.push(r.post);
@@ -231,6 +236,12 @@ export async function saveSend(send: string, data: SendDoc) {
   // The reader's own document is how the owner and editors find their threads.
   db!.doc(`comments/${me}`).set({ at: data.sentAt }).catch(() => {});
   return true;
+}
+/** A send going out (`data`), or one that did not go (null). Its threads and replies show at once, as they will once
+    the database or this browser holds it. */
+export function outgoing(send: string, data: SendDoc | null) {
+  if (data) flying.set(send, data); else flying.delete(send);
+  rebuild();
 }
 /** Keep a send in this browser: its threads stay on the page, with no answers. */
 export function keepLocal(send: string, data: SendDoc) {
