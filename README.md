@@ -76,6 +76,8 @@ here with the action as the base branch has it.
 ```sh
 claude plugin validate --strict . && claude plugin validate --strict .claude-plugin/plugin.json
 claude --plugin-dir . plugin details snowmead   # lists the skills it loads
+# claude.ai keeps 1024 characters of a skill's description and warns on each sync past that; validate does not check it
+awk '/^description: /{n=length($0)-13; if(n>1024){print FILENAME": description is "n" characters"; bad=1}} END{exit bad}' skills/*/SKILL.md
 ```
 
 **Release:** bump `version` in `.claude-plugin/plugin.json` (installed copies update only when it changes),
