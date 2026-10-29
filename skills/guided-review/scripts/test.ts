@@ -493,13 +493,15 @@ async function runComments(file: string) {
       r.pending = sendBar();
       let copied = null;
       navigator.clipboard.writeText = (text) => { copied = text; return Promise.resolve(); };
+      const queued = JSON.parse(localStorage.getItem('gr:42:comments'));
+      const th = (text) => ' [thread ' + queued.find((c) => c.text === text)?.id + ']';
       $('[data-note-send]').click();
       await until(() => copied);
       await sleep(150);
       r.sent = !!copied && copied.startsWith('# Review comments on #42 ') && copied.includes(': 5 comments')
-        && copied.includes('1. General\\n   Seeded general comment') && copied.includes('src/webhooks/backoff.ts (the file)')
-        && copied.includes('src/webhooks/deliver.ts:27\\n') && copied.includes('src/webhooks/deliver.ts:31-33\\n   | + ')
-        && copied.includes('src/webhooks/deliver.ts:35-37\\n');
+        && copied.includes('1. General' + th('Seeded general comment') + '\\n   Seeded general comment') && copied.includes('src/webhooks/backoff.ts (the file) [thread ')
+        && copied.includes('src/webhooks/deliver.ts:27 [thread ') && copied.includes('src/webhooks/deliver.ts:31-33' + th('Dragged over three lines') + '\\n   | + ')
+        && copied.includes('src/webhooks/deliver.ts:35-37 [thread ') && queued.every((c) => copied.includes(' [thread ' + c.id + ']\\n'));
       r.cleared = sendBar() === '' && !document.querySelector('.gr-margin > .gr-note:not(.gr-thread)') && localStorage.getItem('gr:42:comments') === '[]';
       r.kept = JSON.parse(localStorage.getItem('gr:sent') ?? '[]').map((s) => s.prs[0].comments.length).join();
       r.threads = document.querySelectorAll('.gr-margin > .gr-thread').length + ' ' + $('.gr-note-count').textContent;
@@ -519,7 +521,7 @@ async function runComments(file: string) {
       copied = null;
       $('[data-note-send]').click();
       await until(() => copied);
-      r.replySent = !!copied && copied.includes(': 1 comment\\n') && copied.includes('1. Reply on src/webhooks/deliver.ts:31-33\\n   > Dragged over three lines\\n   And the 503 case?');
+      r.replySent = !!copied && copied.includes(': 1 comment\\n') && copied.includes('1. Reply on src/webhooks/deliver.ts:31-33' + th('Dragged over three lines') + '\\n   > Dragged over three lines\\n   And the 503 case?');
       r.replyPosted = await until(() => [...drawn().querySelectorAll('.gr-post:not(.is-pending) .gr-note-text')].map((p) => p.textContent).join('|') === 'Dragged over three lines|And the 503 case?');
       // a composer's Send sends that one comment at once
       card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('[data-note-file]').click();
@@ -530,7 +532,7 @@ async function runComments(file: string) {
       now.querySelector('[data-composer-send]').click();
       await until(() => copied);
       await sleep(150);
-      r.sentNow = copied.includes(': 1 comment\\n') && copied.includes('1. src/webhooks/deliver.ts (the file)\\n   Split this file?') && sendBar() === '' && !!boxBy('Split this file?')?.classList.contains('gr-thread');
+      r.sentNow = copied.includes(': 1 comment\\n') && copied.includes('1. src/webhooks/deliver.ts (the file) [thread c') && copied.includes(']\\n   Split this file?') && sendBar() === '' && !!boxBy('Split this file?')?.classList.contains('gr-thread');
       const tid = drawn().dataset.threadId;
       drawn().querySelector('[data-thread-resolve]').click();
       r.resolved = await until(() => box('t:' + tid)?.classList.contains('is-folded')) && JSON.parse(localStorage.getItem('gr:msgs')).at(-1).resolved;
@@ -683,6 +685,7 @@ async function runThreads(file: string) {
       const ref = [...docs.keys()].find((p) => p.startsWith('comments/u_me/sends/'));
       r.sentRef = sent[0]?.endsWith('Every comment, with its code: ' + ref + ' in the page database.') && docs.get(ref).prs[0].key === 'gr:42' && docs.has('comments/u_me');
       const mine = docs.get(ref).prs[0].comments[0].id;
+      r.sentThread = !!sent[0]?.includes(' [thread ' + mine + ']\\n');
       r.mineShows = await until(() => box('t:' + mine)) && box('t:' + mine).querySelector('.gr-post-by b').textContent;
       put('comments/u_me/msgs/m1', { thread: mine, by: 'claude', text: 'Capped at an hour (backoff.ts:12).', at: new Date().toISOString(), head: 'c2c2c2c' });
       r.answer = await until(() => box('t:' + mine)?.querySelector('.gr-post.is-claude')) && [...box('t:' + mine).querySelectorAll('.gr-post-by b')].map((b) => b.textContent).join() + ' ' + box('t:' + mine).querySelector('.gr-post.is-claude .gr-note-text').textContent;
@@ -708,7 +711,7 @@ async function runThreads(file: string) {
       r.replyWord = form.querySelector('[data-composer-send]').textContent;
       form.querySelector('[data-composer-send]').click();
       await until(() => sent.length === 2);
-      r.replyText = sent[1]?.includes(': 1 comment\\n') && sent[1]?.includes('1. Reply on General\\n   > Is the backoff capped?\\n   Make it configurable?');
+      r.replyText = sent[1]?.includes(': 1 comment\\n') && sent[1]?.includes('1. Reply on General [thread ' + mine + ']\\n   > Is the backoff capped?\\n   Make it configurable?');
       await sleep(100);
       const ref2 = [...docs.keys()].filter((p) => p.startsWith('comments/u_me/sends/')).sort().at(-1);
       const rc = docs.get(ref2)?.prs[0].comments[0];
@@ -726,7 +729,7 @@ async function runThreads(file: string) {
   report(name, tab, got, ms, {
     level: '0 true', movedLevel: '0 true', goneBeside: '0 true', foldReveal: true, outdated: 'false,false,true', goneCode: '+   const gone = true;', movedLabel: 'Line 33', movedLit: true,
     otherReader: 'Reviewer true', notWhole: true, unread: '1 true', inbox: '1 Claude Capped at an hour (backoff.ts:12). | true',
-    bellGo: 'true,true,true,true,true,true', inboxEmpty: true, inboxClosed: true, sendWord: 'Send 1to Claude', sentRef: true, mineShows: 'You', answer: 'You,Claude Capped at an hour (backoff.ts:12).', answerToast: 'Claude answered in a thread.',
+    bellGo: 'true,true,true,true,true,true', inboxEmpty: true, inboxClosed: true, sendWord: 'Send 1to Claude', sentRef: true, sentThread: true, mineShows: 'You', answer: 'You,Claude Capped at an hour (backoff.ts:12).', answerToast: 'Claude answered in a thread.',
     replyWord: 'Send', replyText: true, replyDoc: 'reply true Is the backoff capped? claude', replyShows: true, mark: true,
   }, { look: BUDGET.interaction, bell: BUDGET.interaction });
 }

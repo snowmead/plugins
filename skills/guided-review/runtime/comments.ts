@@ -797,9 +797,10 @@ async function refreshCanSend() {
 type Batch = { c: Ctx; list: ReviewComment[] }[];
 const plural = (n: number) => `${n} comment${n === 1 ? '' : 's'}`;
 const prName = (c: Ctx) => `${c.pr.number != null ? `#${c.pr.number} ` : ''}${c.pr.title}, at ${c.pr.head.slice(0, 7)}`;
-/** The text Claude is sent: each comment's place, a few of its lines of code, and its words, numbered in reading
-    order; a reply names its thread's place and quotes the comment that opened it. Within `limit` bytes it drops the
-    code first, then the comments that do not fit, and says where the rest are: in the page database at `ref`, or
+/** The text Claude is sent: each comment's place and thread, a few of its lines of code, and its words, numbered in
+    reading order; a reply names its thread's place and quotes the comment that opened it. The thread id is how Claude
+    finds the agent that holds a thread (references/threads.md), with nothing else to read. Within `limit` bytes it
+    drops the code first, then the comments that do not fit, and says where the rest are: in the page database at `ref`, or
     still on the page. Returns the comments it holds. */
 function summary(batch: Batch, limit: number, ref: string | null) {
   const n = batch.reduce((s, b) => s + b.list.length, 0);
@@ -809,8 +810,8 @@ function summary(batch: Batch, limit: number, ref: string | null) {
   const item = (c: Ctx, cm: ReviewComment, i: number, code: boolean) => {
     const t = cm.kind === 'reply' ? threadOf(cm.thread) : null;
     const lines = cm.kind === 'reply'
-      ? [`${i}. Reply on ${t ? where(t.cm) : 'a thread'}`, ...(t ? [`   > ${firstLine(t.cm.text)}`] : [])]
-      : [`${i}. ${where(cm)}${cm.head !== c.pr.head ? `, written on ${cm.head.slice(0, 7)}` : ''}`];
+      ? [`${i}. Reply on ${t ? where(t.cm) : 'a thread'} [thread ${cm.thread}]`, ...(t ? [`   > ${firstLine(t.cm.text)}`] : [])]
+      : [`${i}. ${where(cm)}${cm.head !== c.pr.head ? `, written on ${cm.head.slice(0, 7)}` : ''} [thread ${cm.id}]`];
     if (code) for (const [op, s] of cm.code?.slice(0, 3) ?? []) lines.push(`   | ${op} ${s}`);
     for (const t of cm.text.split('\n')) lines.push(`   ${t}`);
     return lines.join('\n');

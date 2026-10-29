@@ -28,7 +28,9 @@ them:
   republishes the guide for the new head. `c` hides the margin. Without a Claude session to send to, Send copies the
   comments for the chat. On a narrow screen the boxes sit in the code instead.
 - **Comment threads**: a sent comment stays as a thread, with Claude's answer. Reply in it to keep the conversation
-  going. The bell in the bar lists the answers you have not read; click one to go to it. As on GitHub, a thread follows its code to a new head, is marked **Outdated** when that code is gone, and
+  going. Each thread has a Claude agent of its own, a background subagent that reads its code, answers and makes its
+  changes, so one thread's work stays out of the others'; the session that published the page keeps a ledger of every
+  thread, and settles once a problem or a design choice that several share. The bell in the bar lists the answers you have not read; click one to go to it. As on GitHub, a thread follows its code to a new head, is marked **Outdated** when that code is gone, and
   folds away when resolved.
 - **Stacks**: one page can hold several pull requests, a stack or any set to review together. The title becomes a
   menu of them, a stack drawn from its base up, each with its branches, size and review progress; `[` and `]` move
@@ -85,7 +87,7 @@ Run these in this folder, after `bun install`:
 
 ```
 SKILL.md                          what Claude reads first
-references/                       guide-format.md, writing.md, stack.md, comments.md
+references/                       guide-format.md, writing.md, stack.md, comments.md, threads.md
 examples/                         demo.guide.json, demo-43.guide.json, and demo/ (the demo's base, its head and the PR stacked on it)
 runtime/                          TypeScript runtime, CSS, library pins
 kit/                              link to the shared kit: tokens, sounds, UI parts, build helpers
