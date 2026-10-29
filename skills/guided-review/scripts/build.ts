@@ -26,6 +26,7 @@ import type { BeforeAfter, Chapter, Diff, DiffFile, Guide, Kind, PageData, PageP
 import { FONTS, ICON, assets, preview, publishLines, runtime, soundButton, styles } from '../kit/build/page';
 import { libs, preloads } from '../kit/build/libs';
 import { BELL, COMMENT, PANEL } from '../runtime/icons';
+import { previews } from './markdown';
 
 const ROOT = join(import.meta.dir, '..');
 const RT = join(ROOT, 'runtime');
@@ -86,7 +87,7 @@ const FLOW_CLASSES = [
 
 // ---------------------------------------------------------------- one pull request
 interface Built {
-  id: string; prefix: string; number: number | null; title: string; url: string | null; name?: string;
+  id: string; prefix: string; number: number | null; title: string; url: string | null; name?: string; repo: string;
   base: string; branch: string | null; add: number; del: number; files: number; flows: number;
   errors: string[]; warns: string[]; report: string[];
   meta: string; sections: string; diffView: string; footer: string; links: string; data: PagePr;
@@ -380,7 +381,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
   ];
   const tag = multi ? `${num || id}: ` : '';
   return {
-    id, prefix: P, number: pr.number ?? null, title: pr.title, url: pr.url ?? null, name: guide.name,
+    id, prefix: P, number: pr.number ?? null, title: pr.title, url: pr.url ?? null, name: guide.name, repo: repoUrl,
     base, branch, add: total[0], del: total[1], files: diff.files.length, flows,
     errors: errors.map((e) => tag + e), warns: warns.map((w) => tag + w), report,
     meta, sections: sections.join('\n'),
@@ -397,6 +398,14 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
 
 // ---------------------------------------------------------------- every pull request
 const prs = inputs.map((x, i) => buildPr(x.guide, x.diff, i));
+// Markdown files are rendered here, with their change marked, so the page only shows them (scripts/markdown.ts).
+for (const [i, p] of prs.entries()) {
+  const { diff } = inputs[i];
+  const md = await previews(diff.files, { repo: p.repo, base: diff.base, head: diff.head, checkout });
+  p.warns.push(...md.warns.map((w) => (multi ? `${p.number != null ? `#${p.number}` : p.id}: ` : '') + w));
+  if (md.out.size) p.data.files = diff.files.map((f) => (md.out.has(f.path) ? { ...f, preview: md.out.get(f.path)! } : f));
+  p.report[0] += `, ${md.out.size} Markdown preview${md.out.size === 1 ? '' : 's'}`;
+}
 const errors = prs.flatMap((p) => p.errors);
 const warns = prs.flatMap((p) => p.warns);
 const seen = new Map<string, number>();

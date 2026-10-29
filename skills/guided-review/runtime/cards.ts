@@ -8,31 +8,13 @@ import { onTheme, themeType } from '../kit/web/theme';
 import { D, split, stat } from './dom';
 import { libs } from './libs';
 import { COMMENT } from './icons';
-import { type Note, commentNotes, fileNotes, noteEl, noteMounted, openLine } from './comments';
+import { type Note, commentNotes, fileNotes, noteEl, noteMounted, openLine, reflow } from './comments';
 import type { Ctx } from './ctx';
+import { firstNew, firstOld, rebuildOld } from './hunks';
+import { type Prose, blockAt, light, paint, proseOf, reveal, showSwitches, switches } from './prose';
 
 /** Lines a click on a fold opens. */
 export const STEP = 20;
-
-// ---------------------------------------------------------------- hunk arithmetic
-// "+N,0" names the line after which nothing is added.
-const nextNew = (h: Hunk) => (h.newLines === 0 ? h.newStart + 1 : h.newStart + h.newLines);
-export const firstNew = (h: Hunk) => (h.newLines === 0 ? h.newStart + 1 : h.newStart);
-export const firstOld = (h: Hunk) => (h.oldLines === 0 ? h.oldStart + 1 : h.oldStart);
-
-/** The old text of a changed file: the new text with each hunk put back. */
-export function rebuildOld(f: DiffFile): string[] | null {
-  if (!f.new) return null;
-  const out: string[] = [];
-  let pos = 1;
-  for (const h of f.hunks) {
-    while (pos < firstNew(h)) out.push(f.new[pos++ - 1]);
-    for (const l of h.lines) if (l[0] !== '+') out.push(l[3]);
-    pos = nextNew(h);
-  }
-  while (pos <= f.new.length) out.push(f.new[pos++ - 1]);
-  return f.oldCount == null || out.length === f.oldCount ? out : null;
-}
 
 /** A git patch of some of a file's hunks, as git printed them. */
 function patchOf(f: DiffFile, hunks: Hunk[]) {
@@ -65,6 +47,8 @@ export interface CardState {
   fd?: PierreFileDiffMeta;
   host?: Element | null;
   flashTimer?: number;
+  /** A Markdown file's preview and its switches (prose.ts). */
+  prose?: Prose | null;
 }
 export const cards = new WeakMap<Element, CardState>();
 const mounted = new Set<CardState>();
@@ -266,7 +250,7 @@ const mounter = 'IntersectionObserver' in window ? new IntersectionObserver((ent
   for (const e of entries) {
     if (!e.isIntersecting || e.target.classList.contains('collapsed')) continue;
     mounter!.unobserve(e.target);
-    void mount(e.target);
+    wake(e.target);
   }
 }, { rootMargin: '900px 0px' }) : null;
 
@@ -299,17 +283,20 @@ export function card(ctx: Ctx, f: DiffFile, hunkIds: number[] | null, chapter: s
     body = `<div class="gr-code" style="min-height:${rows * 20}px"></div>`;
   }
   const gen = f.kind === 'generated' ? '<div class="gen-note">Generated file. It starts folded; the change comes from the source files in this pull request.</div>' : '';
+  const prose = hunks.length && !f.binary ? proseOf(f, hunkIds && !whole ? hunkIds : null, ctx.pr.chapters) : null;
   el.innerHTML =
     `<header><button type="button" class="gr-fold" aria-label="Fold ${esc(name)}" aria-expanded="true">${ICON.down}</button>`
     + `<span class="gr-lang">${esc(chipOf(f))}</span><span class="fname">${esc(name)}</span>`
     + `<span class="fdir" title="${esc(f.path)}">${esc(dir)}${f.oldPath ? ` ← ${esc(f.oldPath)}` : ''}</span>`
     + `<span class="fstat">${part}${word ? `<span class="st">${word}</span>` : ''}${stat(a, d)}</span>`
+    + (prose ? switches(name) : '')
     + `<button type="button" class="gr-note-btn" data-note-file aria-label="Comment on ${esc(name)}" title="Comment on this file">${COMMENT}</button>`
     + `<label class="gr-check"><input type="checkbox" data-review-file="${esc(f.path)}"${chapter ? ` data-review-ch="${esc(chapter)}"` : ''}><span class="rv">Reviewed</span></label></header>`
     + '<div class="gr-notes" hidden></div>' + gen + body;
+  if (prose) { el.classList.add('has-md'); el.append(prose.el); showSwitches(el, prose); }
   if (hunks.length && !f.binary) {
-    cards.set(el, { el, ctx, f, hunks, whole, elsewhere: elsewhereOf(ctx, f, hunks) });
-    if (mounter) mounter.observe(el); else void mount(el);
+    cards.set(el, { el, ctx, f, hunks, whole, elsewhere: elsewhereOf(ctx, f, hunks), prose });
+    if (mounter) mounter.observe(el); else wake(el);
   }
   fileNotes(ctx, el);
   if (f.kind === 'generated') setFold(el, true);
@@ -320,13 +307,60 @@ export function setFold(el: Element | null, folded: boolean) {
   if (!el) return;
   el.classList.toggle('collapsed', folded);
   $('.gr-fold', el)?.setAttribute('aria-expanded', String(!folded));
-  if (!folded && cards.has(el)) { fresh(el); void mount(el); }
+  if (!folded && cards.has(el)) { fresh(el); wake(el); }
+}
+
+// ---------------------------------------------------------------- Markdown: Preview or Source
+/** Whether a card shows a Markdown file as it reads. */
+export const previewOn = (st: CardState) => st.prose?.mode === 'preview';
+/** Draw what a card shows: its preview, or its code. */
+function wake(el: Element) {
+  const st = cards.get(el);
+  if (!st) return;
+  if (!previewOn(st)) { void mount(el); return; }
+  if (!st.prose!.painted) { paint(st.prose!); reflow(st); }
+}
+/** Flip a Markdown card between Preview and Source, or its Changes on or off. Returns whether anything changed. */
+export function setProse(el: Element, o: { mode?: Prose['mode']; changes?: boolean }) {
+  const st = cards.get(el), pr = st?.prose;
+  if (!st || !pr || ((o.mode ?? pr.mode) === pr.mode && (o.changes ?? pr.changes) === pr.changes)) return false;
+  const repaint = o.changes != null && o.changes !== pr.changes;
+  select(st, null);
+  pr.mode = o.mode ?? pr.mode;
+  pr.changes = o.changes ?? pr.changes;
+  showSwitches(el, pr);
+  if (repaint) pr.painted = false;
+  setFold(el, false);
+  wake(el);
+  reflow(st);
+  return true;
+}
+/** Open a fold of a card's preview. */
+export function openProseFold(el: Element, from: number) {
+  const st = cards.get(el);
+  if (!st?.prose) return;
+  st.prose.open.add(from);
+  paint(st.prose);
+  reflow(st);
+}
+/** Select lines in a card: in its code, or the blocks that hold them in its preview. */
+export function select(st: CardState, range: PierreLineRange | null) {
+  if (st.prose) light(st.prose, previewOn(st) ? range : null);
+  if (!previewOn(st) || !range) st.inst?.setSelectedLines(range);
+}
+/** The "+" on a block of a preview: a comment on the block's lines. */
+export function commentBlock(block: HTMLElement) {
+  const st = cards.get(block.closest('.gr-file')!);
+  if (!st) return;
+  const side = block.dataset.side === 'o' ? 'deletions' : 'additions';
+  openLine(st, { start: +block.dataset.a!, end: +block.dataset.b!, side, endSide: side }, 'the block');
 }
 
 // ---------------------------------------------------------------- rows
 /** The row of a line in a rendered card: a removed line by its old number, any other by its new one. Split cards
     number each column by its own side, so the line is looked up in the deletions or the additions column. */
 export function rowOf(st: CardState, line: number, side: 'o' | 'n') {
+  if (previewOn(st)) return st.prose!.painted ? blockAt(st.prose!, line, side) : null;
   const root = st.host?.shadowRoot;
   if (!root) return null;
   if (root.querySelector('[data-diff-type="split"]')) return root.querySelector(`[data-${side === 'o' ? 'deletions' : 'additions'}] [data-line="${line}"]`);
@@ -338,6 +372,16 @@ export function rowOf(st: CardState, line: number, side: 'o' | 'n') {
 export async function findRow(cardEl: Element, line: number, side: 'o' | 'n') {
   const st = cards.get(cardEl);
   if (!st) return null;
+  // A preview shows the block that holds the line, opening its fold. A line it cannot show (an old line, with Changes
+  // off) is in the source.
+  if (previewOn(st)) {
+    wake(cardEl);
+    const at = blockAt(st.prose!, line, side) ?? (reveal(st.prose!, line, side) ? blockAt(st.prose!, line, side) : null);
+    if (at) { reflow(st); return at; }
+    // A line of another chapter's hunk is not this card's to show.
+    if (!st.whole && !st.hunks.some((h) => h.lines.some((l) => (side === 'o' ? l[1] : l[2]) === line))) return null;
+    setProse(cardEl, { mode: 'source' });
+  }
   await mount(cardEl);
   fresh(cardEl);
   const row = rowOf(st, line, side);

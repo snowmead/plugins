@@ -73,8 +73,8 @@
       "id": "docs",
       "kind": "docs",
       "title": "Delivery in the docs",
-      "body": "The Delivery section says which answers are retried, how far apart, and when a delivery fails. It asks receivers to make their handlers idempotent, since a retry can bring an event they already handled.",
-      "files": ["docs/webhooks.md"]
+      "body": "The Delivery section says which answers are retried, how far apart, and when a delivery fails, with [a table](ref:docs/webhooks.md:16) and a drawing of the six posts. It asks receivers to make their handlers idempotent, since a retry can bring an event they already handled.",
+      "files": ["docs/webhooks.md", "docs/retries.svg"]
     },
     {
       "id": "migration",

@@ -61,6 +61,10 @@ Each row of `lines`:
 Every hunk of every file belongs to a chapter, and `build.ts` stops when one is missing. Split a file by hunks
 when its parts belong to different ideas; show a hunk once.
 
+A Markdown file (`.md`, `.markdown`) needs nothing more: `build.ts` renders it, and its card opens in Preview with
+the change marked, showing the blocks of the chapter's own hunks. A ref to one of its lines lands on the block that
+holds it. A file gather.ts keeps without its text (over 4,000 lines or 400 KB) shows only its source.
+
 ## `table`
 
 A state table lays out the cases a change decides between, one row per case, with the new cases marked.

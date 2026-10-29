@@ -56,6 +56,9 @@ put('src/m.rs', `fn stays() {\n    let s = 0;\n}\n\n${MOVED}`);
 put('src/tail.rs', 'impl Foo {\n    fn keep(&self) {\n        let a = 1;\n    }\n\n    fn trim(&self) {\n        let b = 2;\n        let c = 3;\n        let d = 4;\n    }\n}\n');
 put('docs/notes.md', '# Notes\n\n## Setup\n\n```sh\n# install\njust up\n```\n\nSome text.\n');
 put('README.md', '# Scratch\n\nA repository for the tests.\n');
+// A PNG's first bytes are enough for the page to embed it.
+const LOGO = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+put('docs/logo.png', LOGO);
 git(repo, 'add', '-A');
 git(repo, 'commit', '-qm', 'base');
 const branchPoint = git(repo, 'rev-parse', 'HEAD').trim();
@@ -72,6 +75,18 @@ put('src/m.rs', read('src/m.rs').replace(`\n${MOVED}`, ''));
 put('src/n.rs', MOVED);
 put('src/tail.rs', read('src/tail.rs').replace('        let c = 3;\n        let d = 4;\n', ''));
 put('docs/notes.md', read('docs/notes.md').replace('Some text.', 'Some more text.'));
+// A new page of docs with what a preview must render, rewrite or drop.
+put('docs/guide.md', [
+  '---', 'title: Guide', 'owner: docs', '---', '',
+  '# Guide', '',
+  'See [the readme](../README.md) and [setup](#setup). <script>alert(1)</script>', '',
+  '<img src=x onerror=alert(1)> [bad](javascript:alert(1)) <b onclick="alert(1)">bold</b>', '',
+  '![logo](logo.png) ![badge](https://img.example.com/b.svg)', '',
+  '- [x] done', '- [ ] open', '',
+  '> [!NOTE]', '> Read this.', '',
+  '## Setup', '',
+  '<iframe src="https://example.com"></iframe>', '',
+].join('\n'));
 put('tests/a_test.rs', '#[test]\nfn works() {}\n// </script><img src=x onerror=alert(1)>\n');
 put('migrations/0001_init.sql', 'create table t (id int);\n');
 put('api/schema.gen.ts', 'export type T = { id: number };\n');
@@ -93,7 +108,7 @@ const file = (path: string) => diff.files.find((f) => f.path === path) ?? ({ hun
 
 same('gather diffs from the merge base', diff.base, branchPoint);
 same('gather sorts every changed file by kind', Object.fromEntries(diff.files.map((f) => [f.path, f.kind]).sort()), {
-  'api/schema.gen.ts': 'generated', 'assets/logo.bin': 'core', 'docs/notes.md': 'docs', 'migrations/0001_init.sql': 'database',
+  'api/schema.gen.ts': 'generated', 'assets/logo.bin': 'core', 'docs/guide.md': 'docs', 'docs/notes.md': 'docs', 'migrations/0001_init.sql': 'database',
   'src/a.rs': 'core', 'src/gone.rs': 'core', 'src/m.rs': 'core', 'src/n.rs': 'core', 'src/old.rs': 'core', 'src/r2.rs': 'core',
   'src/tail.rs': 'core', 'tests/a_test.rs': 'tests',
 });
@@ -113,7 +128,7 @@ same('moved code is marked where it landed', file('src/n.rs').moves.map(pick), [
 
 // A guide that places every file and hunk, with refs written into its first chapter.
 const later: Guide['chapters'] = [
-  { id: 'notes', title: 'The notes', kind: 'docs', body: ['Notes.'], files: ['docs/notes.md'] },
+  { id: 'notes', title: 'The notes', kind: 'docs', body: ['Notes.'], files: ['docs/notes.md', 'docs/guide.md'] },
   { id: 'db', title: 'A table', kind: 'database', body: ['A table.'], files: ['migrations/0001_init.sql'] },
   { id: 'tests', title: 'A test', kind: 'tests', body: ['A test.'], files: ['tests/a_test.rs'] },
   { id: 'gen', title: 'The schema', kind: 'generated', body: ['Generated.'], files: ['api/schema.gen.ts'] },
@@ -153,6 +168,22 @@ check('the title is escaped', built.html.includes('<h1>Scratch &lt;change&gt; &a
 // The diff's own `</script>` line reaches the page as text, from the data file.
 const data = /^window\.GR_DATA = (.*);\n$/s.exec(built.data)?.[1];
 check('the data file holds the diff as it is', !!data && JSON.parse(data).prs[0].files.find((f: DiffFile) => f.path === 'tests/a_test.rs').new.includes('// </script><img src=x onerror=alert(1)>'));
+// Markdown files are rendered at build: each block with its lines, sanitized, with the change marked.
+const files = data ? JSON.parse(data).prs[0].files as DiffFile[] : [];
+const notes = files.find((f) => f.path === 'docs/notes.md')?.preview, mdGuide = files.find((f) => f.path === 'docs/guide.md')?.preview;
+same('a Markdown file renders as blocks, each with its lines', notes?.blocks.map((b) => [b.a, b.b, b.html.slice(0, 4)]), [[1, 1, '<h1 '], [3, 3, '<h2 '], [5, 8, '<pre'], [10, 10, '<p>S']]);
+same('a reworded block is changed, with its words marked', notes?.rows.map((r) => r.mark + (r.html?.includes('<ins>more</ins>') ? ' ins' : '')), ['same', 'same', 'same', 'changed ins']);
+same('a changed block names its hunk', notes?.rows.at(-1)?.hunks, [1]);
+const g = mdGuide?.blocks.map((b) => b.html).join('\n') ?? '';
+check('a preview drops scripts, frames, handlers and javascript: links', !!g && !/<script|<iframe|onerror|onclick|href="javascript:/i.test(g), g);
+check('front matter shows as a table of its keys', mdGuide?.blocks[0]?.a === 1 && mdGuide.blocks[0].b === 4 && /class="gr-md-front".*<th>title<\/th>.*<td>Guide<\/td>/.test(mdGuide.blocks[0].html), mdGuide?.blocks[0]?.html);
+check('a link to a file of the repository goes to GitHub at the head', g.includes(`href="https://github.com/example/scratch/blob/${diff.head}/README.md" target="_blank"`), g);
+check('a link to a heading of the same file stays in the page', g.includes('data-md-anchor="setup"') && g.includes('<h2 data-md-id="setup">Setup</h2>'), g);
+check('an image of the repository is embedded from git', g.includes(`src="data:image/png;base64,${Buffer.from(LOGO).toString('base64')}"`), g);
+check('an image from another host shows as a link to it', /<a href="https:\/\/img\.example\.com\/b\.svg"[^>]*>badge<\/a>/.test(g), g);
+check('task lists and alerts render as GitHub does', g.includes('<input type="checkbox" disabled checked> done') && g.includes('<div class="gr-md-alert is-note"><p class="gr-md-alert-t">Note</p>'), g);
+same('an added file is added, block by block', mdGuide?.rows.every((r) => r.mark === 'added' && r.n != null), true);
+
 // A read of the published page returns at most 50,000 characters, so the page holds only its markup.
 check('the page holds only its markup; Geist, styles, runtime and data load beside it', built.html.includes('fonts.googleapis.com/css2?family=Geist')
   && !built.html.includes('base64') && !built.html.includes('<style')
@@ -225,7 +256,7 @@ const budget = { boot: BUDGET.boot, mark: BUDGET.interaction, key: BUDGET.intera
 const expect: Record<string, unknown> = {
   railButtons: 8, generatedFolded: true, moveChip: '↑ 6 lines moved to src/webhooks/sign.ts line 3', code: true, plain: 0, flow: true,
   progress: '1 of 7 chapters reviewed', chapterFolds: true, saved: true, keyMoves: true, keyMarks: '2 of 7 chapters reviewed',
-  jumpInGuide: true, jumpFoldToDiff: true, foldRow: true, diffCards: 10, tree: true, treeTick: true, soundOff: 'false', soundSaved: false,
+  jumpInGuide: true, jumpFoldToDiff: true, foldRow: true, diffCards: 11, tree: true, treeTick: true, soundOff: 'false', soundSaved: false,
   styleStart: 'true', split: true, styleSaved: 'split', splitJump: true, unified: true,
   textShut: true, panelSaved: '{"guide":true,"diff":false}', treeOwn: 'true false', treeShut: true, panelsOpen: '{"guide":false,"diff":false}',
 };
@@ -308,6 +339,64 @@ const RUN = `
   $('.gr-tab[data-view="guide"]').click();
   $('[data-panel-toggle]').click();
   r.panelsOpen = !shut('.gr-tree') && !shut('#c-worker .gr-body') && localStorage.getItem('gr:panel-closed');`;
+
+// A Markdown card opens in Preview: the document with its change marked, folded around it. A fold opens; Changes off
+// shows the whole document, and the Diff tab's card of the same file keeps its own switch; Source draws the diff and
+// Preview comes back as the reader left it. A ref to a line lights the block that holds it, and the speech bubble on
+// a block opens a comment on its lines, in the margin, level with the block.
+const MD_RUN = `
+  const shows = (el) => !!el && getComputedStyle(el).display !== 'none';
+  const md = card('#c-docs', 'docs/webhooks.md');
+  $('#c-docs').scrollIntoView();
+  await until(() => md.querySelector('.gr-md-b'));
+  r.opensInPreview = [md.classList.contains('is-prose'), md.querySelector('[data-md-mode="preview"]').getAttribute('aria-pressed'), !md.querySelector('diffs-container')].join(' ');
+  r.marks = ['changed', 'added', 'removed'].map((m) => md.querySelectorAll('.gr-md-b.is-' + m).length).join(' ');
+  r.words = !!md.querySelector('.is-changed ins') && !!md.querySelector('.is-changed del');
+  r.fold = md.querySelector('.gr-md-fold .lb')?.textContent;
+  r.image = md.querySelector('.gr-prose img')?.getAttribute('src').startsWith('data:image/svg+xml;base64,');
+  r.alert = md.querySelector('.gr-md-alert-t')?.textContent;
+  const before = md.querySelectorAll('.gr-md-b').length;
+  ms.mdFold = t(() => md.querySelector('button[data-md-open]').click());
+  r.foldOpens = md.querySelectorAll('.gr-md-b').length - before;
+
+  ms.mdChanges = t(() => md.querySelector('[data-md-changes]').click());
+  const doc = window.GR_DATA.prs[0].files.find((f) => f.path === 'docs/webhooks.md').preview.blocks.length;
+  r.whole = (md.querySelectorAll('.gr-md-b').length === doc) + ' ' + md.querySelectorAll('.is-added, .is-changed, .is-removed, ins, del, .gr-md-fold').length;
+  $('.gr-tab[data-view="diff"]').click();
+  const other = card('.gr-diff', 'docs/webhooks.md');
+  other.scrollIntoView();
+  await until(() => other.querySelector('.gr-md-b'));
+  r.ownSwitch = other.querySelector('[data-md-changes]').getAttribute('aria-pressed') + ' ' + !!other.querySelector('.gr-md-b.is-changed');
+  $('.gr-tab[data-view="guide"]').click();
+  md.scrollIntoView();
+
+  ms.mdSource = t(() => md.querySelector('[data-md-mode="source"]').click());
+  r.source = await until(() => md.querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line]')) && !shows(md.querySelector('.gr-prose')) && md.querySelector('[data-md-changes]').hidden;
+  md.querySelector('[data-md-mode="preview"]').click();
+  r.back = [shows(md.querySelector('.gr-prose')), shows(md.querySelector('.gr-code')), md.querySelector('[data-md-changes]').getAttribute('aria-pressed')].join(' ');
+
+  [...document.querySelectorAll('#c-docs .gr-body a[data-ref]')].find((a) => a.dataset.ref === 'docs/webhooks.md').click();
+  r.jump = await until(() => md.classList.contains('is-prose') && md.querySelector('.gr-md-b.is-lit')?.dataset.a === '16');
+
+  md.querySelector('[data-md-changes]').click();
+  const table = [...md.querySelectorAll('.gr-md-b')].find((b) => b.querySelector('table'));
+  table.scrollIntoView({ block: 'center' });
+  await sleep(100);
+  ms.mdNote = t(() => table.querySelector('[data-md-note]').click());
+  await sleep(150);
+  const form = document.querySelector('.gr-margin > [data-key="draft"]');
+  r.noteWhere = form?.querySelector('.gr-composer-where')?.textContent;
+  r.noteLevel = form && Math.round(form.getBoundingClientRect().top - table.getBoundingClientRect().top);
+  r.noteLit = table.classList.contains('is-lit');
+  form.querySelector('textarea').value = 'Say that the waits vary?';
+  form.querySelector('[data-composer-add]').click();
+  const saved = JSON.parse(localStorage.getItem('gr:42:comments') ?? '[]').at(-1);
+  r.noteSaved = saved && [saved.kind, saved.path, saved.start, saved.end, saved.side, saved.code.length].join(' ');`;
+const MD_EXPECT: Record<string, unknown> = {
+  opensInPreview: 'true true true', marks: '1 4 0', words: true, fold: '4 unchanged blocks', image: true, alert: 'Important', foldOpens: 4,
+  whole: 'true 0', ownSwitch: 'true true', source: true, back: 'true false false', jump: true,
+  noteWhere: 'Comment on the block, lines 16–23', noteLevel: 0, noteLit: true, noteSaved: 'line docs/webhooks.md 16 23 n 8', narrow: true,
+};
 
 // The stack: #42 and #43, based on it, on one page. The picker, [ and ], marks kept per pull request, an anchor that
 // opens #43, and a jump inside it.
@@ -740,6 +829,14 @@ try {
   const stack = buildStackDemo(join(dir, 'stack'), true);
   if (demo.code || stack.code) { console.log(demo.log + stack.log); process.exit(1); }
   await runPage('page', join(dir, 'demo.preview.html'), RUN, expect, budget);
+  await runPage('markdown', join(dir, 'demo.preview.html'), MD_RUN, MD_EXPECT, { boot: BUDGET.boot, mdFold: BUDGET.interaction, mdChanges: BUDGET.interaction, mdSource: BUDGET.interaction, mdNote: BUDGET.interaction }, async (tab, r) => {
+    // Narrower, there is no margin: the comment sits under its block, as a line comment sits under its line.
+    await tab.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 900, deviceScaleFactor: 1, mobile: false });
+    r.narrow = JSON.parse(await tab.run(`(async () => { await new Promise((ok) => setTimeout(ok, 300));
+      const table = [...document.querySelectorAll('#c-docs .gr-md-b')].find((b) => b.querySelector('table'));
+      const box = table?.nextElementSibling;
+      return JSON.stringify(!!box?.classList.contains('gr-md-notes') && !box.hidden && box.textContent.includes('Say that the waits vary?') && !document.querySelector('.gr-margin > [data-key]')); })()`));
+  });
   await runComments(join(dir, 'demo.preview.html'));
   await runThreads(join(dir, 'demo.preview.html'));
   await runPage('stack', join(dir, 'stack.preview.html'), STACK_RUN, STACK_EXPECT, { boot: BUDGET.boot, pick: BUDGET.interaction, back: BUDGET.interaction }, async (tab, r) => {

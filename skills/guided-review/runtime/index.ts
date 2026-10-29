@@ -8,7 +8,8 @@ import type { DiffStyle } from './types';
 import { $$ } from '../kit/web/dom';
 import { sound } from '../kit/web/sound';
 import { T0 } from './dom';
-import { cards, setDiffStyle, setFold, startDiffStyle, STEP } from './cards';
+import { cards, commentBlock, openProseFold, setDiffStyle, setFold, setProse, startDiffStyle, STEP } from './cards';
+import { headingIn } from './prose';
 import { type Ctx, active, byId, byOwnId, ctxOf, ctxs, diffOf } from './ctx';
 import { markChapter, markFile, progress, saveMarks } from './marks';
 import { choose, current, go, jump, onScroll, pin, show, step, toCard, togglePanel, view } from './nav';
@@ -58,6 +59,22 @@ document.addEventListener('click', (e) => {
     return;
   }
   if (t.classList.contains('gr-fold')) { const el = t.closest('.gr-card')!; setFold(el, !el.classList.contains('collapsed')); return; }
+  // A Markdown card: Source or Preview, Changes on or off, a fold of its preview, a comment on a block, a link to a
+  // heading of the same file.
+  const file = t.closest<HTMLElement>('.gr-file');
+  if (file && t.dataset.mdMode) { if (setProse(file, { mode: t.dataset.mdMode as 'source' | 'preview' })) sound.play('toggle'); return; }
+  if (file && t.hasAttribute('data-md-changes')) { if (setProse(file, { changes: t.getAttribute('aria-pressed') !== 'true' })) sound.play('toggle'); return; }
+  if (file && t.dataset.mdOpen) { openProseFold(file, Number(t.dataset.mdOpen)); sound.play('reveal'); return; }
+  if (file && t.hasAttribute('data-md-note')) { commentBlock(t.closest<HTMLElement>('.gr-md-b')!); return; }
+  if (file && t.dataset.mdAnchor != null) {
+    e.preventDefault();
+    const st = cards.get(file);
+    if (!st?.prose) return;
+    if (!headingIn(st.prose, t.dataset.mdAnchor)) setProse(file, { changes: false });
+    const h = headingIn(st.prose, t.dataset.mdAnchor);
+    if (h) { pin(h); sound.play('nav'); }
+    return;
+  }
   if (t.dataset.expand) {
     const st = cards.get(t.closest('.gr-file')!);
     const all = e.shiftKey || e.altKey;

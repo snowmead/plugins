@@ -14,6 +14,11 @@ them:
   that name the function they hide, moved code marked at both ends. A **Diff** tab lists every file in a
   [`@pierre/trees`](https://trees.software) tree. Unified or split: the guide sets where it starts (`diffStyle`),
   and each reader can switch from the bar.
+- **Markdown** files open in **Preview**, as GitHub shows them: rendered when the guide is built (with
+  [markdown-it](https://github.com/markdown-it/markdown-it) and a GitHub-like sanitizer), with the change marked:
+  added and removed blocks, and the words that changed inside a block, folded around it. **Changes** off shows the whole
+  document as it is now; **Source** shows the diff. Each card keeps its own switches. Images of the repository are
+  embedded; links to its files go to GitHub at the head.
 - **Full width**: the page fills the window, so long lines show in full. The panel button at the left of the bar (`b`)
   closes the chapter text in the guide, leaving each chapter's title above its code, and the file tree in the Diff
   tab; each view remembers its own.
@@ -22,7 +27,7 @@ them:
 - **Review comments**: press the **+** in a card's gutter to comment on a line. For a block of lines, click a line
   number, Shift-click another and press the **+**, or drag the **+** over the lines;
   the speech bubble in a file's header comments on the whole file, and **Comment** under the title on the whole pull
-  request. Each comment is a box in a margin beside the code, level with its line, like comments beside a document;
+  request. In a Markdown preview, the speech bubble beside a block comments on the block's lines. Each comment is a box in a margin beside the code, level with its line, like comments beside a document;
   click one to go to its code, opening its file if it is folded or marked reviewed, with its lines selected. **Send**
   sends a comment to Claude at once; **Add to queue** queues it, and the bar's **Send N to Claude** sends the queue. Claude changes the code on the branch and
   republishes the guide for the new head. `c` hides the margin. Without a Claude session to send to, Send copies the

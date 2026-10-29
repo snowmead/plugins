@@ -5,7 +5,8 @@
 
    - A line comment starts from the "+" @pierre/diffs shows beside the line under the pointer (drag it to take a block
      of lines), or beside the last of the lines the reader selected by their numbers (a click, then a Shift-click on
-     another to take the lines between).
+     another to take the lines between). On a Markdown card in Preview, it starts from the speech bubble beside a
+     block, and is on the block's lines.
    - A file comment starts from the speech bubble in a card's header.
    - A general comment starts from the Comment button under the pull request's title.
    - A reply starts from a thread's Reply box.
@@ -29,7 +30,8 @@ import { ICON } from '../kit/web/icons';
 import { sound } from '../kit/web/sound';
 import { toast } from '../kit/web/toast';
 import { split } from './dom';
-import { type CardState, allDrawn, cards, findRow, mount, redrawNotes, rowOf, setFold } from './cards';
+import { type CardState, allDrawn, cards, findRow, mount, previewOn, redrawNotes, rowOf, select, setFold } from './cards';
+import { reveal as revealProse } from './prose';
 import { type Ctx, active, ctxOf, ctxs, diffOf, guideOf } from './ctx';
 import { choose, pin, renderDiff, show, view } from './nav';
 import { type Post, type Target, type Thread, authorOf, codeOf, keepLocal, mark, newId, onThreads, placeOf, refFor, rowAt, rowsOf, saveSend, startThreads, threadOf, threadsOf, watchThreads } from './threads';
@@ -211,7 +213,7 @@ function closeDraft() {
   const d = draft;
   if (!d) return;
   draft = null;
-  d.st?.inst?.setSelectedLines(null);
+  if (d.st) select(d.st, null);
   if (looking === 'draft' || (d.thread && looking === d.thread.dataset.key)) look(null);
   if (d.thread) paintThread(d.thread);
   else showDraft(d.c, d.st);
@@ -219,7 +221,7 @@ function closeDraft() {
 /** Draw the comment being written where it goes, or take it away once it is closed. */
 function showDraft(c: Ctx, st?: CardState) {
   if (inCode()) {
-    if (st) redrawNotes(st);
+    if (st?.inst) redrawNotes(st);
     for (const el of $$('.gr-file', c.root)) fileNotes(c, el);
     headNotes(c);
   }
@@ -246,13 +248,13 @@ function openNew(c: Ctx, t: Target, label: string, st?: CardState, range?: Pierr
   look('draft', false);
   showDraft(c, st);
   // The lines stay selected while the comment is written, even where closing an empty composer cleared them.
-  if (st && range) { st.inst?.setSelectedLines(range); lit = st; }
+  if (st && range) { select(st, range); lit = st; }
   focusIn(form);
   sound.play('reveal');
 }
 
-/** The gutter's "+": a composer for the lines picked. */
-export function openLine(st: CardState, range: PierreLineRange) {
+/** The gutter's "+": a composer for the lines picked (`what` names them, as "the block" of a preview). */
+export function openLine(st: CardState, range: PierreLineRange, what?: string) {
   if (!takeDraft()) return;
   const toSide = (s?: string): Side => (s === 'deletions' ? 'o' : 'n');
   let a = { line: range.start, side: toSide(range.side) }, b = { line: range.end, side: toSide(range.endSide ?? range.side) };
@@ -261,7 +263,7 @@ export function openLine(st: CardState, range: PierreLineRange) {
   const ia = rowAt(rows, a.line, a.side), ib = rowAt(rows, b.line, b.side);
   if (ia >= 0 && ib >= 0 ? ia > ib : a.side === b.side && a.line > b.line) [a, b] = [b, a];
   const t: Target = { kind: 'line', path: st.f.path, start: a.line, side: a.side, end: b.line, endSide: b.side };
-  openNew(st.ctx, t, `Comment on ${lineLabel(t).toLowerCase()}`, st, range);
+  openNew(st.ctx, t, `Comment on ${what ? `${what}, ` : ''}${lineLabel(t).toLowerCase()}`, st, range);
 }
 /** The speech bubble in a card's header: a composer for the file as a whole. */
 function openFile(card: HTMLElement) {
@@ -340,6 +342,12 @@ function spotOf(it: Item, scope: HTMLElement): Spot {
   if (at?.kind === 'line') for (const card of list) {
     const st = cards.get(card);
     if (!st) continue;
+    // A preview shows a line where a block holds it; else the box sits by the card's header.
+    if (previewOn(st)) {
+      if (rowOf(st, at.start!, at.side!)) return { at: 'row', st, line: at.start!, side: at.side! };
+      if (rowOf(st, at.end!, at.endSide!)) return { at: 'row', st, line: at.end!, side: at.endSide! };
+      continue;
+    }
     const rows = rowsIn(st);
     if (rowAt(rows, at.start!, at.side!) >= 0) return { at: 'row', st, line: at.start!, side: at.side! };
     if (rowAt(rows, at.end!, at.endSide!) >= 0) return { at: 'row', st, line: at.end!, side: at.endSide! };
@@ -365,7 +373,7 @@ const threadNotes = new Map<string, Note>();
 const threadNote = (id: string) => { let n = threadNotes.get(id); if (!n) threadNotes.set(id, n = { kind: 'thread', id }); return n; };
 /** The boxes a card draws under its lines where there is no margin, each under the last line it is on. */
 export function commentNotes(st: CardState): PierreAnnotation<Note>[] {
-  if (!inCode()) return [];
+  if (!inCode() || previewOn(st)) return [];
   const scope = st.el.closest<HTMLElement>('.gr-view');
   if (!scope) return [];
   const out: PierreAnnotation<Note>[] = [];
@@ -393,12 +401,44 @@ function fillBoxes(box: HTMLElement, items: Item[]) {
   keepTyping(box, () => box.replaceChildren(...kids));
   box.hidden = !kids.length;
 }
-/** A card's boxes under its header where there is no margin: its file's comments, and those that cannot sit on a line. */
+/** A card's boxes under its header where there is no margin: its file's comments, and those that cannot sit on a
+    line. A preview's line comments sit under their blocks. */
 export function fileNotes(c: Ctx, card: HTMLElement) {
   const box = $('.gr-notes', card);
   if (!box) return;
   const scope = card.closest<HTMLElement>('.gr-view');
   fillBoxes(box, inCode() && scope ? itemsOf(c).filter((it) => { const s = spotOf(it, scope); return s.at === 'card' && s.card === card; }) : []);
+  const st = cards.get(card);
+  if (st?.prose) proseNotes(st);
+}
+/** Where there is no margin, a preview draws the boxes on its blocks under each block, as the code draws them under
+    a line. */
+function proseNotes(st: CardState) {
+  const pr = st.prose!;
+  const want = new Map<Element, Item[]>();
+  const scope = st.el.closest<HTMLElement>('.gr-view');
+  if (inCode() && previewOn(st) && pr.painted && scope) {
+    for (const it of itemsOf(st.ctx)) {
+      const s = spotOf(it, scope);
+      if (s.at !== 'row' || s.st !== st || !it.at) continue;
+      const block = rowOf(st, it.at.end!, it.at.endSide!) ?? rowOf(st, s.line, s.side);
+      if (block) want.set(block, [...(want.get(block) ?? []), it]);
+    }
+  }
+  for (const box of $$('.gr-md-notes', pr.el)) if (!want.has(box.previousElementSibling!)) box.remove();
+  for (const [block, items] of want) {
+    let box = block.nextElementSibling as HTMLElement | null;
+    if (!box?.classList.contains('gr-md-notes')) block.after(box = h('div', { class: 'gr-md-notes', hidden: true }));
+    fillBoxes(box, items);
+  }
+}
+/** A card flipped between Preview and Source, or opened a fold: its boxes go where it now shows their lines. */
+export function reflow(st: CardState) {
+  if (inCode()) {
+    if (st.inst) redrawNotes(st);
+    fileNotes(st.ctx, st.el as HTMLElement);
+  }
+  relayout();
 }
 /** The boxes under the title where there is no margin: comments on the pull request as a whole. */
 function headNotes(c: Ctx) {
@@ -599,6 +639,7 @@ function topOf(s: Spot, head: number) {
   if (card.classList.contains('collapsed')) return card.getBoundingClientRect().top;
   const row = rowOf(s.st, s.line, s.side);
   if (row) return row.getBoundingClientRect().top;
+  if (previewOn(s.st)) return card.getBoundingClientRect().top;
   const rows = rowsIn(s.st), i = Math.max(0, rowAt(rows, s.line, s.side));
   let n = 0, hunk = 0;
   for (const hk of s.st.hunks) { if (n + hk.lines.length > i) break; n += hk.lines.length; hunk++; }
@@ -624,7 +665,7 @@ function look(key: string | null, layoutNow = true) {
   if (key === looking) return;
   looking = key;
   if (key?.startsWith('t:')) markRead(key.slice(2));
-  if (lit) { lit.inst?.setSelectedLines(null); lit = null; }
+  if (lit) { select(lit, null); lit = null; }
   for (const el of $$<HTMLElement>('[data-key]')) el.classList.toggle('is-active', !!key && el.dataset.key === key);
   if (key) void light(key);
   if (layoutNow) relayout();
@@ -635,9 +676,9 @@ async function light(key: string) {
   if (!it?.at || it.at.kind !== 'line') return;
   const s = spotOf(it, viewOf(c));
   if (s.at !== 'row') return;
-  await mount(s.st.el);
+  if (!previewOn(s.st)) await mount(s.st.el);
   if (looking !== key) return;
-  s.st.inst?.setSelectedLines(rangeOf(it.at));
+  select(s.st, rangeOf(it.at));
   lit = s.st;
 }
 
@@ -657,6 +698,13 @@ async function reveal(key: string, always: boolean) {
   const it = itemsOf(c).find((x) => x.key === key);
   if (!it) return;
   let s = spotOf(it, viewOf(c));
+  // A line in a fold of a preview: the fold opens.
+  if (it.at?.kind === 'line' && s.at !== 'row') {
+    for (const card of $$('.gr-file', viewOf(c)).filter((x) => x.dataset.path === it.at!.path)) {
+      const st = cards.get(card);
+      if (st && previewOn(st) && revealProse(st.prose!, it.at.start!, it.at.side!)) { reflow(st); s = spotOf(it, viewOf(c)); break; }
+    }
+  }
   if (it.at?.kind === 'line' && s.at !== 'row') {
     // A line no card of this view shows, as one in a fold of the guide: the Diff tab's card of the whole file opens to it.
     renderDiff(c);

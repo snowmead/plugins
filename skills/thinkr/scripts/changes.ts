@@ -13,6 +13,7 @@
    runtime (runtime/changes.ts) shows the marks only for the entry the reader picks. Rebuilding a version replaces
    its snapshot, so the marks are always against the version before it. */
 import type { Node } from './tree';
+import { align } from '../kit/build/words';
 
 /** The units a change is found in: the outermost of these in the page. */
 const BLOCK = new Set(['h1', 'h2', 'h3', 'h4', 'p', 'li', 'dt', 'dd', 'blockquote', 'pre', 'tr', 't-callout', 't-figure', 't-question']);
@@ -234,29 +235,4 @@ function words(a: string, b: string, tag: string): string | null {
   });
   flush();
   return /<ins>|<del /.test(body) ? hb[0] + body + b.slice(eb) : null;
-}
-
-// ---------------------------------------------------------------- alignment
-type Op = ['=' | '-' | '+', number, number];
-/** A longest common subsequence of two lists, as keep (=), remove (-) and add (+) steps in order. The common head
-    and tail are matched first, so an edit in the middle of a long page fills only a small table. */
-export function align(a: string[], b: string[]): Op[] {
-  let s = 0, e = 0;
-  while (s < a.length && s < b.length && a[s] === b[s]) s++;
-  while (e < a.length - s && e < b.length - s && a[a.length - 1 - e] === b[b.length - 1 - e]) e++;
-  const n = a.length - s - e, m = b.length - s - e, W = m + 1;
-  const dp = new Uint32Array((n + 1) * W);
-  for (let i = n - 1; i >= 0; i--)
-    for (let j = m - 1; j >= 0; j--)
-      dp[i * W + j] = a[s + i] === b[s + j] ? dp[(i + 1) * W + j + 1] + 1 : Math.max(dp[(i + 1) * W + j], dp[i * W + j + 1]);
-  const ops: Op[] = [];
-  for (let k = 0; k < s; k++) ops.push(['=', k, k]);
-  let i = 0, j = 0;
-  while (i < n || j < m) {
-    if (i < n && j < m && a[s + i] === b[s + j]) ops.push(['=', s + i++, s + j++]);
-    else if (j >= m || (i < n && dp[(i + 1) * W + j] >= dp[i * W + j + 1])) ops.push(['-', s + i++, -1]);
-    else ops.push(['+', -1, s + j++]);
-  }
-  for (let k = 0; k < e; k++) ops.push(['=', a.length - e + k, b.length - e + k]);
-  return ops;
 }

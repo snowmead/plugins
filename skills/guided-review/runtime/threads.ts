@@ -15,7 +15,7 @@
 import type { Author, DbCap, DiffFile, Line, ReviewComment, SendDoc, SentComment, Side, ThreadMsg, UserCap } from './types';
 import { store } from '../kit/web/dom';
 import { toast } from '../kit/web/toast';
-import { rebuildOld } from './cards';
+import { rebuildOld } from './hunks';
 import { type Ctx, ctxs } from './ctx';
 
 const MAX_CODE = 30; // lines of code kept with a line comment

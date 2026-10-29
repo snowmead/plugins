@@ -17,7 +17,7 @@ macOS and Linux; on Windows, Developer Mode and `core.symlinks=true`).
 | `ui.css` | The shared parts: the sticky bar (`.k-bar`), buttons (`.k-btn` with `is-primary`, `is-ghost`, `is-icon`, `is-sm`), the segmented control (`.k-seg`), badges (`.k-badge`), the toast (`.k-toast`) and the speaker button (`.k-sound`). |
 | `sounds.json` | One earshot kit: `nav`, `step`, `select`, `deselect`, `reveal`, `toggle`, `send` and `hover`. |
 | `web/` | Browser code each page's runtime bundles: `dom.ts` (`h`, `$`, `$$`, `esc`, `slug`, `store`, `onScroll`, `barLine`, `copyText`), `icons.ts` (`ICON`, `soundButton`), `theme.ts`, `sound.ts`, `toast.ts`, `types.ts`. |
-| `build/` | Helpers for each skill's scripts: `page.ts` (the Google Fonts link for Geist, the stylesheet, the runtime with its sounds, the files a page publishes beside it, the preview document), `libs.ts` (libraries pinned in `runtime/libs.json`, refreshed under the artifact rule), `chrome.ts` (find Chrome, drive it over DevTools for tests), `shot.ts` (screenshots). |
+| `build/` | Helpers for each skill's scripts: `page.ts` (the Google Fonts link for Geist, the stylesheet, the runtime with its sounds, the files a page publishes beside it, the preview document), `libs.ts` (libraries pinned in `runtime/libs.json`, refreshed under the artifact rule), `chrome.ts` (find Chrome, drive it over DevTools for tests), `shot.ts` (screenshots), `deps.ts` (a skill's build dependencies, installed once from its lockfile on a fresh copy), `words.ts` (`align`, the longest common subsequence the builds mark what changed with). |
 | `scripts/` | Maintenance: `sounds.py` re-renders the sounds. |
 
 ## Tokens

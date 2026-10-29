@@ -13,7 +13,21 @@ We post each event with a 10 second timeout, and a 2xx answer delivers it. A tim
 429 or a 5xx is retried up to 5 more times, about 30 s, 1, 2, 4 and 8 minutes apart; then the delivery is marked
 failed. Any other 4xx fails it at once.
 
-Make your handler idempotent: a retry can bring an event you already handled.
+| Post | Waits before it | Since the first post |
+|-----:|----------------:|---------------------:|
+| 1 | none | 0 s |
+| 2 | 30 s | 30 s |
+| 3 | 1 min | 1.5 min |
+| 4 | 2 min | 3.5 min |
+| 5 | 4 min | 7.5 min |
+| 6 | 8 min | 15.5 min |
+
+Each wait varies by up to 20%, so endpoints that fail together are not retried together.
+
+![Six posts over about 15 minutes](retries.svg)
+
+> [!IMPORTANT]
+> Make your handler idempotent: a retry can bring an event you already handled.
 
 ## The endpoint page
 

@@ -18,6 +18,7 @@
 import { join } from 'node:path';
 import { FONTS, assets, preview, publishLines, runtime, styles } from '../kit/build/page';
 import { type LibMap, libs, preloads } from '../kit/build/libs';
+import { need as needIn } from '../kit/build/deps';
 import { type Node, parse } from './tree';
 import { type History, KINDS, track } from './changes';
 
@@ -27,22 +28,8 @@ const ID = /^[A-Za-z][A-Za-z0-9_.-]*$/;
 
 const decode = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 
-/** Import a build dependency. A fresh install (the plugin, npx skills, a plain copy) has no node_modules yet,
-    so the first build installs them once, from the pinned lockfile. */
-let installed = false;
-async function need<T>(spec: string): Promise<T> {
-  try { return await import(spec); } catch { /* not installed yet */ }
-  const dir = join(import.meta.dir, '..');
-  if (!installed) {
-    installed = true;
-    console.log('  setup installing build dependencies (once)…');
-    const r = Bun.spawnSync(['bun', 'install', '--production', '--frozen-lockfile'], { cwd: dir, stdout: 'ignore', stderr: 'pipe' });
-    if (r.exitCode) { console.log(`  error \`bun install\` failed in ${dir}:\n${r.stderr.toString().trim()}`); process.exit(1); }
-  }
-  try { return await import(spec); } catch { /* resolution may have cached the miss; try the path itself */ }
-  try { return await import(Bun.resolveSync(spec, dir)); }
-  catch { console.log(`  error ${spec} is missing. Run \`bun install\` in ${dir}.`); process.exit(1); }
-}
+/** Import a build dependency, installing them once on a fresh copy (kit/build/deps.ts). */
+const need = <T>(spec: string) => needIn<T>(spec, join(import.meta.dir, '..'));
 
 // ---------------------------------------------------------------- libraries
 /** The libraries a page needs: motion always (the runtime animates with it), plus what its scripts load. */

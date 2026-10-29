@@ -35,7 +35,8 @@ The skill lives at `${CLAUDE_SKILL_DIR}`; run its scripts by that full path, exa
 
 **Before the first build**, check `bun --version`. When Bun is missing, stop and ask the user to install it
 (`curl -fsSL https://bun.sh/install | bash`, or `brew install oven-sh/bun/bun`); do not install it yourself. The
-scripts need git and Bun, and nothing else.
+scripts need git and Bun, and nothing else: the first build that meets a Markdown file installs its two packages
+(markdown-it and sanitize-html) once, from the pinned lockfile.
 
 ## Workflow
 

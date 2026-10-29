@@ -1,7 +1,7 @@
 /* Moving around: the pull request on screen, its Guide and Diff views and their left columns, jumps from a ref to its
    line, the chapter rail, j and k. */
 import { $, $$, esc, store } from '../kit/web/dom';
-import { type CardState, card, cards, findRow, setFold } from './cards';
+import { type CardState, card, cards, findRow, select, setFold } from './cards';
 import { type Ctx, active, ctxs, diffOf, guideOf, setActive } from './ctx';
 import { buildTree, progress, restoreChapters, showFile } from './marks';
 
@@ -126,9 +126,9 @@ export function toCard(c: Ctx, path: string, scope: Element | null) {
 }
 function flash(st: CardState, row: Element, line: number, side: 'o' | 'n') {
   pin(row, 'center');
-  st.inst?.setSelectedLines({ start: line, end: line, side: side === 'o' ? 'deletions' : 'additions' });
+  select(st, { start: line, end: line, side: side === 'o' ? 'deletions' : 'additions' });
   clearTimeout(st.flashTimer);
-  st.flashTimer = window.setTimeout(() => st.inst?.setSelectedLines(null), 1800);
+  st.flashTimer = window.setTimeout(() => select(st, null), 1800);
 }
 /** Jump to a line of a pull request: the guide's card that holds it, else the Diff tab's card of the whole file. */
 export async function jump(c: Ctx, path: string, line: number, side: 'o' | 'n', chapter: string | null, from: Element | null) {

@@ -36,6 +36,32 @@ export interface DiffFile {
   newCount: number | null;
   hunks: Hunk[];
   moves: Move[];
+  /** A Markdown file rendered, as build.ts adds it to the page's data (scripts/markdown.ts). diff.json has none. */
+  preview?: MdPreview;
+}
+
+/** One top-level block of a rendered Markdown file (a heading, a paragraph, a list, a table, a code block…): its
+    first and last source lines, 1-based, and its sanitized HTML. */
+export interface MdBlock { a: number; b: number; html: string }
+/** One block of the preview with Changes on, in reading order. */
+export interface MdRow {
+  mark: 'same' | 'changed' | 'added' | 'removed';
+  /** The block of `blocks` it shows: same, changed and added rows, and every row of a deleted file. */
+  n?: number;
+  /** The old block's first and last lines: a changed row, and a removed row of a changed file. */
+  o?: [number, number];
+  /** A changed row's HTML with its words marked, or a removed row's old HTML. */
+  html?: string;
+  /** The hunks whose changed lines fall in it, so a chapter card shows only the rows of its own hunks. */
+  hunks: number[];
+}
+export interface MdPreview {
+  /** The side `blocks` are on: the head ('n'), or the base for a deleted file ('o'). */
+  side: Side;
+  /** The whole document, unmarked, as it is at the head (as it was, for a deleted file): Changes off. */
+  blocks: MdBlock[];
+  /** The document with its change marked: Changes on. */
+  rows: MdRow[];
 }
 export interface Commit { sha: string; author: string; subject: string }
 export interface Diff {

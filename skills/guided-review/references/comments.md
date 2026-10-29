@@ -11,6 +11,7 @@ on. This file covers the capabilities that make that work, what a send holds, an
 |---|---|
 | A line | Hovers it and presses the **+** in its gutter. |
 | A block of lines | Clicks the first line's number and Shift-clicks the last's (or the other way up), then presses the **+**, which sits on the last line of the selection. Or drags the **+** down (or up) over the lines. A block may run from removed lines into added ones. |
+| A block of a Markdown preview | Presses the speech bubble beside the block. It is a line comment on the block's source lines (on the old side for a removed block), so Claude reads it as any other. |
 | A file as a whole | Presses the speech bubble in the file's card header. |
 | The pull request as a whole | Presses **Comment** under the title. |
 | A thread, to answer Claude | Presses **Reply…** at the foot of the thread. |
