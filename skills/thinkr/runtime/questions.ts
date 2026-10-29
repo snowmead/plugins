@@ -158,9 +158,12 @@ export function createQuestions(page: HTMLElement, mode: Mode, key: string) {
     }
     render();
 
+    // an option's label is every node in its title (text, <code>, links…) but the Recommended badge
     const labelOf = (v: string) => v === 'other'
       ? 'Other: ' + a.other
-      : (q.querySelector(`input[value="${CSS.escape(v)}"]`)?.closest('.t-opt')?.querySelector('.t-optlabel')?.firstChild?.textContent?.trim() || v);
+      : ([...(q.querySelector(`input[value="${CSS.escape(v)}"]`)?.closest('.t-opt')?.querySelector('.t-optlabel')?.childNodes ?? [])]
+        .filter((n) => !(n instanceof Element && n.classList.contains('k-badge')))
+        .map((n) => n.textContent).join('').replace(/\s+/g, ' ').trim() || v);
     const text = prompt?.textContent?.trim() || id;
     return {
       el: q, id, quiz, done,

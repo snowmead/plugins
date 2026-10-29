@@ -11,6 +11,13 @@ import { browser, findChrome } from '../kit/build/chrome';
 const ROOT = join(import.meta.dir, '..');
 findChrome();
 
+// Option labels with markup, which the template's plain labels leave untested. They go in before the first build,
+// so both versions have them and they are not a change.
+const PLAN_V1: [string | RegExp, string][] = [
+  ['<t-option value="bucket">Token bucket<small>', '<t-option value="bucket">Token bucket, one <code>EVALSHA</code> call<small>'],
+  ['<t-option value="org">Organization<small>', '<t-option value="org"><b>Organization</b>, by <code>org_id</code><small>'],
+];
+
 // The plan is tested at version 2: built once as the template, then changed as below and built again, so the build
 // has a version to compare with and the page has Changes to pick.
 const PLAN_V2: [string | RegExp, string][] = [
@@ -39,10 +46,10 @@ const BUDGET = { boot: 30, interaction: 12 };
 // before the page's own scripts on every load.
 const cases: Record<string, { viewer?: string; prime?: string; run: string; expect: Record<string, unknown>; budget: Record<string, number> }> = {
   plan: {
-    // A stand-in for the claude.ai viewer: the page database in memory, a reader "u_me", and a comments capability
-    // that records each send's text, or fails once with rate_limited when __fail is set.
+    // A stand-in for the claude.ai viewer: the page database in memory (__docs), a reader "u_me", and a comments
+    // capability that records each send's text, or fails once with rate_limited when __fail is set.
     viewer: `(() => {
-      const docs = new Map();
+      const docs = window.__docs = new Map();
       window.__sent = [];
       const db = { doc: (path) => ({ path, get: async () => ({ exists: docs.has(path) }), set: async (d) => { docs.set(path, d); } }) };
       const comments = {
@@ -176,6 +183,9 @@ const cases: Record<string, { viewer?: string; prime?: string; run: string; expe
         return window.__sent.at(-1).split('\\n\\n').map((b) => b.split('\\n')[0]).join(' | ');
       };
       r.sendFirst = await submit(false);
+      // labels with markup come back whole, in the send and in the database, and never with "Recommended"
+      r.sentLabels = window.__sent.at(-1).split('\\n\\n').slice(1, 3).map((b) => b.split('\\n')[1]).join(' | ');
+      r.dbLabels = ['algorithm', 'scopes'].map((id) => window.__docs.get('responses/u_me').answers[id].labels.join('; ')).join(' | ');
       r.sendApprove = await submit(true);
       $('#algorithm--sliding').click();
       r.sendChanged = await submit(false);
@@ -192,6 +202,8 @@ const cases: Record<string, { viewer?: string; prime?: string; run: string; expe
       chgBar: 'Two weeks of shadow mode', chgNext: '2 / 3', chgSwitch: '1 / 1 1', chgQA: 'When Redis does not answer within 20 ms, what should the gateway do? | Let the request through',
       chgReclick: true, chgCleared: true, chgFold: true, chgUnfold: true, chgSeen: 2,
       sendFirst: 'Feedback on: API Rate Limits (v2) | Q1 Which algorithm should count requests? | Q2 What should each limit be counted against? | Q3 When Redis does not answer within 20 ms, what should the gateway do? | Q4 Which customers need a higher limit from day one? | Message: | Full answers: responses/u_me in the page database.',
+      sentLabels: '→ Token bucket, one EVALSHA call | → API key; Organization, by org_id',
+      dbLabels: 'Token bucket, one EVALSHA call | API key; Organization, by org_id',
       sendApprove: 'Approved: API Rate Limits (v2) | Q4 Which customers need a higher limit from day one? | Answers unchanged since the last send: Q1, Q2, Q3. | Full answers: responses/u_me in the page database.',
       sendChanged: 'Feedback on: API Rate Limits (v2) | Q1 Which algorithm should count requests? | Q4 Which customers need a higher limit from day one? | Answers unchanged since the last send: Q2, Q3. | Full answers: responses/u_me in the page database.',
       sendFailed: true,
@@ -230,19 +242,23 @@ try {
     const b = Bun.spawnSync(['bun', join(ROOT, 'scripts/build.ts'), file]);
     if (b.exitCode || / warn /.test(b.stdout.toString())) { console.log(b.stdout.toString()); process.exit(1); }
   };
+  const edit = async (file: string, edits: [string | RegExp, string][], list: string) => {
+    let src = await Bun.file(file).text();
+    for (const [from, to] of edits) {
+      const hit = typeof from === 'string' ? from : from.exec(src)?.[0];
+      if (!hit || !src.includes(hit)) { console.log(`fail  plan: the template no longer has ${from}; update ${list}`); process.exit(1); }
+      src = src.replace(hit, to);
+    }
+    await Bun.write(file, src);
+  };
   for (const [name, c] of Object.entries(cases)) {
     // built in the temp folder, so the history file the build keeps for a plan never lands in templates/
     const file = join(tmp, `${name}.html`);
     await Bun.write(file, Bun.file(join(ROOT, `templates/${name}.html`)));
+    if (name === 'plan') await edit(file, PLAN_V1, 'PLAN_V1');
     build(file);
     if (name === 'plan') {
-      let src = await Bun.file(file).text();
-      for (const [from, to] of PLAN_V2) {
-        const hit = typeof from === 'string' ? from : from.exec(src)?.[0];
-        if (!hit || !src.includes(hit)) { console.log(`fail  plan: the template no longer has ${from}; update PLAN_V2`); process.exit(1); }
-        src = src.replace(hit, to);
-      }
-      await Bun.write(file, src);
+      await edit(file, PLAN_V2, 'PLAN_V2');
       build(file);
     }
     const chromeTab = await browser(join(tmp, 'profile-' + name));
