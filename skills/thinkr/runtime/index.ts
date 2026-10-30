@@ -64,7 +64,9 @@ function boot(page: HTMLElement) {
     wrap.append(pre);
   }
   // links out (docs, code, sources) get an arrow; a <t-refs> list also shows each link's site
-  for (const a of page.querySelectorAll<HTMLAnchorElement>('a[href^="http"]')) {
+  for (const a of page.querySelectorAll<HTMLAnchorElement | SVGAElement>('a[href^="http"]')) {
+    // a link in a diagram (Mermaid's click) is SVG, whose target is read-only: it opens in a new tab and stays plain
+    if (!(a instanceof HTMLAnchorElement)) { a.setAttribute('target', '_blank'); continue; }
     a.classList.add('t-ext');
     a.rel = 'noopener';
     a.target = '_blank';

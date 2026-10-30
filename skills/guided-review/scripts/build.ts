@@ -12,19 +12,21 @@
    and <out>.preview.html (a full document to open locally); <out> defaults to the guide's or the stack's path
    without .json. Exit code 1 when a guide has errors; warnings do not stop the build.
 
-   Libraries (@pierre/diffs, @pierre/trees, and mermaid for the preview) resolve to the newest release that is at
-   least 14 days old (the artifact rule). A refresh runs on its own when libs.json is more than 7 days old, and is
-   skipped quietly when offline. Size: the page holds only its markup; the stylesheet, the runtime (with its sounds)
-   and the data are files beside it, and Geist comes from Google Fonts. Speed: the runtime is bundled and minified,
-   and every library the page uses is preloaded from the head with its whole import graph, so nothing waits on a
-   request chain. Flows are mermaid blocks, which the artifact viewer draws itself; only the preview loads mermaid.
+   Libraries (@pierre/diffs and @pierre/trees) resolve to the newest release that is at least 14 days old (the
+   artifact rule). A refresh runs on its own when libs.json is more than 7 days old, and is skipped quietly when
+   offline. Size: the page holds only its markup; the stylesheet, the runtime (with its sounds) and the data are files
+   beside it, and Geist comes from Google Fonts. Speed: the runtime is bundled and minified, and every library the
+   page uses is preloaded from the head with its whole import graph, so nothing waits on a request chain. Diagrams
+   are drawn here with pele, into SVG in the kit's colors; the drawings ride in the data file, so the page loads no
+   diagram library and stays small.
 
-   The font link, the shared stylesheet, the sounds, the speaker button and the library pinning come from the kit
-   (kit/build/). */
+   The font link, the shared stylesheet, the sounds, the speaker button, the library pinning and the diagrams come
+   from the kit (kit/build/). */
 import { dirname, join, resolve } from 'node:path';
-import type { BeforeAfter, Chapter, Diff, DiffFile, Guide, Kind, PageData, PagePr, Stack, StateTable, Text } from '../runtime/types';
+import type { Chapter, Diagram, DiagramRef, Diff, DiffFile, Guide, Kind, PageData, PageDiagram, PagePr, Stack, StateTable, Text } from '../runtime/types';
 import { FONTS, ICON, assets, preview, publishLines, runtime, soundButton, styles } from '../kit/build/page';
 import { libs, preloads } from '../kit/build/libs';
+import { diagrams } from '../kit/build/diagram';
 import { BELL, COMMENT, PANEL } from '../runtime/icons';
 import { previews } from './markdown';
 
@@ -46,6 +48,7 @@ if (!opt('guide') && !opt('stack')) {
   console.log('       bun scripts/build.ts --stack=stack.json [--out=stack] [--check] [--repo=<checkout>]');
   process.exit(flag('help') ? 0 : 2);
 }
+const draw = await diagrams(ROOT);
 
 // ---------------------------------------------------------------- inputs
 // One guide and its diff, or a stack.json that lists several, in the order the page's picker shows them.
@@ -78,17 +81,12 @@ const chip = (path: string) => {
   return ext && ext.length <= 4 ? ext : 'txt';
 };
 const CHEV = ICON.down;
-// The new, changed and removed node styles, in colors that read on both themes.
-const FLOW_CLASSES = [
-  'classDef new stroke:#22a35a,stroke-width:2px;',
-  'classDef changed stroke:#d08700,stroke-width:2px;',
-  'classDef removed stroke:#dc3e3e,stroke-width:2px,stroke-dasharray:4 3;',
-];
+const MARK_LABEL: Record<string, string> = { new: 'New', changed: 'Changed', removed: 'Removed' };
 
 // ---------------------------------------------------------------- one pull request
 interface Built {
   id: string; prefix: string; number: number | null; title: string; url: string | null; name?: string; repo: string;
-  base: string; branch: string | null; add: number; del: number; files: number; flows: number;
+  base: string; branch: string | null; add: number; del: number; files: number;
   errors: string[]; warns: string[]; report: string[];
   meta: string; sections: string; diffView: string; footer: string; links: string; data: PagePr;
 }
@@ -157,7 +155,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
   const steps = ov.steps ?? [];
   if (steps.length > 5) warn(`overview.steps has ${steps.length} items. Keep 2 to 5.`);
   steps.forEach((s, i) => { if (words(s) > 30) warn(`overview.steps[${i}] has ${words(s)} words. One line each.`); });
-  if (!ov.beforeAfter) err('overview.beforeAfter is missing. Every guide opens with a before / after.');
+  if ('beforeAfter' in ov) err('overview.beforeAfter is gone: the overview draws the change as a diagram. Write overview.diagram instead (guide-format.md).');
 
   const chapters: Chapter[] = guide.chapters ?? [];
   if (!chapters.length) err('The guide has no chapters.');
@@ -179,6 +177,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     if (sawLate && !LATE.has(kind)) err(`${where}: a ${kind} chapter comes after a database, tests or generated chapter. The core change comes first.`);
     if (LATE.has(kind)) sawLate = true;
     if (kind === 'generated') sawGenerated = true;
+    if ('beforeAfter' in ch) err(`${where}: beforeAfter is gone: a chapter draws its change as a diagram. Write diagram instead (guide-format.md).`);
     const body = paras(ch.body);
     if (!body.length) err(`${where}: body is missing.`);
     const bw = body.reduce((n, p) => n + words(p), 0);
@@ -216,7 +215,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     }
   }
 
-  /** The chapter that shows a line, for the chapter number beside a before / after row. */
+  /** The chapter that shows a line, for the tooltip of a diagram node that refs it. */
   function chapterOf(ref: Ref): number | null {
     const f = FILES.get(ref.path)!;
     const hit = f.hunks.find((h) => {
@@ -256,46 +255,40 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     }).join('');
   }
 
-  // -------------------------------------------------------------- before / after
-  let flows = 0;
-  function beforeAfter(ba: BeforeAfter | undefined, where: string) {
-    if (!ba) return '';
-    const lines = ba.lines ?? [];
-    if (!lines.length && !ba.flow) { err(`${where}: give lines (pseudocode or a call tree) or a flow.`); return ''; }
-    if (lines.length > 32) warn(`${where}: ${lines.length} lines. Keep the before / after under 30; show the path that changed.`);
-    let add = 0, del = 0;
-    const rows = lines.map((l, i) => {
-      const w = `${where}.lines[${i}]`;
-      const op = l.op ?? ' ';
-      if (![' ', '+', '-'].includes(op)) err(`${w}: op must be " ", "+" or "-".`);
-      if (op === '+') add++;
-      if (op === '-') del++;
-      if (!l.t) err(`${w}: t (the row's text) is missing.`);
-      else if (String(l.t).length > 90) warn(`${w}: ${String(l.t).length} characters. Keep a row under 90.`);
-      const depth = Math.max(0, Math.min(8, l.d ?? 0));
-      let rf = '';
-      const ref = l.ref ? parseRef(l.ref, op === '-' ? 'o' : 'n', w) : null;
-      if (ref) rf += refLink(ref, `${esc(ref.path.split('/').pop())}${ref.line ? ` ${ref.line}` : ''}`, ref.external ? 'ext' : '');
-      let chIdx: number | null = null;
-      if (l.ch) { chIdx = chapters.findIndex((c) => c.id === l.ch); if (chIdx < 0) err(`${w}: ch "${l.ch}" is not a chapter id.`); }
-      else if (ref && !ref.external) chIdx = chapterOf(ref);
-      if (chIdx != null && chIdx >= 0) rf += `<button type="button" class="chn" data-chapter-go="${esc(chapters[chIdx].id)}" title="${esc(chapters[chIdx].title)}">${pad2(chIdx + 1)}</button>`;
-      const cls = op === '+' ? 'add' : op === '-' ? 'del' : 'ctx';
-      const note = l.note ? `<span class="note">${esc(l.note)}</span>` : '';
-      return `<div class="ln ${cls}"><span class="mk">${op === '+' ? '+' : op === '-' ? '−' : ''}</span><span class="tx">${'  '.repeat(depth)}${esc(l.t)}${note}</span><span class="rf">${rf}</span></div>`;
-    }).join('');
-    let flow = '';
-    if (ba.flow) {
-      const src = String(ba.flow).trim().split('\n');
-      if (!/^(flowchart|graph)\s+(LR|RL|TD|TB|BT)\b/.test(src[0])) err(`${where}.flow: start with "flowchart LR" or "flowchart TD".`);
-      flow = `<div class="flow"><pre class="mermaid">${esc([src[0], ...FLOW_CLASSES.map((c) => `  ${c}`), ...src.slice(1)].join('\n'))}</pre></div>`;
-      flows++;
+  // -------------------------------------------------------------- diagrams
+  // Each section's diagram, drawn here with pele (kit/build/diagram.ts). The page holds an empty box for it; the
+  // drawing rides in the data file, and the runtime fills the box as its section comes near.
+  const drawings: Record<string, PageDiagram> = {};
+  function diagram(dg: Diagram | undefined, key: string, where: string) {
+    if (!dg || typeof dg !== 'object') { err(`${where} is missing. Every section draws its change: give it { "title": …, "mermaid": … }.`); return ''; }
+    if (!String(dg.mermaid ?? '').trim()) { err(`${where}.mermaid is missing: the diagram's Mermaid source, such as "flowchart LR\\n  A[…] --> B[…]:::new".`); return ''; }
+    const drawn = draw(String(dg.mermaid).trim(), `${id}-${key}`);
+    if ('error' in drawn) { err(`${where}.mermaid: ${drawn.error}`); return ''; }
+    if (dg.title != null && words(dg.title) > 14) warn(`${where}.title has ${words(dg.title)} words. One line names what the diagram shows.`);
+    if (drawn.nodes.size > 14) warn(`${where}: ${drawn.nodes.size} nodes. Keep a diagram under 12; draw the path that changed.`);
+    if (drawn.width > 960) warn(`${where}: the diagram is ${drawn.width} px wide, so it shrinks to fit its card. Shorten its labels, cut nodes, or draw it top to bottom (flowchart TD).`);
+    if (drawn.type === 'flowchart' && !drawn.marks.length) warn(`${where}: no node is marked. Mark what the pull request adds, changes or removes with :::new, :::changed or :::removed.`);
+    const refs: Record<string, DiagramRef> = {};
+    for (const [node, ref] of Object.entries(dg.refs ?? {})) {
+      const w = `${where}.refs.${node}`;
+      if (!drawn.nodes.has(node)) { err(`${w}: the diagram has no node "${node}". Its nodes: ${[...drawn.nodes.keys()].join(', ') || 'none'}.`); continue; }
+      // A removed node stands for code that is gone, so its line is on the old side, unless its file is new (a
+      // migration that drops an index).
+      const gone = drawn.nodes.get(node) === 'removed' && FILES.get(String(ref).replace(/:\d+$/, ''))?.status !== 'added';
+      const r = parseRef(ref, gone ? 'o' : 'n', w);
+      if (!r) continue;
+      const at = r.external ? null : chapterOf(r);
+      const ch = at != null ? chapters[at] : null;
+      refs[node] = {
+        path: r.path, line: r.line, ...(r.side ? { side: r.side } : {}), ...(ch ? { ch: ch.id } : {}), ...(r.external ? { url: r.external } : {}),
+        title: `${r.path.split('/').pop()}${r.line ? ` ${r.line}` : ''}${ch ? `, chapter ${pad2(at! + 1)}: ${ch.title}` : r.external ? ', on GitHub' : ''}`,
+      };
     }
-    const label = ba.label ? `<span class="lbl">${esc(ba.label)}</span>` : '';
-    const stat = lines.length ? `<span class="fstat">${add ? `<span class="add-n">+${add}</span>` : ''}${del ? `<span class="del-n">−${del}</span>` : ''}<span>${lines.length} lines</span></span>` : '';
-    return `<div class="gr-card gr-ba"><header><button type="button" class="gr-fold" aria-label="Fold before / after" aria-expanded="true">${CHEV}</button>`
-      + `<span class="ttl">Before / after</span>${label}<span class="sp"></span>${stat}</header>`
-      + (ba.title ? `<div class="cap">${esc(ba.title)}</div>` : '') + flow + (rows ? `<div class="lines">${rows}</div>` : '') + '</div>';
+    drawings[key] = { html: drawn.body, ...(Object.keys(refs).length ? { refs } : {}) };
+    const keys = drawn.marks.map((m) => `<span class="gr-dia-key is-${m}">${MARK_LABEL[m]}</span>`).join('');
+    return `<div class="gr-card gr-dia"><header><button type="button" class="gr-fold" aria-label="Fold the diagram" aria-expanded="true">${CHEV}</button>`
+      + `<span class="ttl">${esc(dg.title ?? 'Diagram')}</span><span class="sp"></span>${keys ? `<span class="gr-dia-keys">${keys}</span>` : ''}</header>`
+      + `<div class="k-dia" data-dia="${esc(key)}"></div></div>`;
   }
 
   // -------------------------------------------------------------- state table
@@ -336,7 +329,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
   sections.push(`<section class="gr-sec" id="${P}overview" data-title="Overview"><div class="gr-text"><h2>Overview</h2><div class="gr-body">`
     + paras(ov.summary).map((p) => `<p>${md(p, 'overview.summary')}</p>`).join('')
     + (steps.length ? `<ol>${steps.map((s, i) => `<li>${md(s, `overview.steps[${i}]`)}</li>`).join('')}</ol>` : '')
-    + `</div></div><div class="gr-code-col">${beforeAfter(ov.beforeAfter, 'overview.beforeAfter')}</div></section>`);
+    + `</div></div><div class="gr-code-col">${diagram(ov.diagram, 'overview', 'overview.diagram')}</div></section>`);
   let labelStarted = false;
   chapters.forEach((ch, i) => {
     const kind = ch.kind ?? 'core';
@@ -349,7 +342,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
       + `<label class="gr-check"><input type="checkbox" data-review-chapter="${esc(ch.id)}"> Reviewed</label></div>`
       + `<div class="gr-body">${paras(ch.body).map((p) => `<p>${md(p, `${where}.body`)}</p>`).join('')}</div>`
       + table(ch.table, `${where}.table`) + fileList(sel[i] ?? []) + '</div>'
-      + `<div class="gr-code-col">${beforeAfter(ch.beforeAfter, `${where}.beforeAfter`)}<div class="gr-files" data-chapter="${esc(ch.id)}"></div></div></section>`);
+      + `<div class="gr-code-col">${diagram(ch.diagram, `c-${ch.id}`, `${where}.diagram`)}<div class="gr-files" data-chapter="${esc(ch.id)}"></div></div></section>`);
   });
 
   const links = (guide.links ?? []).map((l, i) => {
@@ -376,13 +369,13 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
   const keys = `<kbd>j</kbd> <kbd>k</kbd> next and previous chapter · <kbd>r</kbd> mark the chapter reviewed${multi ? ' · <kbd>[</kbd> <kbd>]</kbd> previous and next pull request' : ''} · <kbd>b</kbd> chapter text or file tree · <kbd>c</kbd> show or hide comments · shift-click a fold to open it all`;
   const hunkCount = diff.files.reduce((s, f) => s + f.hunks.length, 0);
   const report = [
-    `guide ${num || esc(pr.title)}: ${n} chapters, ${diff.files.length} files, ${hunkCount} hunks, ${flows} flow${flows === 1 ? '' : 's'}`,
+    `guide ${num || esc(pr.title)}: ${n} chapters, ${diff.files.length} files, ${hunkCount} hunks, ${Object.keys(drawings).length} diagrams`,
     ...chapters.map((ch, i) => `  ${pad2(i + 1)} ${(ch.kind ?? 'core').padEnd(9)} ${String(paras(ch.body).reduce((s, p) => s + words(p), 0)).padStart(3)} words  ${ch.title}`),
   ];
   const tag = multi ? `${num || id}: ` : '';
   return {
     id, prefix: P, number: pr.number ?? null, title: pr.title, url: pr.url ?? null, name: guide.name, repo: repoUrl,
-    base, branch, add: total[0], del: total[1], files: diff.files.length, flows,
+    base, branch, add: total[0], del: total[1], files: diff.files.length,
     errors: errors.map((e) => tag + e), warns: warns.map((w) => tag + w), report,
     meta, sections: sections.join('\n'),
     diffView: `<div class="gr-view gr-diff" hidden><aside class="gr-tree"><h3>${diff.files.length} files</h3><div class="gr-tree-host"></div></aside><div class="gr-diff-cards"></div></div>`,
@@ -391,7 +384,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
       + (pr.url ? `<a class="k-btn is-sm is-primary" href="${esc(pr.url)}" target="_blank" rel="noopener"><span>Open ${num}<span class="long"> on GitHub</span></span><span aria-hidden="true">↗</span></a>` : ''),
     data: {
       id, prefix: P, key: `gr:${pr.number ?? branch ?? diff.head}`, number: pr.number ?? null, title: pr.title, head: diff.head,
-      chapters: chapters.map((c, i) => ({ id: c.id, title: c.title, files: sel[i] ?? [] })), files: diff.files,
+      chapters: chapters.map((c, i) => ({ id: c.id, title: c.title, files: sel[i] ?? [] })), files: diff.files, diagrams: drawings,
     },
   };
 }
@@ -416,7 +409,6 @@ if (stack?.diffStyle != null && !['unified', 'split'].includes(stack.diffStyle))
 if (stack?.name != null && (!String(stack.name).trim() || words(stack.name) > 5)) errors.push('stack.json: name is the page\'s name in the gallery: 2 to 4 words, such as "Webhook retries stack".');
 // A stack: each pull request's base is the branch of the one before it.
 const stacked = multi && prs.every((p, i) => i === 0 || (!!prs[i - 1].branch && p.base === prs[i - 1].branch));
-const flows = prs.reduce((s, p) => s + p.flows, 0);
 
 for (const p of prs) for (const line of p.report) console.log(line);
 if (multi) console.log(`page: ${prs.length} pull requests${stacked ? ', stacked' : ''}`);
@@ -482,9 +474,5 @@ const page = `<title>${esc(name)}</title>\n<meta name="claude:viewport-fit-sides
   + `<link rel="stylesheet" href="${at['guided-review.css']}">\n${markup}\n`
   + `<script src="${at['data.js']}"></script>\n<script src="${at['guided-review.js']}"></script>\n`;
 await Bun.write(`${stem}.artifact.html`, page);
-// The preview has no artifact viewer to draw the flows, so it loads mermaid itself.
-const mermaid = flows ? `<script type="module">import mermaid from '${libmap.mermaid.url}';
-mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'neutral', fontFamily: 'Geist Mono, monospace' });
-await mermaid.run({ querySelector: 'pre.mermaid', suppressErrors: true });</script>\n` : '';
-await Bun.write(`${stem}.preview.html`, preview(page, '', mermaid));
+await Bun.write(`${stem}.preview.html`, preview(page));
 console.log(`ok    ${warns.length} warning(s), ${Math.round(page.length / 1024)} KB\n${publishLines(stem, files)}\n      preview: ${stem}.preview.html`);

@@ -205,6 +205,9 @@ t-figure:hover > .t-edge::after { opacity: .35; }
 t-figure.is-resizing { user-select: none; }
 .t-figfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 12px 10px 16px; border-top: 1px solid var(--border); font-size: 13.5px; }
 t-figure figcaption { padding: 12px 16px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted-fg); }
+
+/* a Mermaid diagram, drawn at build in the kit's colors (kit/ui.css), boxed like a figure */
+t-page .k-dia { margin: 32px 0; padding: 20px 16px; border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); background: var(--card); }
 t-figure figcaption b { color: var(--fg); font-weight: 500; }
 .t-stepper { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; min-width: 0; }
 .t-steptext { flex: 1; min-width: 0; color: var(--fg); }
@@ -310,7 +313,7 @@ t-page .is-lit del[data-t]::before { content: attr(data-t); border-radius: 2px; 
 t-page [data-removed].is-lit { color: var(--bad); text-decoration: line-through; background: color-mix(in oklch, var(--bad) 7%, transparent); box-shadow: 0 0 0 6px color-mix(in oklch, var(--bad) 7%, transparent); }
 t-refs li[data-removed] { padding: 10px 14px; font-size: 14px; }
 t-page [data-removed]::before { content: "Removed"; display: inline-block; margin-right: 8px; padding: 0 7px; border: 1px solid; border-radius: 99px; font-size: 11px; line-height: 17px; vertical-align: 1px; }
-t-page t-figure.is-lit, t-page t-question.is-lit { background: var(--card); box-shadow: 0 0 0 2px color-mix(in oklch, var(--ok) 55%, transparent); }
+t-page t-figure.is-lit, t-page t-question.is-lit, t-page .k-dia.is-lit { background: var(--card); box-shadow: 0 0 0 2px color-mix(in oklch, var(--ok) 55%, transparent); }
 
 /* where a contents click landed: a ring that fades, on the heading or the question card */
 @keyframes t-flash { from { outline-color: color-mix(in oklch, var(--fg) 40%, transparent); } to { outline-color: transparent; } }

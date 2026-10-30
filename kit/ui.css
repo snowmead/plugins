@@ -40,6 +40,33 @@
 .k-badge.is-solid { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); }
 .k-badge.is-muted { color: var(--muted-fg); }
 
+/* ---------- diagrams: Mermaid drawn by pele at build (kit/build/diagram.ts), in the page's own colors and type. Each
+   pele variable is a kit token, so a diagram turns dark with the page. A box under 480 px shows the drawing laid out
+   for a phone, when there is one. A drawing shrinks to three quarters of its width (--w) at most, then scrolls
+   sideways. Nodes marked :::new, :::changed or :::removed take the colors of a change. */
+.k-dia { container-type: inline-size; }
+.k-dia > div { overflow-x: auto; }
+.k-dia svg { display: block; margin-inline: auto; width: var(--w); max-width: 100%; min-width: calc(var(--w) * .75); height: auto; }
+.k-dia-narrow { display: none; }
+@container (max-width: 480px) {
+  .k-dia-wide:has(+ .k-dia-narrow) { display: none; }
+  .k-dia-narrow { display: block; }
+}
+.pele {
+  --pele-bg: var(--card); --pele-fg: var(--fg); --pele-muted: var(--muted-fg); --pele-line: var(--fg-2);
+  --pele-surface: var(--muted); --pele-surface-alt: color-mix(in oklch, var(--muted) 45%, var(--card)); --pele-border: var(--border-strong);
+  --pele-accent: var(--c1); --pele-critical: var(--bad); --pele-error: var(--bad);
+  --pele-font: var(--font); --pele-font-mono: var(--mono); --pele-radius: 6px;
+  --pele-series-1: var(--c1); --pele-series-2: var(--c2); --pele-series-3: var(--c3); --pele-series-4: var(--c4);
+  --pele-series-5: var(--c5); --pele-series-6: var(--ok); --pele-series-7: var(--bad); --pele-series-8: var(--muted-fg);
+}
+.pele .pele-edge-label text, .pele .pele-cluster-label { fill: var(--muted-fg); }
+.pele-node:is(.new, .changed, .removed) :is(rect, polygon, path, circle, ellipse) { stroke-width: 1.5px; }
+.pele-node.new :is(rect, polygon, path, circle, ellipse) { stroke: var(--ok); fill: color-mix(in oklab, var(--ok) 10%, var(--card)); }
+.pele-node.changed :is(rect, polygon, path, circle, ellipse) { stroke: var(--c2); fill: color-mix(in oklab, var(--c2) 10%, var(--card)); }
+.pele-node.removed :is(rect, polygon, path, circle, ellipse) { stroke: var(--bad); stroke-dasharray: 4 3; fill: var(--card); }
+.pele-node.removed .pele-label { fill: var(--muted-fg); text-decoration: line-through; }
+
 /* ---------- toast (kit/web/toast.ts); a page with something docked at the bottom raises it with --k-toast-bottom */
 .k-toast { position: fixed; z-index: 40; left: 50%; bottom: calc(var(--k-toast-bottom, 24px) + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 8px);
   opacity: 0; pointer-events: none; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 32px); padding: 10px 14px;

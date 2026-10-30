@@ -126,20 +126,21 @@ const pick = ({ side, from, to, other, otherFrom }: DiffFile['moves'][number]) =
 same('moved code is marked where it left', file('src/m.rs').moves.map(pick), [{ side: '-', from: 5, to: 9, other: 'src/n.rs', otherFrom: 1 }]);
 same('moved code is marked where it landed', file('src/n.rs').moves.map(pick), [{ side: '+', from: 1, to: 5, other: 'src/m.rs', otherFrom: 5 }]);
 
-// A guide that places every file and hunk, with refs written into its first chapter.
+// A guide that places every file and hunk, with refs written into its first chapter, and a diagram in each section.
+const dia = (what: string) => ({ title: what, mermaid: `flowchart LR\n  A[before] --> B[${what}]:::new` });
 const later: Guide['chapters'] = [
-  { id: 'notes', title: 'The notes', kind: 'docs', body: ['Notes.'], files: ['docs/notes.md', 'docs/guide.md'] },
-  { id: 'db', title: 'A table', kind: 'database', body: ['A table.'], files: ['migrations/0001_init.sql'] },
-  { id: 'tests', title: 'A test', kind: 'tests', body: ['A test.'], files: ['tests/a_test.rs'] },
-  { id: 'gen', title: 'The schema', kind: 'generated', body: ['Generated.'], files: ['api/schema.gen.ts'] },
+  { id: 'notes', title: 'The notes', kind: 'docs', body: ['Notes.'], diagram: dia('notes'), files: ['docs/notes.md', 'docs/guide.md'] },
+  { id: 'db', title: 'A table', kind: 'database', body: ['A table.'], diagram: dia('a table'), files: ['migrations/0001_init.sql'] },
+  { id: 'tests', title: 'A test', kind: 'tests', body: ['A test.'], diagram: dia('a test'), files: ['tests/a_test.rs'] },
+  { id: 'gen', title: 'The schema', kind: 'generated', body: ['Generated.'], diagram: dia('the schema'), files: ['api/schema.gen.ts'] },
 ];
 const rest = ['src/gone.rs', 'src/old.rs', 'src/r2.rs', 'src/m.rs', 'src/n.rs', 'src/tail.rs', 'assets/logo.bin'];
 const guideFor = (body: string, chapters?: Guide['chapters']): Guide => ({
   pr: { number: 1, title: 'Scratch <change> & "more"', url: 'https://github.com/example/scratch/pull/1' },
-  overview: { summary: 'Changes two values.', beforeAfter: { lines: [{ t: 'one sets x10', op: '+', ref: 'src/a.rs:11' }] } },
+  overview: { summary: 'Changes two values.', diagram: { ...dia('one sets x10'), refs: { B: 'src/a.rs:11' } } },
   chapters: chapters ?? [
-    { id: 'one', title: 'The first value', body: [body], files: [{ path: 'src/a.rs', hunks: [1] }, ...rest] },
-    { id: 'two', title: 'The second value', body: ['`two` changes too.'], files: [{ path: 'src/a.rs', hunks: [2] }] },
+    { id: 'one', title: 'The first value', body: [body], diagram: dia('the first value'), files: [{ path: 'src/a.rs', hunks: [1] }, ...rest] },
+    { id: 'two', title: 'The second value', body: ['`two` changes too.'], diagram: dia('the second value'), files: [{ path: 'src/a.rs', hunks: [2] }] },
     ...later,
   ],
 });
@@ -189,7 +190,16 @@ check('the page holds only its markup; Geist, styles, runtime and data load besi
   && !built.html.includes('base64') && !built.html.includes('<style')
   && ['guided-review.css', 'data.js', 'guided-review.js'].every((f) => new RegExp(`(href|src)="guide\\.files/${f.replace(/\.(\w+)$/, '\\.[0-9a-f]{8}\\.$1')}"`).test(built.html)));
 check('the libraries are preloaded at exact versions', /<link rel="modulepreload" href="https:\/\/cdn\.jsdelivr\.net\/npm\/@pierre\/diffs@\d+\.\d+\.\d+[^"]*"/.test(built.html));
-check('the published page loads no mermaid; the viewer draws flows', !built.html.includes('mermaid@'));
+// Diagrams are drawn at build: the page keeps an empty box per section, and the drawings ride in the data file.
+check('the page loads no diagram library and keeps no mermaid block, which the viewer would draw', !/mermaid|pele@/.test(built.html));
+same('each section has a box for its diagram', [...built.html.matchAll(/<div class="k-dia" data-dia="([^"]+)">/g)].map((m) => m[1]), ['overview', 'c-one', 'c-two', 'c-notes', 'c-db', 'c-tests', 'c-gen']);
+const drawn = data ? JSON.parse(data).prs[0].diagrams : {};
+check('a diagram is drawn into SVG in the kit\'s colors, with its marks', /<svg [^>]*class="pele pele-flowchart"/.test(drawn.overview?.html ?? '') && /class="pele-node [^"]*\bnew" data-id="B"/.test(drawn.overview?.html ?? ''), drawn.overview?.html?.slice(0, 300));
+same('a node\'s ref names its line and its chapter', drawn.overview?.refs, { B: { path: 'src/a.rs', line: 11, side: 'n', ch: 'one', title: 'a.rs 11, chapter 01: The first value' } });
+const outside = build({ ...guideFor('One.'), overview: { summary: 'S.', diagram: { ...dia('x'), refs: { A: 'README.md:3' } } } });
+same('a node\'s ref to a file the pull request does not change goes to GitHub', JSON.parse(/^window\.GR_DATA = (.*);\n$/s.exec(outside.data)?.[1] ?? '{"prs":[{}]}').prs[0].diagrams?.overview?.refs,
+  { A: { path: 'README.md', line: 3, url: `https://github.com/example/scratch/blob/${diff.head}/README.md#L3`, title: 'README.md 3, on GitHub' } });
+check('the diagram\'s key names the marks it uses', /<span class="gr-dia-keys"><span class="gr-dia-key is-new">New<\/span><\/span>/.test(built.html));
 check('the title comes first, as a short name', built.html.startsWith('<title>Guided review #1</title>'));
 
 const branchOnly = build({ ...guideFor('One.'), pr: { title: 'A branch with no pull request' } });
@@ -201,14 +211,14 @@ check('a guide names its page', named.html.startsWith('<title>Scratch values rev
 
 const refusals: [string, unknown, RegExp][] = [
   ['a hunk in no chapter', guideFor('One.', [
-    { id: 'one', title: 'The first value', body: ['One.'], files: [{ path: 'src/a.rs', hunks: [1] }, ...rest] },
+    { id: 'one', title: 'The first value', body: ['One.'], diagram: dia('one'), files: [{ path: 'src/a.rs', hunks: [1] }, ...rest] },
     ...later,
   ]), /src\/a\.rs hunk 2 .* is in no chapter/],
   ['a ref past the end of a file', guideFor('See [it](ref:src/a.rs:999).'), /past the end of the file/],
   ['a ref to a file that does not exist', guideFor('See [it](ref:src/missing.rs:1).'), /neither in this pull request nor at its head/],
   ['a core chapter after a tests chapter', guideFor('One.', [
     later[0], later[2],
-    { id: 'one', title: 'The values', body: ['One.'], files: ['src/a.rs', ...rest] },
+    { id: 'one', title: 'The values', body: ['One.'], diagram: dia('the values'), files: ['src/a.rs', ...rest] },
     later[1], later[3],
   ]), /\(one\): a core chapter comes after a database, tests or generated chapter/],
   ['a link that is not https', guideFor('See [it](javascript:alert(1)).'), /must start with https:\/\/ or ref:/],
@@ -216,6 +226,14 @@ const refusals: [string, unknown, RegExp][] = [
   ['a pull request number without its url', { ...guideFor('One.'), pr: { number: 1, title: 'T' } }, /pr needs both number and url/],
   ['a name that is a sentence', { ...guideFor('One.'), name: 'A guided review of the scratch values change' }, /name is the page's name in the gallery/],
   ['a diff style that is neither unified nor split', { ...guideFor('One.'), diffStyle: 'side-by-side' }, /diffStyle must be "unified" or "split"/],
+  ['a chapter without a diagram', guideFor('One.', [
+    { id: 'one', title: 'The first value', body: ['One.'], diagram: dia('one'), files: [{ path: 'src/a.rs', hunks: [1] }, ...rest] },
+    { id: 'two', title: 'The second value', body: ['Two.'], files: [{ path: 'src/a.rs', hunks: [2] }] } as Guide['chapters'][number],
+    ...later,
+  ]), /chapters\[1\]\.diagram is missing/],
+  ['a before / after, which a diagram replaced', { ...guideFor('One.'), overview: { summary: 'S.', beforeAfter: { lines: [{ t: 'x' }] } } }, /overview\.beforeAfter is gone/],
+  ['a diagram pele cannot read', { ...guideFor('One.'), overview: { summary: 'S.', diagram: { mermaid: 'flowchart LR\n  A[x --> B' } } }, /overview\.diagram\.mermaid: Parse error on line \d/],
+  ['a ref to a node the diagram does not have', { ...guideFor('One.'), overview: { summary: 'S.', diagram: { ...dia('x'), refs: { Z: 'src/a.rs:11' } } } }, /overview\.diagram\.refs\.Z: the diagram has no node "Z"\. Its nodes: A, B/],
 ];
 for (const [name, guide, message] of refusals) {
   const r = build(guide);
@@ -254,7 +272,7 @@ findChrome();
 const BUDGET = { boot: 30, interaction: 12, frame: 16.7 };
 const budget = { boot: BUDGET.boot, mark: BUDGET.interaction, key: BUDGET.interaction, tab: BUDGET.interaction, split: BUDGET.interaction, restyle: BUDGET.frame, panel: BUDGET.interaction };
 const expect: Record<string, unknown> = {
-  railButtons: 8, generatedFolded: true, moveChip: '↑ 6 lines moved to src/webhooks/sign.ts line 3', code: true, plain: 0, flow: true,
+  railButtons: 8, generatedFolded: true, moveChip: '↑ 6 lines moved to src/webhooks/sign.ts line 3', code: true, plain: 0, diagram: true,
   progress: '1 of 7 chapters reviewed', chapterFolds: true, saved: true, keyMoves: true, keyMarks: '2 of 7 chapters reviewed',
   jumpInGuide: true, jumpFoldToDiff: true, foldRow: true, diffCards: 11, tree: true, treeTick: true, soundOff: 'false', soundSaved: false,
   styleStart: 'true', split: true, styleSaved: 'split', splitJump: true, unified: true,
@@ -265,13 +283,13 @@ const RUN = `
   r.railButtons = document.querySelectorAll('.gr-rail button').length;
   r.generatedFolded = card('.gr-guide', 'src/api/schema.gen.ts').classList.contains('collapsed');
 
-  // code renders as it comes near; the moved-code chip and the flow come with it
+  // code renders as it comes near, and so does each diagram; the moved-code chip comes with the code
   $('#c-signing').scrollIntoView();
   r.code = await until(() => card('#c-signing', 'src/webhooks/deliver.ts')?.querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line]'));
   await until(() => card('#c-signing', 'src/webhooks/deliver.ts').querySelector('.gr-move'));
   r.moveChip = card('#c-signing', 'src/webhooks/deliver.ts').querySelector('.gr-move button')?.textContent;
   r.plain = document.querySelectorAll('.gr-plain').length;
-  r.flow = await until(() => document.querySelector('.flow svg'));
+  r.diagram = !!await until(() => $('#c-signing .k-dia svg.pele'));
 
   // review marks
   scrollTo(0, 0); await sleep(100);
@@ -290,13 +308,17 @@ const RUN = `
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
   r.keyMarks = $('.gr-progress').textContent;
 
-  // a before / after ref to a line a chapter shows stays in the guide and selects the line
-  const ref = (line) => [...document.querySelectorAll('#overview .rf a[data-ref]')].find((a) => a.dataset.ref === 'src/webhooks/deliver.ts' && a.dataset.line === String(line));
-  ref(31).click();
+  // a diagram node's ref to a line a chapter shows stays in the guide and selects the line
+  const node = async (sec, id) => { await until(() => $(sec + ' .pele-node.is-ref')); return $(sec + ' .k-dia-wide .pele-node.is-ref[data-id="' + id + '"]'); };
+  (await node('#overview', 'R')).dispatchEvent(new MouseEvent('click', { bubbles: true }));
   r.jumpInGuide = await until(() => !$('.gr-guide').hidden && card('#c-retry-decision', 'src/webhooks/deliver.ts').querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line="31"][data-selected-line]'));
 
-  // a ref to a line folded away in every chapter opens the Diff tab's card of the whole file at that line
-  ref(16).click();
+  // a ref to a line folded away in every chapter opens the Diff tab's card of the whole file at that line; Enter on
+  // the focused node follows it too
+  $('.gr-tab[data-view="guide"]').click();
+  const post = await node('#c-retry-decision', 'P');
+  post.focus();
+  post.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   r.jumpFoldToDiff = await until(() => !$('.gr-diff').hidden);
   r.foldRow = await until(() => card('.gr-diff', 'src/webhooks/deliver.ts')?.querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line="16"][data-selected-line]'));
 
@@ -321,7 +343,7 @@ const RUN = `
   r.split = await until(() => dcard()?.querySelector('[data-diff-type="split"]'));
   ms.restyle = +performance.getEntriesByName('gr:restyle').at(-1).duration.toFixed(2);
   r.styleSaved = JSON.parse(localStorage.getItem('gr:diff-style'));
-  ref(27).click();
+  (await node('#overview', 'OK')).dispatchEvent(new MouseEvent('click', { bubbles: true }));
   r.splitJump = await until(() => dcard()?.querySelector('[data-additions] [data-line="27"][data-selected-line]'));
   $('[data-diff-style="unified"]').click();
   r.unified = await until(() => dcard()?.querySelector('[data-diff-type="single"]'));
@@ -420,8 +442,8 @@ const STACK_RUN = `
   vis('input[data-review-chapter="counts"]')[0].click();
   r.ownMarks = [!!JSON.parse(localStorage.getItem('gr:43') ?? '{}').c?.counts, !!JSON.parse(localStorage.getItem('gr:42') ?? '{"c":{}}').c?.counts].join();
   r.pickerProgress = document.querySelector('[data-progress-of="pr43"]').textContent;
-  const ref = [...document.querySelectorAll('#pr43-overview .rf a[data-ref]')].find((a) => a.dataset.line === '17');
-  ref.click();
+  await until(() => $('#pr43-overview .pele-node.is-ref'));
+  $('#pr43-overview .k-dia-wide .pele-node.is-ref[data-id="F"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
   r.jump = await until(() => vis('.gr-file').find((c) => c.dataset.path === 'src/api/endpoint.ts')?.querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line="17"][data-selected-line]'));`;
 const STACK_EXPECT: Record<string, unknown> = {
   startsOn: 'pr42', count: '1 of 2', stacked: true, opens: true, arrowMoves: 'pr43', picked: 'pr43', closed: true,

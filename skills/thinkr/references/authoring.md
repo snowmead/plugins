@@ -37,7 +37,7 @@ Plain HTML: `section`, `h2`–`h4`, `p`, `ul`, `ol`, `blockquote`, `table`, `pre
 | `<pre data-title="file.ts" data-href="https://…#L10-L20"><code class="language-ts">` | Code with a header, a copy button and highlighting (done at build, any highlight.js language). `data-href` links the header to the real file. Escape `<` and `&`. |
 | `<table>` | Scrolls sideways on phones. `class="num"` on a cell right-aligns a number in mono. |
 | `$$ … $$`, `\[ … \]`, `\( … \)` | TeX, rendered to SVG at build (the page loads no math library). `\col{1}{x}` colors a term with `c1`; `\R`, `\N`, `\E` are defined. The build warns on a TeX error. |
-| `<pre class="mermaid">` | A static diagram the artifact viewer draws. Prefer a stepped SVG figure when order matters. |
+| `<pre class="mermaid">` | A static [Mermaid](https://mermaid.js.org/intro/) diagram, drawn at build by [pele](https://pele.run) into SVG in the page's colors, light and dark, and boxed like a figure. Escape `<` and `&`. Mark nodes `:::new`, `:::changed` or `:::removed` to color them as a change; leave out `classDef` and `style`, whose colors do not follow the theme. The build stops on a diagram it cannot read. Prefer a stepped SVG figure when order matters. |
 
 ### Color
 

@@ -56,32 +56,6 @@
     "https://cdn.jsdelivr.net/npm/preact-render-to-string@6.6.5/+esm",
     "https://cdn.jsdelivr.net/npm/preact@10.28.1/+esm"
    ]
-  },
-  "mermaid": {
-   "pkg": "mermaid",
-   "version": "12.2.0",
-   "url": "https://cdn.jsdelivr.net/npm/mermaid@{v}/dist/mermaid.esm.min.mjs",
-   "modules": [
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-674HQBI4.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-GDOATIN3.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-IER4RZHT.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-MFYRHTYG.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-LGKD3V67.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-XUG7IRDC.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-4GHFHL4L.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-KJ5T2YZX.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-F6PIGZHG.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-MMC4O45A.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-XGFVAD2T.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-YX6CVSZ3.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-MIE3LDYP.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-GHI2JMQX.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-ZZ52EIBP.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-FWWDAFD2.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-L2B47AAZ.mjs",
-    "https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/chunks/mermaid.esm.min/chunk-QVIEFLGF.mjs"
-   ]
   }
  }
 }

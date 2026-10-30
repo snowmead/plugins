@@ -48,30 +48,37 @@ Plan the chapters before anything else.
   a fact about the code: say it plainly ("The retry runs inside the transaction, so a failure rolls back both
   writes").
 
-## Before / after
+## Diagrams
 
-Every guide opens with one. It answers the reviewer's first question: what was the system before, and what changed?
+Every section has one, drawn at build in the page's colors: the overview's draws the whole pull request, and each
+chapter's draws its own part, above its code. A diagram answers the reviewer's first question about a section: what
+did this look like before, and what is different now? Draw each chapter's after its text, from the code.
 
-- **Draw the path that changed, as a diff of behavior.** Use a call tree or pseudocode: the entry point, the calls
-  under it, the decision that is new. Rows that go are `-`, rows that come are `+`, and the rows around them stay
-  so the reader knows where they are.
-- **Keep it under 30 rows,** each under 90 characters. Leave out calls that did not change and do not explain the
-  change.
-- **Ref every row you can.** A ref jumps to the code, and the row shows its chapter's number, so the card doubles as
-  a map of the guide.
-- **Use a flow** when the change adds a path through several components, such as a new message from one service to
-  another, or new states. Mark the new nodes `:::new`. Keep the rows too when the flow alone hides what was there
-  before.
-- **Give a chapter its own before / after** only when its idea is a change of behavior that its code does not show
-  at a glance.
+- **Draw the path that changed, as a diff.** The entry point, the steps under it, the decision or the state that is
+  new. Mark what the pull request adds `:::new`, what it changes `:::changed` and what it takes out `:::removed`, and
+  keep the nodes around them plain, so the reader knows where they are. A removed node can hang off the node that
+  used to lead to it, on a dotted edge labelled `before`.
+- **Pick the kind that fits the change.** A flowchart for a path or a decision (`LR` for a pipeline, `TD` for a
+  decision tree), a sequence diagram for messages between services, a state diagram for new states, an ER diagram
+  for tables.
+- **Keep it small: 3 to 10 nodes, labels under about 40 characters.** Name a node for what it does ("deliver posts
+  the signed event"), with the code's names in it, and put conditions on the edges. Leave out the calls that did not
+  change and do not explain the change.
+- **Ref every node that stands for code.** A ref makes the node a link to its line, and its tooltip names the
+  chapter, so the overview's diagram doubles as a map of the guide.
+- **Every chapter, the late ones too.** Docs: the sections that changed and what they now say. A migration: the
+  table with its new columns, constraints and indexes. Tests: the cases, grouped by what they test, the new ones
+  marked. Generated files: the source they come from and what changed in it.
 
 ## Overview
 
-Write it last, from the chapters.
+Write it last, from the chapters and their diagrams.
 
 - **Summary, 2 to 4 sentences.** What was wrong or missing, then what the pull request does about it, in the words
   a product person would use. No file names.
 - **Steps, 2 to 5 lines,** in chapter order: the main moves of the change.
+- **Diagram: the whole change at a glance.** The path a request, an event or a record takes now, with what the
+  pull request adds, changes and removes marked, in 5 to 10 nodes. Ref each node to the line its chapter shows.
 
 ## Style
 

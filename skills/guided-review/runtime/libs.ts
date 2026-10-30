@@ -1,7 +1,7 @@
 /* The libraries, from the pinned jsDelivr URLs build.ts writes into the page (runtime/libs.json). build.ts also
    preloads their whole import graphs from the head, so by the time the first card mounts the bytes are usually
-   here. A failed import leaves the page readable: cards fall back to plain diff text, the tree to a list. Flows
-   are not drawn here: the artifact viewer draws mermaid blocks itself, and the local preview loads mermaid. */
+   here. A failed import leaves the page readable: cards fall back to plain diff text, the tree to a list. Diagrams
+   need no library here: build.ts draws them (runtime/diagrams.ts). */
 import type { PierreDiffs, PierreTrees } from './types';
 import { D } from './dom';
 

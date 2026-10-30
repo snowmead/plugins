@@ -10,15 +10,17 @@
 
    Size: the page holds only its content. The stylesheet and the runtime (with its sounds) are files published
    beside it (page.files/, passed to the Artifact tool as `files`), and Geist comes from Google Fonts.
-   Speed: math and code highlighting are rendered here (no MathJax or highlight.js in the page), and every
-   library the page uses is preloaded from the head, its whole import graph at once, so nothing waits on a
-   request chain. Needs `bun install` in this skill's directory.
+   Speed: math, code highlighting and Mermaid diagrams are rendered here (no MathJax, highlight.js or diagram
+   library in the page), and every library the page uses is preloaded from the head, its whole import graph at once,
+   so nothing waits on a request chain. Needs `bun install` in this skill's directory.
 
-   The font link, the shared stylesheet, the sounds and the library pinning come from the kit (kit/build/). */
+   The font link, the shared stylesheet, the sounds, the library pinning and the diagrams come from the kit
+   (kit/build/). */
 import { join } from 'node:path';
 import { FONTS, assets, preview, publishLines, runtime, styles } from '../kit/build/page';
 import { type LibMap, libs, preloads } from '../kit/build/libs';
 import { need as needIn } from '../kit/build/deps';
+import { diagrams } from '../kit/build/diagram';
 import { type Node, parse } from './tree';
 import { type History, KINDS, track } from './changes';
 
@@ -71,6 +73,22 @@ async function highlight(html: string) {
   return html.replace(re, (m, open: string, lang: string, code: string, close: string) => {
     if (!hljs.getLanguage(lang)) { console.log(`  warn  no highlighting for language-${lang}`); return m; }
     return open + hljs.highlight(decode(code), { language: lang, ignoreIllegals: true }).value + close;
+  });
+}
+
+/** Each <pre class="mermaid"> drawn into SVG with pele (kit/build/diagram.ts), in the page's colors. The artifact
+    viewer draws a mermaid block itself, so none stays in the page. The block's other attributes (an id, its change
+    marks) move to the drawing's box. A diagram pele cannot read is an error, with its line in the page. */
+async function drawDiagrams(html: string, errors: string[]) {
+  const re = /<pre\b([^>]*\bclass="[^"]*\bmermaid\b[^"]*"[^>]*)>([\s\S]*?)<\/pre>/g;
+  if (!re.test(html)) return html;
+  const draw = await diagrams(join(import.meta.dir, '..'));
+  let n = 0;
+  return html.replace(re, (block, attrs: string, source: string, at: number) => {
+    const d = draw(decode(source).trim(), `t-dia-${++n}`);
+    if ('error' in d) { errors.push(`line ${html.slice(0, at).split('\n').length}: <pre class="mermaid">: ${d.error}`); return block; }
+    const box = attrs.replace(/\bclass="([^"]*)"/, (_, c: string) => `class="${['k-dia', ...c.split(/\s+/).filter((x) => x && x !== 'mermaid')].join(' ')}"`);
+    return `<div${box}>${d.body}</div>`;
   });
 }
 
@@ -239,11 +257,13 @@ if (mode === 'plan' && !errors.length) {
   warns.push(...changes.warns);
   errors.push(...changes.errors);
 }
+// diagrams are drawn after the changes are marked, so a changed diagram's marks move to its drawing
+const drawn = errors.length ? '' : await drawDiagrams(changes?.html ?? src, errors);
 for (const w of warns) console.log('  warn  ' + w);
 for (const e of errors) console.log('  error ' + e);
 if (errors.length) { console.log(`${errors.length} error(s). Nothing written.`); process.exit(1); }
 
-const { html: out, files } = await pack(changes?.html ?? src, stem, libmap);
+const { html: out, files } = await pack(drawn, stem, libmap);
 await Bun.write(`${stem}.artifact.html`, out);
 await Bun.write(`${stem}.preview.html`, preview(out));
 if (changes) await Bun.write(historyFile, JSON.stringify(changes.history));

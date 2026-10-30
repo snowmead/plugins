@@ -21,30 +21,34 @@ the diff. [`../examples/demo.guide.json`](../examples/demo.guide.json) uses ever
 |---|---|---|
 | `summary` | yes | What the pull request changes and why, in 2 to 4 sentences: the state before, then what is different. A string, or an array of paragraphs. |
 | `steps` | no | 2 to 5 one-line items: the main moves of the change, in the order the chapters take them. |
-| `beforeAfter` | yes | The before / after card beside the summary. See below. |
+| `diagram` | yes | The diagram of the whole change, beside the summary. See below. |
 
-## `beforeAfter`
+## `diagram`
 
-The card that shows how the system behaved before and how it behaves now, like a diff of the behavior. Give
-`lines`, a `flow`, or both. A chapter can have its own `beforeAfter` too, when its idea needs one.
+A diagram of what a section changes, drawn when the guide is built: the overview's shows the whole pull request, and
+each chapter's shows its own part, above its code. `build.ts` draws it with [pele](https://pele.run) into SVG in the
+page's own colors, light and dark, and lays it out again top to bottom for a phone.
 
-| Field | What it holds |
-|---|---|
-| `label` | A muted word after "Before / after": `call tree`, `pseudocode`, `flow`, `what stops`, `data`. |
-| `title` | One line above the card's body that names the path shown, such as "The worker posts a batch of deliveries". |
-| `lines` | The rows. Each row is an object, below. |
-| `flow` | [Mermaid](https://mermaid.js.org/syntax/flowchart.html) source that starts with `flowchart LR` or `flowchart TD`. Add `:::new`, `:::changed` or `:::removed` to a node to draw its border green, amber or dashed red. The artifact viewer draws it. |
+| Field | Required | What it holds |
+|---|---|---|
+| `title` | no | One line in the card's header that names what the diagram shows, such as "Where a delivery goes after each post". Defaults to "Diagram". |
+| `mermaid` | yes | [Mermaid](https://mermaid.js.org/intro/) source: a `flowchart LR` or `flowchart TD` most of the time; a `sequenceDiagram`, `stateDiagram-v2` or `erDiagram` when the change is a message order, states or tables. As a JSON string: `\n` between lines, and `\"` around a label with punctuation (`R["retrying, due at nextAttemptAt"]`). |
+| `refs` | no | `{ "<node id>": "path:line" }`: the code a node stands for. Clicking the node, or Enter on it, jumps to that line in the chapter that shows it, and its tooltip names the file, line and chapter. A file the pull request does not change opens on GitHub at the head commit. A `:::removed` node's line is on the old side, unless its file is new. |
 
-Each row of `lines`:
+Mark the nodes of a flowchart with what the pull request does to them: `:::new` (green), `:::changed` (amber) or
+`:::removed` (dashed red, struck through). The card's header shows a key for the marks the diagram uses. Leave out
+`classDef` and `style`: colors written in the source do not follow the page's theme.
 
-| Field | What it holds |
-|---|---|
-| `t` | The row's text: a call, a step, a state, a rule. Under 90 characters. Plain text, shown in the code font. |
-| `op` | `" "` (default) for a row that stays, `"-"` for a row that goes, `"+"` for a row that is new. Put the `-` row just before the `+` row that replaces it. |
-| `d` | Indent depth, 0 to 8. Nest a callee one deeper than its caller. |
-| `note` | A short muted aside after the text, such as "one per row" or "was always". |
-| `ref` | `path:line`, the code the row stands for. Shows as `file.ts 120` at the right and jumps to that line in its chapter. A `-` row's line is on the old side; every other row's is on the new side. A file the pull request does not change links to GitHub at the head commit. |
-| `ch` | A chapter id. Shows the chapter's number at the right. Without it, a row with a `ref` shows the number of the chapter that holds that line. |
+```json
+"diagram": {
+  "title": "Where a delivery goes after each post",
+  "mermaid": "flowchart LR\n  D[\"deliver posts the event\"] -->|2xx| OK[delivered]\n  D -->|\"timeout, 5xx\"| R[\"retrying\"]:::new",
+  "refs": { "D": "src/webhooks/deliver.ts:11", "R": "src/webhooks/deliver.ts:31" }
+}
+```
+
+`build.ts` stops on source pele cannot read, with its line, and on a ref to a node the diagram does not have. It warns
+when a diagram is over 960 px wide (it shrinks to fit its card), has more than 14 nodes, or marks no node.
 
 ## `chapters`
 
@@ -56,7 +60,7 @@ Each row of `lines`:
 | `body` | yes | One or two short paragraphs, a string or an array. |
 | `files` | yes | The code the chapter shows, in the order to read it: a path for the whole file, or `{ "path": "…", "hunks": [2, 3] }` for some of its hunks. Hunk numbers are the ones `gather.ts` prints. |
 | `table` | no | A boxed state table under the body, below. |
-| `beforeAfter` | no | A before / after for this chapter, above its files. |
+| `diagram` | yes | The diagram of what this chapter changes, above its files. Fields as above. |
 
 Every hunk of every file belongs to a chapter, and `build.ts` stops when one is missing. Split a file by hunks
 when its parts belong to different ideas; show a hunk once.

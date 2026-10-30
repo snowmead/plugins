@@ -31,8 +31,8 @@ agents, or as a plain skill: `npx skills add snowmead/plugins --skill thinkr` (a
 
 ### Requirements
 
-- [Bun](https://bun.sh) 1.2 or newer on your `PATH`. The first build installs the two packages the build uses
-  (MathJax and highlight.js), once, from the pinned lockfile.
+- [Bun](https://bun.sh) 1.2 or newer on your `PATH`. The first build installs the packages the build uses
+  (MathJax, highlight.js and pele, which draws Mermaid diagrams), once, from the pinned lockfile.
 - Publishing uses Claude's Artifact tool, so pages are made in Claude Code or another Claude client that can publish
   Artifacts. claude.ai uploads are best effort: they need code execution with network access to install Bun.
 - Optional: Google Chrome, for the screenshot check (`scripts/shot.ts`).

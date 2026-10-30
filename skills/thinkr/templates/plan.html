@@ -17,6 +17,13 @@
     <h2 id="flow">How a request is checked</h2>
     <p>The check lives in the gateway, before any service code runs. It costs one Redis round trip per request.</p>
 
+    <pre class="mermaid">flowchart LR
+  R[request] --> K{API key?}
+  K -->|unknown| U[401]
+  K -->|known| B{token in its bucket?}:::new
+  B -->|yes| S[API service]
+  B -->|no| L["429, with Retry-After"]:::new</pre>
+
     <t-figure id="flow-fig" min-width="560" alt="Sequence diagram: client, gateway, Redis and the API service, with an allowed request and a limited one">
       <svg viewBox="0 0 640 290" role="img">
         <g data-in>

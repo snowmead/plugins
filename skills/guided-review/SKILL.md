@@ -1,6 +1,6 @@
 ---
 name: guided-review
-description: Builds a guided code review of a pull request or branch, or of several (a stack, or any set to review together), as a Claude Artifact. The page opens with an overview and a before / after of the behavior, then walks the diff as short chapters, each explained in plain words beside its code, core change first and tests, database and generated files last, with review marks, a file tree and syntax-highlighted diffs. Readers comment on lines, files or the whole pull request in a margin beside the code and send the comments to Claude, which changes the code and rebuilds the page; each sent comment stays as a thread where a Claude agent of its own answers. Use when asked to walk someone through, explain or prepare a review of what a pull request, a branch or a stack of pull requests changed, to write a review guide, when review comments arrive from a guide page, or when a pull request you drive is green and about to merge.
+description: Builds a guided code review of a pull request or branch, or of several (a stack, or any set to review together), as a Claude Artifact. The page opens with an overview and a diagram of the whole change, then walks the diff as short chapters, each explained in plain words beside its code and drawn as a diagram of what it changes, core change first and tests, database and generated files last, with review marks, a file tree and syntax-highlighted diffs. Readers comment on lines, files or the whole pull request in a margin beside the code and send the comments to Claude, which changes the code and rebuilds the page; each sent comment stays as a thread where a Claude agent of its own answers. Use when asked to walk someone through, explain or prepare a review of what a pull request, a branch or a stack of pull requests changed, to write a review guide, when review comments arrive from a guide page, or when a pull request you drive is green and about to merge.
 license: Apache-2.0. Complete terms in LICENSE.txt
 compatibility: Claude Code, or another agent with a shell and git that can publish claude.ai Artifacts. Needs Bun 1.2 or newer; Chrome is optional, for screenshots.
 metadata:
@@ -12,8 +12,9 @@ allowed-tools: Bash(bun ${CLAUDE_SKILL_DIR}/scripts/gather.ts *) Bash(bun ${CLAU
 
 A guided review explains a pull request to a reviewer who did not write it, so they need not jump between files to
 work out what it does. It is one page, published as a Claude Artifact: an **overview** (what changed and why, the
-main steps, and a **before / after** card that draws the changed path through the code like a diff of the behavior),
-then **chapters**: the files and hunks grouped by idea, in reading order, each a short text beside its code. The core
+main steps, and a **diagram** of the whole change, its new, changed and removed parts marked), then **chapters**:
+the files and hunks grouped by idea, in reading order, each a short text beside its code, under a diagram of what
+that chapter changes. The diagrams are Mermaid, drawn when the page is built, in the page's colors. The core
 change comes first; docs follow; database, tests and generated files come last. Readers tick chapters as reviewed,
 and the marks stay in their browser. One page can also hold several pull requests.
 
@@ -35,8 +36,8 @@ The skill lives at `${CLAUDE_SKILL_DIR}`; run its scripts by that full path, exa
 
 **Before the first build**, check `bun --version`. When Bun is missing, stop and ask the user to install it
 (`curl -fsSL https://bun.sh/install | bash`, or `brew install oven-sh/bun/bun`); do not install it yourself. The
-scripts need git and Bun, and nothing else: the first build that meets a Markdown file installs its two packages
-(markdown-it and sanitize-html) once, from the pinned lockfile.
+scripts need git and Bun, and nothing else: the first build installs its packages (pele, which draws the diagrams,
+and markdown-it and sanitize-html for Markdown files) once, from the pinned lockfile.
 
 ## Workflow
 
@@ -56,7 +57,8 @@ request: rebuilding from the same `guide.json` and publishing the same file keep
    generated) with its hunks, numbered, and the function or section each hunk sits in.
 2. **Read the change** as [writing.md](references/writing.md#before-you-write) says: the diff itself with `git diff`,
    never `diff.json`; the description, commits and thread; and the callers of each changed function.
-3. **Write `<work>/guide.json`.** Plan the chapters first, then the before / after, then the overview:
+3. **Write `<work>/guide.json`.** Plan the chapters first, then each chapter's diagram, then the overview and its
+   diagram:
    [writing.md](references/writing.md) has the rules and [guide-format.md](references/guide-format.md) the fields.
    Put the pull request's video, if it has one, in `links`. Leave `diffStyle` out (unified) unless the user asks
    for split, or most changes rewrite lines in place.
@@ -66,12 +68,12 @@ request: rebuilding from the same `guide.json` and publishing the same file keep
    bun ${CLAUDE_SKILL_DIR}/scripts/build.ts --diff=<work>/diff.json --guide=<work>/guide.json
    ```
    Fix every `error`: a file or hunk in no chapter, a ref that names no line, a core chapter after a tests chapter.
-   Read every `warn` and fix the ones that are right: long chapters, a long before / after, a hunk shown twice. It
+   Read every `warn` and fix the ones that are right: long chapters, a wide or crowded diagram, a hunk shown twice. It
    writes `<work>/guide.artifact.html` (to publish), `<work>/guide.files/` (its stylesheet, runtime and data,
    published with it) and `<work>/guide.preview.html` (to open locally), and prints the `files` map to publish with.
 5. **Look** on the first build: `bun ${CLAUDE_SKILL_DIR}/scripts/shot.ts <work>/guide.preview.html <work>/shots`,
    then read the PNGs. Check that nothing overlaps, no row is cut off, and the page does not scroll sideways at
-   phone width. With a browser you can drive, click a few before / after refs and check that each lands on the line
+   phone width. With a browser you can drive, click a few diagram nodes that have refs and check that each lands on the line
    it names. One pass, not a loop.
 6. **Publish** `<work>/guide.artifact.html` with the Artifact tool: `icon` `review`, `description` the pull request's
    title, and `files` the map the build printed (on every publish: the data is in it). Load the `artifact-design`

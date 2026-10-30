@@ -82,6 +82,8 @@ const cases: Record<string, { viewer?: string; prime?: string; run: string; expe
       r.onAtStep2 = !part.classList.contains('is-off');
       r.saved = Object.keys(JSON.parse(localStorage.getItem('thinkr:api-rate-limits:plan')).answers).length;
       r.refHost = $('t-refs .t-host').textContent;
+      // a Mermaid block is drawn at build, so no mermaid block is left for the viewer to draw
+      r.diagram = !!$('#flow ~ .k-dia svg.pele-flowchart .pele-node.new') && !document.querySelector('pre.mermaid');
 
       // the figure viewport: zoom, reset, resize from an edge
       const stage = $('#flow-fig .t-stage'), fsvg = stage.querySelector('svg');
@@ -194,7 +196,7 @@ const cases: Record<string, { viewer?: string; prime?: string; run: string; expe
       r.sendFailed = (await submit(false)) === r.sendChanged && $('#t-composer').classList.contains('is-open');
       r.sendRetry = await submit(false);`,
     expect: {
-      badge: 'Answered', count: '1/4', maxDisabled: true, otherShown: true, otherHidden: true, offAtStep1: true, onAtStep2: true, saved: 4, refHost: 'redis.io', fitsContent: true, zoomed: '150%', reset: '100%', taller: true,
+      badge: 'Answered', count: '1/4', maxDisabled: true, otherShown: true, otherHidden: true, offAtStep1: true, onAtStep2: true, saved: 4, refHost: 'redis.io', diagram: true, fitsContent: true, zoomed: '150%', reset: '100%', taller: true,
       panel: 'Approve plan', panelWarn: '1 question is still open.', draft: 'Ship it after the load test.', escCloses: true,
       sendPanel: 'Send feedback', sendNoWarn: true, draftKept: 'Ship it after the load test.', outsideCloses: true,
       tocEntries: 7, tocSub: 4, tocDone: 3, railNotches: true, tocMidGlide: true, tocLands: true, tocHash: '#references', pinOn: 'Rollout', pinHeld: 'Rollout', flashed: true, wheelReleases: true, nextOpen: true,

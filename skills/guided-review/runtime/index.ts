@@ -1,5 +1,5 @@
-/* The guided review page: code cards, review marks, review comments, jumps, the chapter rail, the left columns and
-   keys, for one pull request or several.
+/* The guided review page: code cards, diagrams, review marks, review comments, jumps, the chapter rail, the left
+   columns and keys, for one pull request or several.
    With several, the title is a menu of them (a stack from its base up, or any set to review together), and the page
    shows one at a time. build.ts bundles this into one script, loaded after the page's markup and its data file (window.GR_DATA).
    Code renders with @pierre/diffs and the Diff tab's tree with @pierre/trees, both imported from the pinned jsDelivr
@@ -14,6 +14,7 @@ import { type Ctx, active, byId, byOwnId, ctxOf, ctxs, diffOf } from './ctx';
 import { markChapter, markFile, progress, saveMarks } from './marks';
 import { choose, current, go, jump, onScroll, pin, show, step, toCard, togglePanel, view } from './nav';
 import { startComments, toggleNotes } from './comments';
+import { followNode, startDiagrams } from './diagrams';
 
 /** Mark a chapter from a click or a key, with its sound; the last chapter reviewed sounds its own. */
 function reviewChapter(c: Ctx, id: string, on: boolean) {
@@ -47,7 +48,7 @@ function pick(c: Ctx | null) {
 document.addEventListener('click', (e) => {
   const t = (e.target as Element).closest<HTMLElement>('button, a');
   if (!t?.closest('.gr-pick')) closeList();
-  if (!t) return;
+  if (!t) { followNode(e.target as Element); return; }
   const c = ctxOf(t) ?? active();
   if (t.classList.contains('gr-pick-btn')) { setList(t, t.getAttribute('aria-expanded') !== 'true'); return; }
   if (t.dataset.pick) { pick(byId(t.dataset.pick)); return; }
@@ -87,8 +88,8 @@ document.addEventListener('click', (e) => {
   if (t.dataset.chapterGo) { show('guide'); const el = byOwnId(c, `c-${t.dataset.chapterGo}`); if (el) pin(el); return; }
   if (t.dataset.ref) {
     e.preventDefault();
-    // The chapter a ref belongs to: its before / after row's, or the one it is written in.
-    const ch = t.closest('.ln')?.querySelector<HTMLElement>('[data-chapter-go]')?.dataset.chapterGo ?? t.closest<HTMLElement>('.gr-sec')?.dataset.chapter ?? null;
+    // The chapter a ref belongs to: the one it is written in.
+    const ch = t.closest<HTMLElement>('.gr-sec')?.dataset.chapter ?? null;
     void jump(c, t.dataset.ref, Number(t.dataset.line) || 0, (t.dataset.side as 'o' | 'n') || 'n', ch, t);
     return;
   }
@@ -119,6 +120,8 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') closeList();
   }
   if (t.classList?.contains('gr-pick-btn') && e.key === 'ArrowDown') { e.preventDefault(); setList(t, true); return; }
+  // A diagram node that leads to its code, focused.
+  if ((e.key === 'Enter' || e.key === ' ') && t.classList?.contains('is-ref') && followNode(t)) { e.preventDefault(); return; }
   // Keys stay with a field that takes text; a ticked box gives them back.
   const typing = /textarea|select/i.test(t.tagName) || (t.tagName === 'INPUT' && !/checkbox|radio|button/.test((t as HTMLInputElement).type));
   if (e.metaKey || e.ctrlKey || e.altKey || typing || e.composedPath().some((n) => (n as HTMLElement).isContentEditable)) return;
@@ -146,6 +149,7 @@ function start() {
   choose(c);
   startDiffStyle();
   startComments();
+  startDiagrams();
   if (rest === 'diff') show('diff');
   else if (rest && byOwnId(c, rest) && !byOwnId(c, rest)!.classList.contains('gr-pr')) pin(byOwnId(c, rest)!);
   performance.measure('gr:boot', { start: T0, end: performance.now() });

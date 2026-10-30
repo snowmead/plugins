@@ -182,7 +182,7 @@ function gist(tag: string, src: string) {
   const attr = (name: string) => new RegExp(`\\s${name}="([^"]*)"`).exec(head)?.[1] ?? '';
   let s = tag === 't-figure' ? 'Figure: ' + attr('alt')
     : tag === 't-question' ? 'Question: ' + plain(/<p\b[^>]*>([\s\S]*?)<\/p>/.exec(src)?.[1] ?? '')
-    : tag === 'pre' ? 'Code' + (attr('data-title') ? ': ' + attr('data-title') : '')
+    : tag === 'pre' ? (/\bmermaid\b/.test(attr('class')) ? 'Diagram' : 'Code' + (attr('data-title') ? ': ' + attr('data-title') : ''))
     : plain(src.replace(/<svg\b[\s\S]*?<\/svg>/g, ''));
   s = norm(s);
   return safe(s.length > 280 ? s.slice(0, 279) + '…' : s).replace(/&quot;/g, '"');

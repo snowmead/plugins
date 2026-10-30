@@ -10,5 +10,7 @@ This product includes third-party material, under its own license:
 
 Not included, but used:
 
+- At build time, installed from npm: pele (MIT), which draws the diagrams, and markdown-it (MIT) and sanitize-html
+  (MIT), which render Markdown files.
 - When a guide is viewed, loaded from cdn.jsdelivr.net: @pierre/diffs (Apache-2.0) and @pierre/trees (Apache-2.0);
-  in the local preview, mermaid (MIT); from Google Fonts: Geist and Geist Mono (SIL Open Font License 1.1).
+  from Google Fonts: Geist and Geist Mono (SIL Open Font License 1.1).

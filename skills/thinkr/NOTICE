@@ -10,6 +10,7 @@ This product includes third-party material, under its own license:
 
 Not included, but used:
 
-- At build time, installed from npm: MathJax (mathjax-full, Apache-2.0) and highlight.js (BSD-3-Clause).
+- At build time, installed from npm: MathJax (mathjax-full, Apache-2.0), highlight.js (BSD-3-Clause) and pele (MIT),
+  which draws Mermaid diagrams.
 - When a page is viewed, loaded from cdn.jsdelivr.net: motion (MIT), vgpu (MIT), d3 (ISC), Observable Plot (ISC);
   from Google Fonts: Geist and Geist Mono (SIL Open Font License 1.1).

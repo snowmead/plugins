@@ -1,104 +1,230 @@
 {
-  "pr": { "number": 42, "title": "Retry failed webhook deliveries with backoff", "url": "https://github.com/example/webhooks/pull/42", "author": "example-dev", "base": "main", "head": "retry-webhooks" },
-  "diffStyle": "unified",
-  "overview": {
-    "summary": "A webhook delivery was posted once, so a timeout or a 503 during the receiver's deploy lost the event for good. This pull request retries the failures that may pass later, up to six posts over about 15 minutes, and fails the rest at once.",
-    "steps": [
-      "`deliver` sorts each failure: retry it with backoff, or fail it now.",
-      "The worker takes the deliveries whose next attempt is due.",
-      "`sign` moves to its own module.",
-      "The docs, a migration, the tests and the API schema follow."
+ "pr": {
+  "number": 42,
+  "title": "Retry failed webhook deliveries with backoff",
+  "url": "https://github.com/example/webhooks/pull/42",
+  "author": "example-dev",
+  "base": "main",
+  "head": "retry-webhooks"
+ },
+ "diffStyle": "unified",
+ "overview": {
+  "summary": "A webhook delivery was posted once, so a timeout or a 503 during the receiver's deploy lost the event for good. This pull request retries the failures that may pass later, up to six posts over about 15 minutes, and fails the rest at once.",
+  "steps": [
+   "`deliver` sorts each failure: retry it with backoff, or fail it now.",
+   "The worker takes the deliveries whose next attempt is due.",
+   "`sign` moves to its own module.",
+   "The docs, a migration, the tests and the API schema follow."
+  ],
+  "diagram": {
+   "title": "Where a delivery goes after each post",
+   "mermaid": "flowchart LR\n  W[\"drain takes the due deliveries\"]:::changed --> D[\"deliver posts the signed event\"]\n  D -->|2xx| OK[delivered]\n  D -->|\"timeout, 408, 429, 5xx\"| R[\"retrying, due at nextAttemptAt\"]:::new\n  D -->|\"other 4xx, or the 6th post\"| F[failed]:::changed\n  R -.->|\"30 s to 8 min later\"| W\n  D -.->|before| X[\"any failure: failed at once\"]:::removed",
+   "refs": {
+    "W": "src/webhooks/queue.ts:7",
+    "D": "src/webhooks/deliver.ts:11",
+    "OK": "src/webhooks/deliver.ts:27",
+    "R": "src/webhooks/deliver.ts:31",
+    "F": "src/webhooks/deliver.ts:35",
+    "X": "src/webhooks/deliver.ts:25"
+   }
+  }
+ },
+ "chapters": [
+  {
+   "id": "retry-decision",
+   "title": "Retry what may pass later",
+   "body": [
+    "`deliver` used to post once and mark anything but a 2xx as failed. It now counts `attempts` and sorts each failure with [`retryable`](ref:src/webhooks/backoff.ts:13): a timeout, a network error, a 408, a 429 or a 5xx goes to `retrying`, due at [`nextAttemptAt`](ref:src/webhooks/backoff.ts:7). Any other 4xx fails at once.",
+    "The sixth failed post fails for good. The delay doubles from 30 s and adds ±20% jitter, so endpoints that fail together are not retried together."
+   ],
+   "table": {
+    "title": "Outcome of a post",
+    "caption": "attempt n",
+    "ref": "src/webhooks/deliver.ts:27",
+    "columns": [
+     "Answer",
+     "Before",
+     "Now"
     ],
-    "beforeAfter": {
-      "label": "call tree",
-      "title": "The worker posts a batch of deliveries",
-      "lines": [
-        { "t": "drain(db)", "ref": "src/webhooks/queue.ts:6" },
-        { "t": "find status = pending, oldest first", "op": "-", "d": 1, "ref": "src/webhooks/queue.ts:7" },
-        { "t": "find status in (pending, retrying), nextAttemptAt ≤ now", "op": "+", "d": 1, "ref": "src/webhooks/queue.ts:8" },
-        { "t": "deliver(db, endpoint, delivery, now)", "d": 1, "ref": "src/webhooks/deliver.ts:11" },
-        { "t": "post the signed event, 10 s timeout", "d": 2, "ref": "src/webhooks/deliver.ts:16" },
-        { "t": "not 2xx → failed", "op": "-", "d": 2, "ref": "src/webhooks/deliver.ts:26" },
-        { "t": "2xx → delivered", "op": "+", "d": 2, "ref": "src/webhooks/deliver.ts:27" },
-        { "t": "retryable(code) and attempts < 6 → retrying", "op": "+", "d": 2, "note": "30 s, 1, 2, 4, 8 min", "ref": "src/webhooks/deliver.ts:31" },
-        { "t": "otherwise → failed", "op": "+", "d": 2, "ref": "src/webhooks/deliver.ts:35" },
-        { "t": "log the outcome", "d": 1, "ref": "src/webhooks/queue.ts:14" }
-      ]
+    "rows": [
+     [
+      "2xx",
+      "`delivered`",
+      "`delivered`"
+     ],
+     {
+      "cells": [
+       "Timeout, network error, 408, 429, 5xx",
+       "`failed`",
+       "`retrying`, due at `nextAttemptAt`"
+      ],
+      "new": true
+     },
+     {
+      "cells": [
+       "The same, when n is 6",
+       "`failed`",
+       "`failed`"
+      ],
+      "new": true
+     },
+     [
+      "Any other 4xx",
+      "`failed`",
+      "`failed`"
+     ]
+    ],
+    "note": "2 of 4 cases are new."
+   },
+   "diagram": {
+    "title": "How deliver sorts the answer to a post",
+    "mermaid": "flowchart TD\n  P[\"post, 10 s timeout\"] --> C{2xx?}\n  C -->|yes| OK[delivered]\n  C -->|no| Q{\"retryable(code)?\"}:::new\n  Q -->|\"yes, under 6 posts\"| R[\"retrying, due in 30 s × 2ⁿ⁻¹ ± 20%\"]:::new\n  Q -->|\"no, or the 6th post\"| F[failed]:::changed",
+    "refs": {
+     "P": "src/webhooks/deliver.ts:16",
+     "C": "src/webhooks/deliver.ts:27",
+     "Q": "src/webhooks/backoff.ts:13",
+     "R": "src/webhooks/backoff.ts:7",
+     "F": "src/webhooks/deliver.ts:35"
     }
+   },
+   "files": [
+    "src/webhooks/backoff.ts",
+    {
+     "path": "src/webhooks/deliver.ts",
+     "hunks": [
+      1,
+      2
+     ]
+    }
+   ]
   },
-  "chapters": [
-    {
-      "id": "retry-decision",
-      "title": "Retry what may pass later",
-      "body": [
-        "`deliver` used to post once and mark anything but a 2xx as failed. It now counts `attempts` and sorts each failure with [`retryable`](ref:src/webhooks/backoff.ts:13): a timeout, a network error, a 408, a 429 or a 5xx goes to `retrying`, due at [`nextAttemptAt`](ref:src/webhooks/backoff.ts:7). Any other 4xx fails at once.",
-        "The sixth failed post fails for good. The delay doubles from 30 s and adds ±20% jitter, so endpoints that fail together are not retried together."
-      ],
-      "table": {
-        "title": "Outcome of a post",
-        "caption": "attempt n",
-        "ref": "src/webhooks/deliver.ts:27",
-        "columns": ["Answer", "Before", "Now"],
-        "rows": [
-          ["2xx", "`delivered`", "`delivered`"],
-          { "cells": ["Timeout, network error, 408, 429, 5xx", "`failed`", "`retrying`, due at `nextAttemptAt`"], "new": true },
-          { "cells": ["The same, when n is 6", "`failed`", "`failed`"], "new": true },
-          ["Any other 4xx", "`failed`", "`failed`"]
-        ],
-        "note": "2 of 4 cases are new."
-      },
-      "files": ["src/webhooks/backoff.ts", { "path": "src/webhooks/deliver.ts", "hunks": [1, 2] }]
-    },
-    {
-      "id": "worker",
-      "title": "The worker picks due retries",
-      "body": [
-        "[`drain`](ref:src/webhooks/queue.ts:6), which [`bun run worker`](ref:README.md:3) calls, used to take `pending` deliveries, oldest first. It now takes `pending` and `retrying` ones whose `nextAttemptAt` has passed, soonest first, and hands the same `now` to `deliver`, so one batch sees one clock.",
-        "`Delivery` gains `attempts` and `nextAttemptAt`. The log line carries the attempt number."
-      ],
-      "beforeAfter": {
-        "label": "flow",
-        "title": "Where a delivery goes after each post",
-        "flow": "flowchart LR\n  P[pending] --> D{deliver}\n  R[retrying]:::new --> D\n  D -->|2xx| OK[delivered]\n  D -->|retryable, n < 6| R\n  D -->|other| F[failed]"
-      },
-      "files": ["src/webhooks/queue.ts", "src/db.ts"]
-    },
-    {
-      "id": "signing",
-      "title": "Signing in its own module",
-      "body": "`sign` moved unchanged from `deliver.ts` to [`sign.ts`](ref:src/webhooks/sign.ts:4), and `deliver.ts` imports it. The retry code and the code that signs now live apart; the signature format does not change.",
-      "files": ["src/webhooks/sign.ts", { "path": "src/webhooks/deliver.ts", "hunks": [3] }]
-    },
-    {
-      "id": "docs",
-      "kind": "docs",
-      "title": "Delivery in the docs",
-      "body": "The Delivery section says which answers are retried, how far apart, and when a delivery fails, with [a table](ref:docs/webhooks.md:16) and a drawing of the six posts. It asks receivers to make their handlers idempotent, since a retry can bring an event they already handled.",
-      "files": ["docs/webhooks.md", "docs/retries.svg"]
-    },
-    {
-      "id": "migration",
-      "kind": "database",
-      "title": "Attempts and due time in the table",
-      "body": [
-        "The migration adds `attempts` and `next_attempt_at` with defaults of 0, so rows that exist keep their status and are due at once. The status check gains `retrying`.",
-        "The partial index on pending rows becomes one on `next_attempt_at` for pending and retrying rows, which is the worker's new query."
-      ],
-      "files": ["migrations/0004_delivery_retries.sql"]
-    },
-    {
-      "id": "tests",
-      "kind": "tests",
-      "title": "Tests for retries and backoff",
-      "body": "The 500 case now expects `retrying` and a later `nextAttemptAt`. New cases cover a 404, the sixth failure, the doubling delay and its one-hour cap, and which codes are retryable.",
-      "files": ["tests/deliver.ts", "tests/backoff.ts"]
-    },
-    {
-      "id": "schema",
-      "kind": "generated",
-      "title": "The API schema",
-      "body": "`WebhookDelivery` picks up `retrying`, `attempts` and `next_attempt_at` from `src/db.ts`. Nothing else in its shape changes.",
-      "files": ["src/api/schema.gen.ts"]
+  {
+   "id": "worker",
+   "title": "The worker picks due retries",
+   "body": [
+    "[`drain`](ref:src/webhooks/queue.ts:6), which [`bun run worker`](ref:README.md:3) calls, used to take `pending` deliveries, oldest first. It now takes `pending` and `retrying` ones whose `nextAttemptAt` has passed, soonest first, and hands the same `now` to `deliver`, so one batch sees one clock.",
+    "`Delivery` gains `attempts` and `nextAttemptAt`. The log line carries the attempt number."
+   ],
+   "diagram": {
+    "title": "What one run of the worker takes",
+    "mermaid": "flowchart LR\n  T[\"drain(db, batch, now)\"]:::changed --> O[\"pending, oldest first\"]:::removed\n  T --> N[\"pending or retrying, due by now, soonest first\"]:::new\n  N --> D[\"deliver(db, endpoint, d, now)\"]:::changed\n  D --> G[\"log the outcome and its attempt\"]:::changed",
+    "refs": {
+     "T": "src/webhooks/queue.ts:6",
+     "O": "src/webhooks/queue.ts:7",
+     "N": "src/webhooks/queue.ts:8",
+     "D": "src/webhooks/queue.ts:13",
+     "G": "src/webhooks/queue.ts:14"
     }
-  ]
+   },
+   "files": [
+    "src/webhooks/queue.ts",
+    "src/db.ts"
+   ]
+  },
+  {
+   "id": "signing",
+   "title": "Signing in its own module",
+   "body": "`sign` moved unchanged from `deliver.ts` to [`sign.ts`](ref:src/webhooks/sign.ts:4), and `deliver.ts` imports it. The retry code and the code that signs now live apart; the signature format does not change.",
+   "diagram": {
+    "title": "Where sign lives",
+    "mermaid": "flowchart LR\n  D[\"deliver.ts\"] -->|\"import { sign }\"| S[\"sign.ts: sign(payload, secret, at)\"]:::new\n  D -.->|before| X[\"sign at the end of deliver.ts\"]:::removed",
+    "refs": {
+     "D": "src/webhooks/deliver.ts:3",
+     "S": "src/webhooks/sign.ts:4",
+     "X": "src/webhooks/deliver.ts:40"
+    }
+   },
+   "files": [
+    "src/webhooks/sign.ts",
+    {
+     "path": "src/webhooks/deliver.ts",
+     "hunks": [
+      3
+     ]
+    }
+   ]
+  },
+  {
+   "id": "docs",
+   "kind": "docs",
+   "title": "Delivery in the docs",
+   "body": "The Delivery section says which answers are retried, how far apart, and when a delivery fails, with [a table](ref:docs/webhooks.md:16) and a drawing of the six posts. It asks receivers to make their handlers idempotent, since a retry can bring an event they already handled.",
+   "diagram": {
+    "title": "What the Delivery section now says",
+    "mermaid": "flowchart LR\n  A[\"Delivery: which answers retry, and how often\"]:::changed --> T[\"table of the six posts\"]:::new\n  A --> I[\"drawing of the six posts\"]:::new\n  A --> N[\"make your handler idempotent\"]:::new",
+    "refs": {
+     "A": "docs/webhooks.md:12",
+     "T": "docs/webhooks.md:16",
+     "I": "docs/retries.svg",
+     "N": "docs/webhooks.md:30"
+    }
+   },
+   "files": [
+    "docs/webhooks.md",
+    "docs/retries.svg"
+   ]
+  },
+  {
+   "id": "migration",
+   "kind": "database",
+   "title": "Attempts and due time in the table",
+   "body": [
+    "The migration adds `attempts` and `next_attempt_at` with defaults of 0, so rows that exist keep their status and are due at once. The status check gains `retrying`.",
+    "The partial index on pending rows becomes one on `next_attempt_at` for pending and retrying rows, which is the worker's new query."
+   ],
+   "diagram": {
+    "title": "The deliveries table",
+    "mermaid": "flowchart LR\n  D[(deliveries)] --> A[\"attempts, default 0\"]:::new\n  D --> N[\"next_attempt_at, default 0\"]:::new\n  D --> C[\"status check takes retrying\"]:::changed\n  D --> X[\"index deliveries_pending\"]:::removed\n  D --> I[\"index deliveries_due, pending and retrying\"]:::new",
+    "refs": {
+     "A": "migrations/0004_delivery_retries.sql:1",
+     "N": "migrations/0004_delivery_retries.sql:2",
+     "C": "migrations/0004_delivery_retries.sql:4",
+     "X": "migrations/0004_delivery_retries.sql:6",
+     "I": "migrations/0004_delivery_retries.sql:7"
+    }
+   },
+   "files": [
+    "migrations/0004_delivery_retries.sql"
+   ]
+  },
+  {
+   "id": "tests",
+   "kind": "tests",
+   "title": "Tests for retries and backoff",
+   "body": "The 500 case now expects `retrying` and a later `nextAttemptAt`. New cases cover a 404, the sixth failure, the doubling delay and its one-hour cap, and which codes are retryable.",
+   "diagram": {
+    "title": "The cases the tests cover",
+    "mermaid": "flowchart LR\n  D[deliver] --> T1[\"2xx delivers\"]\n  D --> T2[\"a 500 retries later\"]:::changed\n  D --> T3[\"a 404 fails at once\"]:::new\n  D --> T4[\"the 6th failure fails\"]:::new\n  B[backoff] --> T5[\"the delay doubles, up to an hour\"]:::new\n  B --> T6[\"which codes retry\"]:::new",
+    "refs": {
+     "T1": "tests/deliver.ts:5",
+     "T2": "tests/deliver.ts:11",
+     "T3": "tests/deliver.ts:18",
+     "T4": "tests/deliver.ts:24",
+     "T5": "tests/backoff.ts:4",
+     "T6": "tests/backoff.ts:11"
+    }
+   },
+   "files": [
+    "tests/deliver.ts",
+    "tests/backoff.ts"
+   ]
+  },
+  {
+   "id": "schema",
+   "kind": "generated",
+   "title": "The API schema",
+   "body": "`WebhookDelivery` picks up `retrying`, `attempts` and `next_attempt_at` from `src/db.ts`. Nothing else in its shape changes.",
+   "diagram": {
+    "title": "Where the schema comes from",
+    "mermaid": "flowchart LR\n  S[\"Delivery in src/db.ts\"]:::changed -->|scripts/schema.ts| G[\"WebhookDelivery\"]:::changed\n  G --> F[\"retrying, attempts, next_attempt_at\"]:::new",
+    "refs": {
+     "G": "src/api/schema.gen.ts:3",
+     "F": "src/api/schema.gen.ts:6"
+    }
+   },
+   "files": [
+    "src/api/schema.gen.ts"
+   ]
+  }
+ ]
 }

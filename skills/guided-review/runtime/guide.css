@@ -201,32 +201,22 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .gr-card .gr-check { color: var(--muted-fg); font-size: 12.5px; margin-left: 4px; }
 .gr-card .gen-note { padding: 8px 12px; color: var(--muted-fg); font-size: 12.5px; border-bottom: 1px solid var(--border); }
 
-/* before / after */
-.gr-ba > header .ttl { font-weight: 500; }
-.gr-ba > header .lbl { color: var(--muted-fg); }
-.gr-ba > header .sp { flex: 1; }
-.gr-ba .cap { padding: 10px 14px 4px; color: var(--muted-fg); font-size: 12.5px; }
-.gr-ba .lines { padding: 6px 0 10px; overflow-x: auto; font: 12.5px/1.75 var(--mono); }
-.gr-ba .ln {
-  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: baseline; gap: 6px; padding-right: 10px;
-  min-width: max-content; width: 100%;
-}
-.gr-ba .ln.add { background: var(--add-bg); box-shadow: inset 3px 0 0 var(--add-bar); }
-.gr-ba .ln.del { background: var(--del-bg); box-shadow: inset 3px 0 0 var(--del-bar); }
-.gr-ba .mk { text-align: center; color: var(--faint); user-select: none; }
-.gr-ba .add .mk { color: var(--add-fg); }
-.gr-ba .del .mk { color: var(--del-fg); }
-.gr-ba .tx { white-space: pre; color: var(--fg); }
-.gr-ba .note { color: var(--muted-fg); font-family: var(--font); font-size: 12px; margin-left: 10px; }
-.gr-ba .rf { display: flex; gap: 6px; justify-content: flex-end; font-size: 11px; color: var(--faint); white-space: nowrap; padding-left: 16px; }
-.gr-ba .rf a, .gr-ba .rf button { color: inherit; font: inherit; text-decoration: none; }
-.gr-ba .rf a:hover, .gr-ba .rf button:hover { color: var(--fg); text-decoration: underline; }
-.gr-ba .rf .ext::after, .gr-body a.ref[target]::after { content: " ↗"; }
-.gr-ba .rf .chn { border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; line-height: 16px; }
-.gr-ba .flow { padding: 10px 14px 14px; overflow-x: auto; }
-.gr-ba .flow pre.mermaid { margin: 0; background: none; font-family: var(--mono); font-size: 12px; text-align: center; color: var(--muted-fg); white-space: pre; }
-.gr-ba .flow pre.mermaid[data-processed] { color: var(--fg); white-space: normal; }
-.gr-ba .flow svg { max-width: 100%; height: auto; }
+/* diagrams: each section's Mermaid diagram, drawn at build by pele in the kit's colors (kit/ui.css), with a key to
+   the marks it uses. A node with a ref leads to its code. */
+.gr-card > header > .ttl { font-weight: 500; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gr-dia > header .sp { flex: 1; }
+.gr-dia-keys { display: flex; gap: 10px; }
+.gr-dia-key { display: inline-flex; align-items: center; gap: 5px; color: var(--muted-fg); font-size: 12px; }
+.gr-dia-key::before { content: ""; width: 10px; height: 10px; border-radius: 3px; border: 1.5px solid; }
+.gr-dia-key.is-new::before { border-color: var(--ok); background: color-mix(in oklab, var(--ok) 10%, var(--card)); }
+.gr-dia-key.is-changed::before { border-color: var(--c2); background: color-mix(in oklab, var(--c2) 10%, var(--card)); }
+.gr-dia-key.is-removed::before { border: 1.5px dashed var(--bad); }
+.gr-dia .k-dia { padding: 16px 14px; }
+.gr-dia .k-dia:empty { min-height: 120px; }
+.gr-dia .pele-node.is-ref { cursor: pointer; outline: none; }
+.gr-dia .pele-node.is-ref:is(:hover, :focus-visible) :is(rect, polygon, path, circle, ellipse) { stroke: var(--fg); }
+.gr-dia .pele-node.is-ref:is(:hover, :focus-visible) .pele-label { text-decoration: underline; }
+.gr-body a.ref[target]::after { content: " ↗"; }
 
 /* code: @pierre/diffs renders each card's code in its own shadow root. Its custom
    properties inherit from here; the folds and moved-code chips are ours, slotted in. */
@@ -579,4 +569,4 @@ body.gr-diff-panel-closed .gr-tree { display: none; }
 
 /* Code reads as typed, with no `===` or `=>` ligatures. Last, since the `font`
    shorthands above reset it. */
-code, .mono, .gr-ba .lines, .gr-plain, .gr-sep .sc, .gr-move { font-variant-ligatures: none; }
+code, .mono, .gr-plain, .gr-sep .sc, .gr-move { font-variant-ligatures: none; }

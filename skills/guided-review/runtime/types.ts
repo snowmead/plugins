@@ -1,5 +1,5 @@
 /* Shared types: diff.json (gather.ts writes it), guide.json (the agent writes it), the data build.ts embeds in the
-   page, and the slice of @pierre/diffs, @pierre/trees and mermaid the runtime calls. */
+   page, and the slice of @pierre/diffs and @pierre/trees the runtime calls. */
 import type { ThemeType } from '../kit/web/types';
 
 // ---------------------------------------------------------------- diff.json
@@ -77,8 +77,9 @@ export interface Diff {
 
 // ---------------------------------------------------------------- guide.json
 export type Text = string | string[];
-export interface BeforeAfterLine { t: string; op?: ' ' | '-' | '+'; d?: number; note?: string; ref?: string; ch?: string }
-export interface BeforeAfter { label?: string; title?: string; lines?: BeforeAfterLine[]; flow?: string }
+/** A section's diagram: Mermaid source, drawn at build with pele. `refs` ties a node, by its id, to the code it stands
+    for ("path:line"). */
+export interface Diagram { title?: string; mermaid: string; refs?: Record<string, string> }
 export interface StateTable {
   title?: string;
   caption?: string;
@@ -95,7 +96,7 @@ export interface Chapter {
   body: Text;
   files: FileSel[];
   table?: StateTable;
-  beforeAfter?: BeforeAfter;
+  diagram: Diagram;
 }
 export type DiffStyle = 'unified' | 'split';
 export interface Guide {
@@ -105,7 +106,7 @@ export interface Guide {
   /** How code cards show a change at first: one column, or old and new side by side. Each reader can switch. */
   diffStyle?: DiffStyle;
   links?: { label: string; href: string }[];
-  overview: { summary: Text; steps?: string[]; beforeAfter: BeforeAfter };
+  overview: { summary: Text; steps?: string[]; diagram: Diagram };
   chapters: Chapter[];
 }
 
@@ -133,7 +134,14 @@ export interface PagePr {
   head: string;
   chapters: PageChapter[];
   files: DiffFile[];
+  /** Each section's diagram, drawn at build: by "overview" or "c-<chapter id>". */
+  diagrams: Record<string, PageDiagram>;
 }
+/** Where a diagram's node leads: a line of the diff (in chapter `ch`), or `url` on GitHub for a file the pull request
+    does not change. `title` is the node's tooltip. */
+export interface DiagramRef { path: string; line: number; side?: Side; ch?: string; url?: string; title: string }
+/** A drawn diagram: the SVG for its box (kit/build/diagram.ts), and its nodes' refs by node id. */
+export interface PageDiagram { html: string; refs?: Record<string, DiagramRef> }
 export interface PageData {
   libs: Record<'diffs' | 'trees', string>;
   diffStyle: DiffStyle;

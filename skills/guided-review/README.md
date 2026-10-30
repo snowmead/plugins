@@ -6,10 +6,13 @@ Artifact.
 A big diff shown in file order makes the reviewer work out what the change does. A guided review does that work for
 them:
 
-- **Overview** with a **before / after** card: the path through the code that changed, drawn like a diff of the
-  behavior, each row linked to its line and its chapter, or a mermaid flow.
-- **Chapters**, one idea each, in reading order: text on the left, its code on the right. Core change first; docs,
-  then database, tests and generated files last, with a label. State tables lay out the cases a change decides.
+- **Overview** with a **diagram** of the whole change: the path a request or a record takes now, its new, changed
+  and removed parts marked in green, amber and dashed red, each node linked to its line and its chapter.
+- **Chapters**, one idea each, in reading order: text on the left, its code on the right, under a diagram of what
+  that chapter changes. Core change first; docs, then database, tests and generated files last, with a label. State
+  tables lay out the cases a change decides.
+- **Diagrams** are Mermaid, drawn when the guide is built by [pele](https://pele.run) into SVG in the page's own
+  colors and type, light and dark, with no diagram library in the page; on a phone they are laid out top to bottom.
 - **Code** drawn by [`@pierre/diffs`](https://diffs.com): syntax highlighting, changed words within a line, folds
   that name the function they hide, moved code marked at both ends. A **Diff** tab lists every file in a
   [`@pierre/trees`](https://trees.software) tree. Unified or split: the guide sets where it starts (`diffStyle`),
@@ -61,7 +64,8 @@ project).
 
 ### Requirements
 
-- [Bun](https://bun.sh) 1.2 or newer and git on your `PATH`. The build needs no packages.
+- [Bun](https://bun.sh) 1.2 or newer and git on your `PATH`. The first build installs its packages (pele,
+  markdown-it and sanitize-html) once, from the pinned lockfile.
 - Publishing uses Claude's Artifact tool, so guides are made in Claude Code or another Claude client that can publish
   Artifacts. Without it, Claude hands you the preview file, a full HTML document.
 - Optional: Google Chrome, for the screenshot check (`scripts/shot.ts`).
@@ -88,7 +92,7 @@ Run these in this folder, after `bun install`:
 | `bun run test` | gather and build against a scratch repository (kinds, scopes, moves, refs, escaping, every refusal), then the demo in headless Chrome over DevTools: behavior, no console errors, and timing budgets (boot ≤ 30 ms, each interaction ≤ 12 ms) |
 | `bun run typecheck` | `tsc` over the runtime and the scripts |
 | `bun run example` | Builds the demo into `examples/demo.preview.html`, and the two stacked demo pull requests into `examples/stack.preview.html` |
-| `bun scripts/build.ts --refresh` | Moves @pierre/diffs, @pierre/trees and mermaid (for the preview) to their newest release that is at least 14 days old (the artifact rule); `--major` crosses a major version |
+| `bun scripts/build.ts --refresh` | Moves @pierre/diffs and @pierre/trees to their newest release that is at least 14 days old (the artifact rule); `--major` crosses a major version |
 
 ```
 SKILL.md                          what Claude reads first
