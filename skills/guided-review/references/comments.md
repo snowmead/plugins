@@ -31,7 +31,8 @@ code the whole width. On a narrow screen there is no margin: each box sits in th
 file's header, or under the title.
 
 Queued comments stay in the reader's browser, per pull request like the review marks, until they send them. A sent
-comment stays where it was as a **thread**: the comment, Claude's answers, the replies after them and the replies still
+comment becomes a **thread** where it was the moment Send is pressed, with no Queued step in between; only a send that
+fails puts it back in the queue. A thread holds the comment, Claude's answers, the replies after them and the replies still
 queued, oldest first, and a Reply box. **Resolve** folds a thread to one line (its latest message); **Show** opens it,
 **Reopen** unresolves it.
 

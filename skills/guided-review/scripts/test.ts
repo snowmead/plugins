@@ -725,7 +725,12 @@ const VIEWER = `(() => {
   const comments = {
     canSendToClaude: async () => 'available',
     anchorFor: async () => ({ path: 'h1', x: 0, y: 0 }),
-    sendToClaude: async (t) => { window.__viewer.sent.push(t.text); return { threadId: 'th' + window.__viewer.sent.length, commentId: 'x' }; },
+    sendToClaude: async (t) => {
+      await window.__viewer.hold;
+      if (window.__viewer.fail) throw { code: window.__viewer.fail };
+      window.__viewer.sent.push(t.text);
+      return { threadId: 'th' + window.__viewer.sent.length, commentId: 'x' };
+    },
   };
   const user = { id: async () => 'u_me', can: async () => true, profiles: async (ids) => Object.fromEntries([].concat(ids).map((i) => [i, { name: '' }])) };
   window.claude = { use: async (name) => ({ db, comments, user })[name] ?? null };
@@ -829,7 +834,34 @@ async function runThreads(file: string) {
       r.replyDoc = rc && [rc.kind, rc.thread === mine, rc.on?.text, rc.before?.map((b) => b.by).join()].join(' ');
       r.replyShows = await until(() => box('t:' + mine)?.querySelectorAll('.gr-post:not(.is-pending)').length === 3);
       box('t:' + mine).querySelector('[data-thread-resolve]').click();
-      r.mark = await until(() => [...docs].some(([p, d]) => p.startsWith('comments/u_me/msgs/') && d.thread === mine && d.resolved === true)) && await until(() => box('t:' + mine)?.classList.contains('is-folded'));`));
+      r.mark = await until(() => [...docs].some(([p, d]) => p.startsWith('comments/u_me/msgs/') && d.thread === mine && d.resolved === true)) && await until(() => box('t:' + mine)?.classList.contains('is-folded'));
+      // a composer's Send shows its thread while the send is out, never a queued comment, and the box stays once it lands
+      const boxesWith = (text) => [...document.querySelectorAll('.gr-margin > .gr-note')].filter((b) => b.textContent.includes(text));
+      let release;
+      window.__viewer.hold = new Promise((res) => { release = res; });
+      $('[data-note-general]').click();
+      await sleep(50);
+      const quick = box('draft');
+      quick.querySelector('textarea').value = 'Any jitter?';
+      quick.querySelector('[data-composer-send]').click();
+      await new Promise(requestAnimationFrame);
+      const flying = boxesWith('Any jitter?');
+      r.flying = flying.length + ' ' + flying.every((b) => b.classList.contains('gr-thread') && !b.querySelector('.gr-chip.is-pending')) + ' ' + $('[data-note-send]').hidden;
+      release();
+      await until(() => sent.length === 3);
+      await sleep(100);
+      r.landed = !!flying[0]?.isConnected && box(flying[0].dataset.key) === flying[0] && boxesWith('Any jitter?').length === 1;
+      // a send that fails puts the comment back in the queue
+      window.__viewer.hold = null;
+      window.__viewer.fail = 'consent_required';
+      $('[data-note-general]').click();
+      await sleep(50);
+      const fails = box('draft');
+      fails.querySelector('textarea').value = 'Will this go?';
+      fails.querySelector('[data-composer-send]').click();
+      await sleep(100);
+      const back = boxesWith('Will this go?');
+      r.failed = back.length + ' ' + !back[0]?.classList.contains('gr-thread') + ' ' + !!back[0]?.querySelector('.gr-chip.is-pending') + ' ' + $('[data-note-send]').textContent + ' ' + sent.length;`));
   } catch (e) {
     console.log(`fail  ${name}: ${(e as Error).message}`);
     failed++;
@@ -842,6 +874,7 @@ async function runThreads(file: string) {
     otherReader: 'Reviewer true', notWhole: true, unread: '1 true', inbox: '1 Claude Capped at an hour (backoff.ts:12). | true',
     bellGo: 'true,true,true,true,true,true', inboxEmpty: true, inboxClosed: true, sendWord: 'Send 1to Claude', sentRef: true, sentThread: true, mineShows: 'You', answer: 'You,Claude Capped at an hour (backoff.ts:12).', answerToast: 'Claude answered in a thread.',
     replyWord: 'Send', replyText: true, replyDoc: 'reply true Is the backoff capped? claude', replyShows: true, mark: true,
+    flying: '1 true true', landed: true, failed: '1 true true Send 1to Claude 3',
   }, { look: BUDGET.interaction, bell: BUDGET.interaction });
 }
 
