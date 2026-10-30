@@ -55,3 +55,113 @@ export async function browser(profile: string, { warnings = false } = {}) {
     close() { ws.close(); proc.kill(); },
   };
 }
+
+/** The kit's theme button, driven on a fresh copy of a page under a dark system: the menu by mouse and by real key
+    presses, what each pick does to the page, the viewer's own data-theme, the page's keys while the menu is open, a
+    pick coming back on the next load, and a phone's width. Prints what failed and returns how many failed. */
+export async function themeChecks(url: string, profile: string) {
+  const tab = await browser(profile);
+  let failed = 0, checks = 0;
+  const STATE = `(() => { const w = document.querySelector('[data-k-theme]'), btn = w.querySelector('button'), menu = w.querySelector('[role="menu"]'), a = document.activeElement;
+    return JSON.stringify({ open: !menu.hidden, expanded: btn.getAttribute('aria-expanded'), theme: document.documentElement.dataset.theme ?? null, kept: localStorage.getItem('kit:theme'),
+      focus: a === btn ? 'button' : a.value || a.tagName, checked: menu.querySelector('[aria-checked="true"]')?.value ?? null, seen: window.seenKey ?? null,
+      bg: getComputedStyle(document.body).backgroundColor, sun: getComputedStyle(w.querySelector('.is-sun')).transform === 'matrix(1, 0, 0, 1, 0, 0)' }); })()`;
+  const state = async () => JSON.parse(await tab.run(STATE)) as Record<string, unknown>;
+  const expect = async (name: string, want: Record<string, unknown>) => {
+    const got = await state();
+    for (const [k, v] of Object.entries(want)) {
+      checks++;
+      if (got[k] !== v) { failed++; console.log(`fail  theme, ${name}: ${k} expected ${JSON.stringify(v)}, got ${JSON.stringify(got[k])}`); }
+    }
+    return got;
+  };
+  const key = async (key: string, vk: number, text?: string) => {
+    await tab.send('Input.dispatchKeyEvent', { type: text ? 'keyDown' : 'rawKeyDown', key, code: key, windowsVirtualKeyCode: vk, text });
+    await tab.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: vk });
+  };
+  const down = () => key('ArrowDown', 40), up = () => key('ArrowUp', 38);
+  const open = async (at = url) => { await tab.open(at); await tab.run(`addEventListener('keydown', (e) => { window.seenKey = e.key; })`); };
+  const click = (sel: string) => tab.run(`document.querySelector('[data-k-theme] ${sel}').click()`);
+  const trigger = '> button', settle = () => Bun.sleep(400); // past the icon's turn
+  try {
+    await tab.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+    await tab.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+    await tab.open(url);
+    await tab.run(`localStorage.removeItem('kit:theme')`);
+    await open();
+    await settle();
+    const dark = await expect('at rest', { open: false, expanded: 'false', theme: null, kept: null, sun: false });
+
+    await click(trigger);
+    await expect('opened', { open: true, expanded: 'true', focus: 'system', checked: 'system' });
+    await click('[value="light"]');
+    await settle();
+    const light = await expect('Light on a dark system', { open: false, expanded: 'false', theme: 'light', kept: '"light"', focus: 'button', sun: true });
+    checks++;
+    if (light.bg === dark.bg) { failed++; console.log(`fail  theme, Light on a dark system: the page stayed ${dark.bg}`); }
+
+    await open();
+    await expect('the pick on the next load', { open: false, theme: 'light', bg: light.bg, sun: true });
+    checks++;
+    if (await tab.run(`(() => { const boot = [...document.scripts].find((s) => s.textContent.includes('kit:theme')), css = document.querySelector('link[rel="stylesheet"]');
+      return !!boot && !!(boot.compareDocumentPosition(css) & Node.DOCUMENT_POSITION_FOLLOWING); })()`) !== true) { failed++; console.log('fail  theme: the pick does not go on the root ahead of the stylesheet'); }
+
+    await tab.run(`document.querySelector('[data-k-theme] > button').focus()`);
+    await down();
+    await expect('ArrowDown opens on the current item', { open: true, focus: 'light', checked: 'light' });
+    await down();
+    await expect('ArrowDown moves', { focus: 'dark' });
+    await down(); await down();
+    await expect('ArrowDown wraps', { focus: 'light' });
+    await up();
+    await expect('ArrowUp wraps', { focus: 'system' });
+    await up();
+    await expect('ArrowUp moves', { focus: 'dark' });
+    await key('Enter', 13, '\r');
+    await settle();
+    await expect('Enter picks', { open: false, theme: 'dark', kept: '"dark"', focus: 'button', bg: dark.bg, sun: false });
+
+    await key('Enter', 13, '\r');
+    await expect('Enter opens', { open: true, focus: 'dark' });
+    await tab.run(`window.seenKey = null`); // the Enter that opened it went to the page, as on any closed button
+    await key('x', 88, 'x');
+    await expect('the page keeps no keys while the menu is open', { open: true, seen: null });
+    await key('Escape', 27);
+    await expect('Escape closes', { open: false, focus: 'button', theme: 'dark', seen: null });
+    await key('x', 88, 'x');
+    await expect('the page has its keys back', { seen: 'x' });
+
+    await click(trigger);
+    await key('Tab', 9);
+    await expect('Tab closes', { open: false });
+
+    await click(trigger);
+    await tab.run(`document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`);
+    await expect('a click outside closes', { open: false });
+
+    await click(trigger);
+    await click('[value="system"]');
+    await expect('System', { open: false, theme: null, kept: '"system"', bg: dark.bg });
+
+    await tab.run(`document.documentElement.dataset.theme = 'light'`);
+    await click(trigger);
+    await expect('the menu follows the viewer', { checked: 'light', bg: light.bg });
+    await key('Escape', 27);
+    await tab.run(`delete document.documentElement.dataset.theme`);
+
+    await tab.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await open();
+    await settle();
+    await click(trigger);
+    const box = await tab.run(`(() => { const w = document.querySelector('[data-k-theme]'), b = w.querySelector('button').getBoundingClientRect(), m = w.querySelector('[role="menu"]').getBoundingClientRect();
+      return b.width > 0 && b.right <= innerWidth && m.left >= 0 && m.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth; })()`);
+    checks++;
+    if (box !== true) { failed++; console.log(`fail  theme: at phone width the button or its menu is off the screen (${box})`); }
+
+    for (const e of tab.errors) { failed++; console.log(`error theme: ${e.split('\n')[0]}`); }
+    if (!failed) console.log(`ok    theme (${checks} checks, no errors)`);
+  } finally {
+    tab.close();
+  }
+  return failed;
+}

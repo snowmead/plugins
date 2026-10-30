@@ -453,10 +453,13 @@ body.gr-diff-panel-closed .gr-tree { display: none; }
 .gr-inbox-item .more { color: var(--c1); font-size: 12px; }
 .gr-inbox-empty { margin: 0; padding: 16px 14px; color: var(--muted-fg); }
 /* a phone: the list spans the screen under the bar, and the bar keeps room for the bell and Send by leaving out the
-   sound, the left column's button (the chapter text sits above the code there anyway) and the comments' count */
+   sound, the left column's button (the chapter text sits above the code there anyway), the comments' count and, while
+   Send shows, the theme button; the links scroll in their own strip when they still do not fit */
 @media (max-width: 560px) {
   .gr-inbox { position: fixed; top: calc(var(--bar-h) + env(safe-area-inset-top, 0px) + 4px); left: 12px; right: 12px; width: auto; }
-  .gr-bar .k-sound, .gr-bar .gr-panel-toggle, .gr-note-toggle .gr-note-count { display: none; }
+  .gr-bar .k-sound, .gr-bar .gr-panel-toggle, .gr-note-toggle .gr-note-count, .gr-bar:has(.gr-send:not([hidden])) .k-theme { display: none; }
+  .gr-barlinks { overflow-x: auto; scrollbar-width: none; }
+  .gr-barlinks::-webkit-scrollbar { display: none; }
 }
 
 .gr-send { gap: .3em; background: var(--c1); border-color: var(--c1); color: #fff; }

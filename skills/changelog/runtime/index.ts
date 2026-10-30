@@ -3,10 +3,11 @@
    empty for the feed, a date for that entry. build.ts bundles this after the page's markup and its config.
 
    Like thinkr and guided-review, it plays a sound only to answer what the reader just did: a view changing, a link
-   copied, the speaker button. Hovering, the first click and a new entry stay silent. */
+   copied, the theme menu, the speaker button. Hovering, the first click and a new entry stay silent. */
 import type { Db, Entry } from './types';
 import { barLine, h } from '../kit/web/dom';
 import { sound } from '../kit/web/sound';
+import '../kit/web/theme';
 import { CFG, T0 } from './dom';
 import { viewOpened } from './scene';
 import { entryView, feedView } from './views';

@@ -24,7 +24,7 @@
    from the kit (kit/build/). */
 import { dirname, join, resolve } from 'node:path';
 import type { Chapter, Diagram, DiagramRef, Diff, DiffFile, Guide, Kind, PageData, PageDiagram, PagePr, Stack, StateTable, Text } from '../runtime/types';
-import { FONTS, ICON, assets, preview, publishLines, runtime, soundButton, styles } from '../kit/build/page';
+import { FONTS, ICON, THEME, assets, preview, publishLines, runtime, soundButton, styles, themeButton } from '../kit/build/page';
 import { libs, preloads } from '../kit/build/libs';
 import { diagrams } from '../kit/build/diagram';
 import { BELL, COMMENT, PANEL } from '../runtime/icons';
@@ -439,7 +439,7 @@ const hide = (i: number) => (i ? ' hidden' : '');
 const markup = `<div class="k-bar gr-bar"><div class="gr-wrap">
 <button type="button" class="k-btn is-ghost is-icon is-sm gr-panel-toggle" data-panel-toggle aria-expanded="true" aria-label="Hide the chapter text" title="Hide the chapter text (b)">${PANEL}</button>
 <div class="k-seg is-sm gr-tabs" role="tablist"><button type="button" class="gr-tab" role="tab" data-view="guide" aria-selected="true">Guide</button><button type="button" class="gr-tab" role="tab" data-view="diff" aria-selected="false">Diff</button></div>
-<span class="gr-spacer"></span>${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span>${soundButton('k-btn is-ghost is-icon is-sm')}<span class="gr-bell-wrap"><button type="button" class="k-btn is-ghost is-icon is-sm gr-bell" data-bell aria-haspopup="dialog" aria-expanded="false" aria-controls="gr-inbox" aria-label="Unread answers from Claude" title="Unread answers from Claude">${BELL}<span class="gr-bell-n" hidden></span></button><div class="gr-inbox" id="gr-inbox" role="dialog" aria-label="Unread answers from Claude" data-uncommentable hidden></div></span><button type="button" class="k-btn is-sm gr-note-toggle" data-notes-toggle aria-pressed="true" aria-label="Hide comments" title="Hide comments (c)">${COMMENT}<span class="long">Comments</span><span class="gr-note-count" hidden>0</span></button><button type="button" class="k-btn is-sm gr-send" data-note-send hidden><span class="n">Send</span><span class="long">to Claude</span></button>${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
+<span class="gr-spacer"></span>${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span>${themeButton('k-btn is-ghost is-icon is-sm')}${soundButton('k-btn is-ghost is-icon is-sm')}<span class="gr-bell-wrap"><button type="button" class="k-btn is-ghost is-icon is-sm gr-bell" data-bell aria-haspopup="dialog" aria-expanded="false" aria-controls="gr-inbox" aria-label="Unread answers from Claude" title="Unread answers from Claude">${BELL}<span class="gr-bell-n" hidden></span></button><div class="gr-inbox" id="gr-inbox" role="dialog" aria-label="Unread answers from Claude" data-uncommentable hidden></div></span><button type="button" class="k-btn is-sm gr-note-toggle" data-notes-toggle aria-pressed="true" aria-label="Hide comments" title="Hide comments (c)">${COMMENT}<span class="long">Comments</span><span class="gr-note-count" hidden>0</span></button><button type="button" class="k-btn is-sm gr-send" data-note-send hidden><span class="n">Send</span><span class="long">to Claude</span></button>${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
 </div></div>
 <div class="gr-wrap">
 ${prs.map((p, i) => `<div class="gr-pr" id="${multi ? p.id : 'gr-pr'}" data-pr="${p.id}"${hide(i)}>
@@ -470,7 +470,7 @@ const nums = prs.filter((p) => p.number != null).map((p) => `#${p.number}`);
 const name = multi
   ? stack?.name ?? (nums.length === prs.length ? `Guided review ${nums[0]}–${nums.at(-1)}` : `Review of ${prs.length} pull requests`)
   : one.name ?? (one.number != null ? `Guided review #${one.number}` : `Review of ${one.branch ?? inputs[0].diff.head.slice(0, 7)}`);
-const page = `<title>${esc(name)}</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n${preloads(['diffs', 'trees'], libmap)}\n${FONTS}\n`
+const page = `<title>${esc(name)}</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n${THEME}\n${preloads(['diffs', 'trees'], libmap)}\n${FONTS}\n`
   + `<link rel="stylesheet" href="${at['guided-review.css']}">\n${markup}\n`
   + `<script src="${at['data.js']}"></script>\n<script src="${at['guided-review.js']}"></script>\n`;
 await Bun.write(`${stem}.artifact.html`, page);

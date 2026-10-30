@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Diff, DiffFile, Guide } from '../runtime/types';
 import { buildDemo, buildStack as buildStackDemo, git } from './demo';
-import { browser, findChrome } from '../kit/build/chrome';
+import { browser, findChrome, themeChecks } from '../kit/build/chrome';
 
 const ROOT = join(import.meta.dir, '..');
 let failed = 0;
@@ -904,6 +904,24 @@ try {
       return JSON.stringify({ anchor: p?.dataset.pr, anchorAt: Math.abs(document.getElementById('pr43-c-docs').getBoundingClientRect().top - 60) < 40 || scrollY + innerHeight >= document.documentElement.scrollHeight - 2 }); })()`));
     Object.assign(r, at);
   });
+  failed += await themeChecks('file://' + join(dir, 'demo.preview.html'), join(dir, 'profile-theme'));
+  // A phone's bar, with Send up or not: the page never scrolls sideways, the bell and Send stay on the screen, and the
+  // theme button shows until Send needs its room.
+  const phone = await browser(join(dir, 'profile-phone'));
+  try {
+    const bar = `(() => { const send = document.querySelector('[data-note-send]'), right = (s) => document.querySelector(s).getBoundingClientRect().right;
+      return JSON.stringify({ wide: document.documentElement.scrollWidth > innerWidth, off: right('[data-bell]') > innerWidth || (!send.hidden && right('[data-note-send]') > innerWidth),
+        theme: !!document.querySelector('[data-k-theme]').offsetWidth }); })()`;
+    for (const width of [430, 390, 360, 320]) {
+      await phone.send('Emulation.setDeviceMetricsOverride', { width, height: 844, deviceScaleFactor: 2, mobile: true });
+      await phone.open('file://' + join(dir, 'demo.preview.html'));
+      same(`phone bar at ${width}`, JSON.parse(await phone.run(bar)), { wide: false, off: false, theme: true });
+      await phone.run(`(() => { const s = document.querySelector('[data-note-send]'); s.hidden = false; s.querySelector('.n').textContent = 'Send 1'; })()`);
+      same(`phone bar at ${width}, with Send`, JSON.parse(await phone.run(bar)), { wide: false, off: false, theme: false });
+    }
+  } finally {
+    phone.close();
+  }
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

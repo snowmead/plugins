@@ -14,19 +14,31 @@ macOS and Linux; on Windows, Developer Mode and `core.symlinks=true`).
 | Path | What it is |
 |---|---|
 | `tokens.css` | The tokens every page builds on, light and dark, and the base rules (box sizing, focus ring, selection, reduced motion). |
-| `ui.css` | The shared parts: the sticky bar (`.k-bar`), buttons (`.k-btn` with `is-primary`, `is-ghost`, `is-icon`, `is-sm`), the segmented control (`.k-seg`), badges (`.k-badge`), the toast (`.k-toast`), the speaker button (`.k-sound`), and diagrams (`.k-dia`, with pele's colors and fonts set to the tokens). |
+| `ui.css` | The shared parts: the sticky bar (`.k-bar`), buttons (`.k-btn` with `is-primary`, `is-ghost`, `is-icon`, `is-sm`), the segmented control (`.k-seg`), badges (`.k-badge`), the toast (`.k-toast`), the speaker button (`.k-sound`), the theme button (`.k-theme`) and its menu (`.k-menu`), and diagrams (`.k-dia`, with pele's colors and fonts set to the tokens). |
 | `sounds.json` | One earshot kit: `nav`, `step`, `select`, `deselect`, `reveal`, `toggle`, `send` and `hover`. |
-| `web/` | Browser code each page's runtime bundles: `dom.ts` (`h`, `$`, `$$`, `esc`, `slug`, `store`, `onScroll`, `barLine`, `copyText`), `icons.ts` (`ICON`, `soundButton`), `theme.ts`, `sound.ts`, `toast.ts`, `types.ts`. |
-| `build/` | Helpers for each skill's scripts: `page.ts` (the Google Fonts link for Geist, the stylesheet, the runtime with its sounds, the files a page publishes beside it, the preview document), `libs.ts` (libraries pinned in `runtime/libs.json`, refreshed under the artifact rule), `chrome.ts` (find Chrome, drive it over DevTools for tests), `shot.ts` (screenshots), `deps.ts` (a skill's build dependencies, installed once from its lockfile on a fresh copy), `words.ts` (`align`, the longest common subsequence the builds mark what changed with), `diagram.ts` (Mermaid drawn into SVG with pele, below). |
+| `web/` | Browser code each page's runtime bundles: `dom.ts` (`h`, `$`, `$$`, `esc`, `slug`, `store`, `onScroll`, `barLine`, `copyText`), `icons.ts` (`ICON`, `soundButton`, `themeButton`), `theme.ts` (`themeType`, `isDark`, `onTheme`, `setTheme`, `bindThemeButton`), `sound.ts`, `toast.ts`, `types.ts`. |
+| `build/` | Helpers for each skill's scripts: `page.ts` (the Google Fonts link for Geist, the stylesheet, the runtime with its sounds, the files a page publishes beside it, the preview document), `libs.ts` (libraries pinned in `runtime/libs.json`, refreshed under the artifact rule), `chrome.ts` (find Chrome, drive it over DevTools for tests, and `themeChecks`, the theme button's test for every page), `shot.ts` (screenshots), `deps.ts` (a skill's build dependencies, installed once from its lockfile on a fresh copy), `words.ts` (`align`, the longest common subsequence the builds mark what changed with), `diagram.ts` (Mermaid drawn into SVG with pele, below). |
 | `scripts/` | Maintenance: `sounds.py` re-renders the sounds. |
 
 ## Tokens
 
 `--bg`, `--fg`, `--fg-2` (body text a step back), `--muted-fg`, `--faint` (the quietest text), `--card`, `--muted`,
 `--border`, `--border-strong`, `--input`, `--ring`, `--primary`, `--primary-fg`, `--ok`, `--bad`, `--c1`…`--c5`
-(blue, amber, green, pink, violet), `--font`, `--mono`, `--radius`, `--shadow`, `--bar-h`. A page adds only what is
+(blue, amber, green, pink, violet), `--font`, `--mono`, `--radius`, `--shadow`, `--bar-h`, `--dark` (1 while the dark palette shows, else 0, for what turns with the theme in CSS alone). A page adds only what is
 its own, such as guided-review's colors for added and removed lines, and never writes a literal color where a token
 fits.
+
+## Theme
+
+A reader may want a page lighter or darker than their system, so every page's bar has shadcn/ui's mode toggle: a sun
+or a moon over a menu of Light, Dark and System. It starts on System.
+
+`data-theme` on the root is the one switch: `tokens.css` and everything a page draws through `onTheme` follow it. The
+menu sets it, or clears it for System. The Artifact tool's page contract says the viewer sets it too when its own
+theme is not System; the kit has not watched when it does, and treats the last write as the one that holds. The menu
+shows what is on the root each time it opens. The pick stays in the browser as `kit:theme`,
+and `THEME`, an inline script right after the title, puts it on the root before the first paint. Each artifact has
+its own browser storage, so a pick holds on that page, not on the next one.
 
 ## Sounds
 
@@ -49,16 +61,19 @@ its `package.json`, at a release at least 14 days old.
 
 ## How a skill uses it
 
-- **Build:** `FONTS` for the font link, `styles(<own.css>)` for the stylesheet, `runtime(<runtime/index.ts>, [...])`
+- **Build:** `FONTS` for the font link, `THEME` right after the title, `styles(<own.css>)` for the stylesheet, `runtime(<runtime/index.ts>, [...])`
   for the script and its sounds, `assets(stem, {...})` to write them (and any page data) into `<stem>.files/` with the
   `files` map to publish them with, `publishLines()` to print that map, `preview(page)` for the local preview, and
   `libs(<runtime/libs.json>)` with `preloads()` when the page loads libraries from a CDN, and `diagrams(<skill dir>)`
   for a `draw(source, id)` that turns Mermaid into a `.k-dia` box. The page itself keeps only its own content: an
   agent that reads a published page back gets up to 50,000 characters of it.
-- **Runtime:** import from `../kit/web/…`. The speaker button comes from `soundButton()`; `sound.ts` wires every one
-  on the page.
+- **Runtime:** import from `../kit/web/…`. The speaker button comes from `soundButton()` and the theme button from
+  `themeButton()`; `sound.ts` and `theme.ts` wire every one on the page, and a bar made after load calls
+  `bindSoundButton` and `bindThemeButton`. A runtime that imports nothing from `theme.ts` still imports it, so that
+  the button works.
 - **Tests and shots:** `browser()` and `findChrome()` from `kit/build/chrome.ts`; `scripts/shot.ts` calls `shotCli()`.
-  Both open the preview, which loads Geist from Google Fonts, so they need the network for the real type.
+  Both open the preview, which loads Geist from Google Fonts, so they need the network for the real type. A page
+  with a theme button runs `themeChecks()` on its preview.
 - **tsconfig.json** includes `kit/**/*.ts`, so `bun run typecheck` covers the kit.
 
 ## Changing it

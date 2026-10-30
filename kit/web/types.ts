@@ -13,7 +13,7 @@ export type SoundName =
   | 'hover';    // a mouse moves onto a control, far under the rest
 export type Sounds = Partial<Record<SoundName, { uri: string; db: number }>>;
 
-/** The theme the viewer picked, or the system's. */
+/** The theme the reader or the viewer picked, or the system's. */
 export type ThemeType = 'light' | 'dark' | 'system';
 
 declare global {

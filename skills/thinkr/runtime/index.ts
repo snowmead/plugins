@@ -2,8 +2,9 @@
    window.THINKR = { libs, use } and the kit's sounds. It turns the authored <t-page> into the finished page. */
 import type { Mode, Thinkr } from './types';
 import { barLine, copyText, h, slug } from '../kit/web/dom';
-import { ICON, soundButton } from '../kit/web/icons';
+import { ICON, soundButton, themeButton } from '../kit/web/icons';
 import { bindSoundButton, sound } from '../kit/web/sound';
+import { bindThemeButton } from '../kit/web/theme';
 import { toast } from '../kit/web/toast';
 import { load, motionReady, warm } from './libs';
 import { createFigures, tokens } from './figure';
@@ -24,8 +25,9 @@ function boot(page: HTMLElement) {
   const kind = mode === 'plan' ? 'Plan' : 'Explainer';
 
   // ---------------------------------------------------------------- frame: bar, layout, eyebrow
-  const end = h('div', { class: 't-bar-end', html: soundButton() });
-  bindSoundButton(end.firstElementChild as HTMLElement);
+  const end = h('div', { class: 't-bar-end', html: themeButton() + soundButton() });
+  bindThemeButton(end.querySelector<HTMLElement>('[data-k-theme]')!);
+  bindSoundButton(end.querySelector<HTMLElement>('[data-k-sound]')!);
   const bar = h('div', { class: 'k-bar t-bar', 'data-uncommentable': '' },
     h('div', { class: 't-bar-title' }, h('span', { class: 'k-badge is-muted' }, kind), h('span', {}, title)), end);
   const layout = h('div', { class: 't-layout' });

@@ -6,11 +6,11 @@
    Writes <out>.artifact.html (publish it, with the `files` map the build prints; it reads its entries from its own
    database), the stylesheet and script it loads in <out>.files/, and <out>.preview.html (a full document to open
    locally, where a stand-in database serves the <date>.json files in --entries, or none). The font link, the shared
-   stylesheet, the sounds and the speaker button come from the kit (kit/build/). */
+   stylesheet, the sounds, the theme button and the speaker button come from the kit (kit/build/). */
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Entry, PageConfig } from '../runtime/types';
-import { FONTS, assets, esc, json, preview, publishLines, runtime, soundButton, styles } from '../kit/build/page';
+import { FONTS, THEME, assets, esc, json, preview, publishLines, runtime, soundButton, styles, themeButton } from '../kit/build/page';
 import { loadConfig, opt } from './lib';
 
 const ROOT = join(import.meta.dir, '..');
@@ -32,6 +32,7 @@ const name = esc(config.name);
 // after the markup they fill.
 const page = `<title>${name} Changelog</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+${THEME}
 ${FONTS}
 <link rel="stylesheet" href="${at['changelog.css']}">
 <header class="k-bar bar">
@@ -40,7 +41,7 @@ ${FONTS}
       <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="1" width="18" height="18" rx="5" fill="currentColor"/><path d="M6 10.5h3l1.5-4 2 7 1.5-3h0" fill="none" stroke="var(--bg)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span data-name>${name}</span><span class="sep">/</span><span class="sub">Changelog</span>
     </a>
-    ${soundButton()}
+    <div class="bar-end">${themeButton()}${soundButton()}</div>
   </div>
 </header>
 <main id="app" class="page gutter" aria-live="polite">

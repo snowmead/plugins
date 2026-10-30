@@ -8,7 +8,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import type { SoundName, Sounds } from '../web/types';
 
-export { ICON, soundButton } from '../web/icons';
+export { ICON, soundButton, themeButton } from '../web/icons';
 
 const KIT = join(import.meta.dir, '..');
 
@@ -20,6 +20,10 @@ export const json = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c');
     until they arrive (display=swap). */
 export const FONTS = '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
   + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap">';
+
+/** Puts the reader's kept theme on the root before the first paint: the runtime loads after the markup, too late to
+    stop a flash of the other theme. It goes right after the title. kit/web/theme.ts keeps the choice. */
+export const THEME = `<script>try{const t=JSON.parse(localStorage.getItem('kit:theme'));if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script>`;
 
 /** The page's stylesheet: the kit's tokens and parts, then each of `files` (the skill's own CSS) on top. */
 export async function styles(...files: string[]) {

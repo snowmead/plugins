@@ -6,7 +6,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { browser, findChrome } from '../kit/build/chrome';
+import { browser, findChrome, themeChecks } from '../kit/build/chrome';
 
 const ROOT = join(import.meta.dir, '..');
 findChrome();
@@ -291,6 +291,7 @@ try {
       chromeTab.close();
     }
   }
+  failed += await themeChecks('file://' + join(tmp, 'plan.preview.html'), join(tmp, 'profile-theme'));
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

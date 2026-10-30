@@ -4,6 +4,9 @@
 const svg = (body: string, view = 16, extra = 'fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"') =>
   `<svg viewBox="0 0 ${view} ${view}" ${extra} aria-hidden="true">${body}</svg>`;
 
+/** lucide's own 24 px drawing, in the kit's line weight once it shows at 16 px. */
+const LUCIDE = 'fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"';
+
 export const ICON = {
   left: svg('<path d="M10 3.5 5.5 8l4.5 4.5"/>'),
   right: svg('<path d="M6 3.5 10.5 8 6 12.5"/>'),
@@ -21,6 +24,8 @@ export const ICON = {
   note: svg('<circle cx="8" cy="8" r="6"/><path d="M8 5.5v3M8 10.5v.01"/>'),
   tip: svg('<path d="M6 12.5h4M6.5 14.5h3M8 1.5a4.5 4.5 0 0 0-2.5 8.2V11h5V9.7A4.5 4.5 0 0 0 8 1.5Z"/>'),
   warn: svg('<path d="M7.13 2.5 1.6 12a1 1 0 0 0 .87 1.5h11.06a1 1 0 0 0 .87-1.5L8.87 2.5a1 1 0 0 0-1.74 0Z"/><path d="M8 6.5v2.5M8 11v.01"/>'),
+  sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>', 24, LUCIDE),
+  moon: svg('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>', 24, LUCIDE),
 };
 
 /** The speaker button every page puts at the end of its bar. kit/web/sound.ts wires each one on the page at load
@@ -28,3 +33,13 @@ export const ICON = {
 export const soundButton = (cls = 'k-btn is-ghost is-icon') =>
   `<button type="button" class="${cls} k-sound" data-k-sound aria-label="Sound" aria-pressed="true" title="Mute sounds">`
   + ICON.sound.replace('<svg ', '<svg class="is-on" ') + ICON.mute.replace('<svg ', '<svg class="is-off" ') + '</button>';
+
+/** The theme button every page puts in its bar, beside the speaker: shadcn/ui's mode toggle, a sun or a moon over a
+    menu of Light, Dark and System. kit/web/theme.ts wires each one on the page at load (and any made later, through
+    bindThemeButton). */
+export const themeButton = (cls = 'k-btn is-ghost is-icon') =>
+  `<div class="k-theme" data-k-theme data-uncommentable><button type="button" class="${cls}" aria-label="Toggle theme" aria-haspopup="menu" aria-expanded="false" title="Theme">`
+  + ICON.sun.replace('<svg ', '<svg class="is-sun" ') + ICON.moon.replace('<svg ', '<svg class="is-moon" ') + '</button>'
+  + '<div class="k-menu" role="menu" aria-label="Theme" hidden>'
+  + ['Light', 'Dark', 'System'].map((t) => `<button type="button" role="menuitemradio" aria-checked="false" value="${t.toLowerCase()}">${t}${ICON.check}</button>`).join('')
+  + '</div></div>';

@@ -1,5 +1,5 @@
 /* kit: the tokens and base every page shares. shadcn/ui's neutral theme in Geist, light and dark: the system picks,
-   unless the viewer sets data-theme on the root. Pages build on these names and add only what is theirs. */
+   unless data-theme on the root says otherwise (kit/web/theme.ts). Pages build on these names and add only what is theirs. */
 :root {
   --bg: oklch(1 0 0);
   --fg: oklch(0.145 0 0);
@@ -26,6 +26,7 @@
   --radius: 0.625rem;
   --shadow: 0 1px 2px oklch(0 0 0 / 0.04), 0 8px 24px -12px oklch(0 0 0 / 0.12);
   --bar-h: 52px;
+  --dark: 0;                    /* 1 while the dark palette shows: the theme button turns with it */
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -35,6 +36,7 @@
     --primary: oklch(0.922 0 0); --primary-fg: oklch(0.205 0 0); --ok: oklch(0.72 0.16 155); --bad: oklch(0.704 0.191 22.216);
     --c1: oklch(0.7 0.16 258); --c2: oklch(0.8 0.15 70); --c3: oklch(0.74 0.15 155); --c4: oklch(0.74 0.17 350); --c5: oklch(0.7 0.17 295);
     --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px -12px oklch(0 0 0 / 0.6);
+    --dark: 1;
     color-scheme: dark;
   }
 }
@@ -45,6 +47,7 @@
   --primary: oklch(0.922 0 0); --primary-fg: oklch(0.205 0 0); --ok: oklch(0.72 0.16 155); --bad: oklch(0.704 0.191 22.216);
   --c1: oklch(0.7 0.16 258); --c2: oklch(0.8 0.15 70); --c3: oklch(0.74 0.15 155); --c4: oklch(0.74 0.17 350); --c5: oklch(0.7 0.17 295);
   --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px -12px oklch(0 0 0 / 0.6);
+  --dark: 1;
   color-scheme: dark;
 }
 

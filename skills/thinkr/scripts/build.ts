@@ -17,7 +17,7 @@
    The font link, the shared stylesheet, the sounds, the library pinning and the diagrams come from the kit
    (kit/build/). */
 import { join } from 'node:path';
-import { FONTS, assets, preview, publishLines, runtime, styles } from '../kit/build/page';
+import { FONTS, THEME, assets, preview, publishLines, runtime, styles } from '../kit/build/page';
 import { type LibMap, libs, preloads } from '../kit/build/libs';
 import { need as needIn } from '../kit/build/deps';
 import { diagrams } from '../kit/build/diagram';
@@ -230,7 +230,7 @@ async function pack(src: string, stem: string, libmap: LibMap) {
   const { at: href, files } = await assets(stem, { 'thinkr.css': css, 'thinkr.js': js });
   // title first (the viewer reads it from the first 8 KB), then preloads so libraries download while the page
   // parses; the runtime goes after the content and before page scripts, so they can call thinkr.figure()
-  const html = `${title}\n<meta name="claude:viewport-fit-sides" content="cover">\n${preloads(use, libmap)}\n${FONTS}\n`
+  const html = `${title}\n<meta name="claude:viewport-fit-sides" content="cover">\n${THEME}\n${preloads(use, libmap)}\n${FONTS}\n`
     + `<link rel="stylesheet" href="${href['thinkr.css']}">\n` + (math.css ? `<style>\n${math.css}</style>\n` : '')
     + math.html.trimEnd() + '\n'
     + `<script>window.THINKR = ${JSON.stringify({ libs: libmap, use })};</script>\n<script src="${href['thinkr.js']}"></script>\n`

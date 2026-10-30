@@ -25,6 +25,23 @@
 /* the speaker button: aria-pressed says whether sound is on, and picks its icon */
 .k-sound[aria-pressed="true"] .is-off, .k-sound[aria-pressed="false"] .is-on { display: none; }
 
+/* the theme button: shadcn/ui's mode toggle, a sun that turns into a moon as the page goes dark */
+.k-theme { position: relative; display: inline-flex; flex: none; }
+.k-theme > .k-btn { position: relative; }
+.k-theme > .k-btn svg { transition: transform .15s; }
+.k-theme .is-sun { transform: rotate(calc(var(--dark) * -90deg)) scale(calc(1 - var(--dark))); }
+.k-theme .is-moon { position: absolute; transform: rotate(calc((1 - var(--dark)) * 90deg)) scale(var(--dark)); }
+
+/* ---------- menu: shadcn/ui's dropdown, under its button at the right edge; the item a menu has chosen shows a check */
+.k-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; min-width: 8rem; padding: 4px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px);
+  background: var(--card); color: var(--fg); box-shadow: var(--shadow); transform-origin: top right; animation: k-menu-in .15s; }
+.k-menu > button { appearance: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: calc(var(--radius) - 4px);
+  background: transparent; color: inherit; font: 400 14px/20px var(--font); text-align: left; cursor: default; outline: none; }
+.k-menu > button:hover, .k-menu > button:focus-visible { background: var(--muted); }
+.k-menu > button svg { flex: none; width: 12px; height: 12px; }
+.k-menu > button[aria-checked="false"] svg { visibility: hidden; }
+@keyframes k-menu-in { from { opacity: 0; transform: translateY(-8px) scale(.95); } }
+
 /* ---------- segmented control: tabs, or a choice of two or three */
 .k-seg { display: inline-flex; flex: none; align-items: stretch; gap: 2px; height: 34px; padding: 3px; border-radius: var(--radius); background: var(--muted); }
 .k-seg > button { appearance: none; border: 0; padding: 0 12px; border-radius: calc(var(--radius) - 3px); background: transparent; color: var(--muted-fg);

@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Entry } from '../runtime/types';
 import { type RawPr, type Run, dateIn, inWindow, label, loadConfig, prStats, runsOf, span, windowCi } from './lib';
-import { browser, findChrome } from '../kit/build/chrome';
+import { browser, findChrome, themeChecks } from '../kit/build/chrome';
 
 const ROOT = join(import.meta.dir, '..');
 const argv = Bun.argv.slice(2);
@@ -193,6 +193,7 @@ try {
       console.log(`ok    page (${Object.keys(expect).length} checks, no errors; ${Object.entries(ms).map(([k, v]) => `${k} ${v}ms`).join(', ')})`);
     failed += bad.length + slow.length + tab.errors.length;
   }
+  failed += await themeChecks('file://' + join(tmp, 'changelog.preview.html'), join(tmp, 'profile-theme'));
 } finally {
   tab.close();
   rmSync(tmp, { recursive: true, force: true });
