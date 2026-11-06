@@ -197,6 +197,23 @@ same('each section has a box for its diagram', [...built.html.matchAll(/<div cla
 const drawn = data ? JSON.parse(data).prs[0].diagrams : {};
 check('a diagram is drawn into SVG in the kit\'s colors, with its marks', /<svg [^>]*class="pele pele-flowchart"/.test(drawn.overview?.html ?? '') && /class="pele-node [^"]*\bnew" data-id="B"/.test(drawn.overview?.html ?? ''), drawn.overview?.html?.slice(0, 300));
 same('a node\'s ref names its line and its chapter', drawn.overview?.refs, { B: { path: 'src/a.rs', line: 11, side: 'n', ch: 'one', title: 'a.rs 11, chapter 01: The first value' } });
+// The overview reads top down: the system as it is, then the change, then the words the chapters use.
+const top = build({ ...guideFor('See [`x10`](ref:src/a.rs:11), then `x10` again, and one value.'), overview: { background: 'Values are numbers the app reads at start.', terms: [{ term: '`x10`', means: 'Ten times the `value`.' }, { term: 'value', means: 'A number the app reads.' }, { term: 'gizmo', means: 'Used nowhere.' }], summary: 'Changes two values.', diagram: { ...dia('one sets x10'), refs: { B: 'src/a.rs:11' } } } });
+check('the overview opens with its background, then this change', top.status === 0 && /<h3 class="gr-sub">Background<\/h3><p>[^]*?<\/p><h3 class="gr-sub">This change<\/h3><p>Changes two values\.<\/p>/.test(top.html), top.log);
+check('a term is marked where the overview first uses it, and only there', top.html.includes('<p><span class="gr-term" tabindex="0" aria-describedby="term-1">Values</span> are numbers') && top.html.includes('<p>Changes two values.</p>'), top.html.slice(top.html.indexOf('id="overview"'), top.html.indexOf('id="overview"') + 900));
+check('a chapter marks a code term outside its links, and a plain one', /<a [^>]*class="ref"[^>]*><code>x10<\/code><\/a>, then <span class="gr-term" tabindex="0" aria-describedby="term-0"><code>x10<\/code><\/span> again, and one <span class="gr-term" tabindex="0" aria-describedby="term-1">value<\/span>\./.test(top.html), top.html.slice(top.html.indexOf('id="c-one"'), top.html.indexOf('id="c-one"') + 1200));
+check('the meanings wait, hidden, for the tooltip', top.html.includes('<div class="gr-term-defs" hidden><span id="term-0">Ten times the <code>value</code>.</span><span id="term-1">A number the app reads.</span>'));
+check('a term the text never uses warns', /overview\.terms\[2\] \(gizmo\) is in no text outside a link/.test(top.log), top.log);
+check('an overview without a background warns', /overview\.background is missing/.test(built.log), built.log);
+check('a short sentence does not warn', !/a sentence has/.test(built.log), built.log);
+const long = build(guideFor('This sentence goes on and on, with one word after another word, until it has far more than twenty five words in it, which a reader cannot hold in mind.'));
+const codeLed = build(guideFor('This first sentence has a few plain words in it, about ten. `two` then starts a second sentence that also has some words in it.'));
+check('a sentence that starts with a code name is a sentence of its own', !/a sentence has/.test(codeLed.log), codeLed.log);
+check('a long sentence warns, and the page is still built', long.status === 0 && /chapters\[0\] \(one\)\.body: a sentence has \d+ words/.test(long.log), long.log);
+// The overview says the change in plain words, and a chapter starts with what its part does before it names code.
+check('a code name in the summary warns', /overview\.summary names `x10`\. Say it in plain words/.test(build({ ...guideFor('One.'), overview: { summary: 'Sets `x10`.', diagram: dia('x') } }).log));
+check('a chapter that opens on code warns', /chapters\[1\] \(two\)\.body opens on code \("`two` changes too\./.test(built.log), built.log);
+check('a chapter that opens in plain words does not', !/chapters\[2\] \(notes\)\.body opens on code/.test(built.log), built.log);
 const outside = build({ ...guideFor('One.'), overview: { summary: 'S.', diagram: { ...dia('x'), refs: { A: 'README.md:3' } } } });
 same('a node\'s ref to a file the pull request does not change goes to GitHub', JSON.parse(/^window\.GR_DATA = (.*);\n$/s.exec(outside.data)?.[1] ?? '{"prs":[{}]}').prs[0].diagrams?.overview?.refs,
   { A: { path: 'README.md', line: 3, url: `https://github.com/example/scratch/blob/${diff.head}/README.md#L3`, title: 'README.md 3, on GitHub' } });
@@ -238,6 +255,7 @@ const refusals: [string, unknown, RegExp][] = [
     { id: 'two', title: 'The second value', body: ['Two.'], files: [{ path: 'src/a.rs', hunks: [2] }] } as Guide['chapters'][number],
     ...later,
   ]), /chapters\[1\]\.diagram is missing/],
+  ['a term without its meaning', { ...guideFor('One.'), overview: { summary: 'S.', terms: [{ term: 'x' }], diagram: dia('x') } }, /overview\.terms\[0\] needs a "term" and what it "means"/],
   ['a before / after, which a diagram replaced', { ...guideFor('One.'), overview: { summary: 'S.', beforeAfter: { lines: [{ t: 'x' }] } } }, /overview\.beforeAfter is gone/],
   ['a diagram pele cannot read', { ...guideFor('One.'), overview: { summary: 'S.', diagram: { mermaid: 'flowchart LR\n  A[x --> B' } } }, /overview\.diagram\.mermaid: Parse error on line \d/],
   ['a ref to a node the diagram does not have', { ...guideFor('One.'), overview: { summary: 'S.', diagram: { ...dia('x'), refs: { Z: 'src/a.rs:11' } } } }, /overview\.diagram\.refs\.Z: the diagram has no node "Z"\. Its nodes: A, B/],
@@ -1091,6 +1109,24 @@ try {
   const stack = buildStackDemo(join(dir, 'stack'), true);
   if (demo.code || stack.code) { console.log(demo.log + stack.log); process.exit(1); }
   await runPage('page', join(dir, 'demo.preview.html'), RUN, expect, budget);
+  // A term is marked in the text; pointing at it opens its meaning in one tooltip, beside it and inside the window.
+  await runPage('terms', join(dir, 'demo.preview.html'), `
+    const terms = [...document.querySelectorAll('#overview .gr-term')];
+    r.marked = terms.map((t) => t.textContent).join(', ');
+    const term = terms[0];
+    term.scrollIntoView({ block: 'center' });
+    term.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    await sleep(50);
+    const tip = document.querySelector('.gr-tip');
+    r.open = !!tip && !tip.hidden && tip.textContent === document.getElementById(term.getAttribute('aria-describedby')).textContent;
+    const b = tip.getBoundingClientRect(), tb = term.getBoundingClientRect();
+    r.beside = b.bottom <= tb.top + 1 || b.top >= tb.bottom - 1;
+    r.inside = b.left >= 0 && b.right <= innerWidth;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    r.escape = tip.hidden;
+    term.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    term.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, relatedTarget: document.body }));
+    r.leave = tip.hidden;`, { marked: 'endpoint, delivery, worker', open: true, beside: true, inside: true, escape: true, leave: true }, { boot: BUDGET.boot });
   await runPage('markdown', join(dir, 'demo.preview.html'), MD_RUN, MD_EXPECT, { boot: BUDGET.boot, mdFold: BUDGET.interaction, mdChanges: BUDGET.interaction, mdSource: BUDGET.interaction, mdNote: BUDGET.interaction }, async (tab, r) => {
     // Narrower, there is no margin: the comment sits under its block, as a line comment sits under its line.
     await tab.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 900, deviceScaleFactor: 1, mobile: false });

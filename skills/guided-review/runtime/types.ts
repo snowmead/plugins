@@ -92,6 +92,7 @@ export interface StateTable {
   rows: (string[] | { cells: string[]; new?: boolean; gone?: boolean })[];
   note?: string;
 }
+export interface Term { term: string; means: string }
 export type FileSel = string | { path: string; hunks?: number[] };
 export interface Chapter {
   id: string;
@@ -117,7 +118,16 @@ export interface Guide {
   /** The spec the change was built from: its thinkr design page (`url`, opened on its Spec view) and the design
       version it implements. */
   spec?: { url: string; version?: number };
-  overview: { summary: Text; steps?: string[]; diagram: Diagram };
+  overview: {
+    /** What the system or part is, what uses it, and how it works before the change: for a reader who has never
+        worked on it. */
+    background?: Text;
+    /** The domain words and code names the reader needs, each with a short meaning in plain words. */
+    terms?: Term[];
+    summary: Text;
+    steps?: string[];
+    diagram: Diagram;
+  };
   chapters: Chapter[];
 }
 

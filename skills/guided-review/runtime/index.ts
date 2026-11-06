@@ -15,6 +15,7 @@ import { markChapter, markFile, progress, saveMarks } from './marks';
 import { choose, current, go, jump, onScroll, pin, show, step, toCard, togglePanel, view } from './nav';
 import { startComments, toggleNotes } from './comments';
 import { followNode, startDiagrams } from './diagrams';
+import { startTerms } from './terms';
 
 /** Mark a chapter from a click or a key, with its sound; the last chapter reviewed sounds its own. */
 function reviewChapter(c: Ctx, id: string, on: boolean) {
@@ -152,6 +153,7 @@ function start() {
   startDiffStyle();
   startComments();
   startDiagrams();
+  startTerms();
   if (rest === 'diff') show('diff');
   else if (rest && byOwnId(c, rest) && !byOwnId(c, rest)!.classList.contains('gr-pr')) pin(byOwnId(c, rest)!);
   performance.measure('gr:boot', { start: T0, end: performance.now() });

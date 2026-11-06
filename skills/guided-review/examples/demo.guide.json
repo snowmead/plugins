@@ -9,16 +9,47 @@
  },
  "diffStyle": "unified",
  "overview": {
-  "summary": "A webhook delivery was posted once, so a timeout or a 503 during the receiver's deploy lost the event for good. This pull request retries the failures that may pass later, up to six posts over about 15 minutes, and fails the rest at once.",
+  "background": "This service sends webhooks: it tells a customer's server when an event happens. Each event on its way to one endpoint is a delivery, stored as a row with a status. A worker loop takes the pending deliveries and posts each one, signed, to its endpoint. Before this change, each delivery got one post.",
+  "summary": "When the one post of a delivery failed, the event was lost. A timeout, or a 503 while the customer deployed, was enough. This pull request posts again later when a failure can pass: up to 6 posts over about 15 minutes. Other failures still fail at once.",
   "steps": [
-   "`deliver` sorts each failure: retry it with backoff, or fail it now.",
-   "The worker takes the deliveries whose next attempt is due.",
-   "`sign` moves to its own module.",
-   "The docs, a migration, the tests and the API schema follow."
+   "After a failed post, the code decides: post again later, or fail now.",
+   "The worker also takes the deliveries whose next post is due.",
+   "The signing code moves to its own file, with no change.",
+   "The docs, the table, the tests and the API schema follow."
+  ],
+  "terms": [
+   {
+    "term": "endpoint",
+    "means": "A customer's URL that subscribes to events."
+   },
+   {
+    "term": "delivery",
+    "means": "One event on its way to one endpoint, stored with a status: `pending`, `delivered`, `failed`, and now `retrying`."
+   },
+   {
+    "term": "`deliver`",
+    "means": "The function that posts one delivery and stores the outcome."
+   },
+   {
+    "term": "`drain`",
+    "means": "One run of the worker. It takes a batch of due deliveries and calls `deliver` on each."
+   },
+   {
+    "term": "`retrying`",
+    "means": "A new status. The post failed, and the delivery waits for its next post."
+   },
+   {
+    "term": "`nextAttemptAt`",
+    "means": "When a waiting delivery is due for its next post, in ms since the epoch."
+   },
+   {
+    "term": "worker",
+    "means": "A loop that runs in the background and sends the deliveries that are due, a batch at a time."
+   }
   ],
   "diagram": {
    "title": "Where a delivery goes after each post",
-   "mermaid": "flowchart LR\n  W[\"drain takes the due deliveries\"]:::changed --> D[\"deliver posts the signed event\"]\n  D -->|2xx| OK[delivered]\n  D -->|\"timeout, 408, 429, 5xx\"| R[\"retrying, due at nextAttemptAt\"]:::new\n  D -->|\"other 4xx, or the 6th post\"| F[failed]:::changed\n  R -.->|\"30 s to 8 min later\"| W\n  D -.->|before| X[\"any failure: failed at once\"]:::removed",
+   "mermaid": "flowchart LR\n  W[\"worker: drain takes the due deliveries\"]:::changed --> D[\"deliver: posts the signed event\"]\n  D -->|2xx| OK[delivered]\n  D -->|\"timeout, 408, 429, 5xx\"| R[\"retrying, due at nextAttemptAt\"]:::new\n  D -->|\"other 4xx, or the 6th post\"| F[failed]:::changed\n  R -.->|\"30 s to 8 min later\"| W\n  D -.->|before| X[\"any failure: failed at once\"]:::removed",
    "refs": {
     "W": "src/webhooks/queue.ts:7",
     "D": "src/webhooks/deliver.ts:11",
@@ -34,8 +65,8 @@
    "id": "retry-decision",
    "title": "Retry what may pass later",
    "body": [
-    "`deliver` used to post once and mark anything but a 2xx as failed. It now counts `attempts` and sorts each failure with [`retryable`](ref:src/webhooks/backoff.ts:13): a timeout, a network error, a 408, a 429 or a 5xx goes to `retrying`, due at [`nextAttemptAt`](ref:src/webhooks/backoff.ts:7). Any other 4xx fails at once.",
-    "The sixth failed post fails for good. The delay doubles from 30 s and adds ±20% jitter, so endpoints that fail together are not retried together."
+    "The worker hands each delivery to `deliver`, which posts it to its endpoint and stores the outcome. Before, any answer that was not a 2xx made the delivery fail. Now `deliver` counts the posts in `attempts`. It asks [`retryable`](ref:src/webhooks/backoff.ts:13) if the failure can pass later: a timeout, a network error, a 408, a 429 or a 5xx can. Those deliveries go to `retrying`, due at [`nextAttemptAt`](ref:src/webhooks/backoff.ts:7). Any other 4xx fails at once.",
+    "The sixth failed post fails for good. The wait doubles from 30 s, and a random part of up to 20% is added. Then endpoints that fail at the same time do not get their retries at the same time."
    ],
    "table": {
     "title": "Outcome of a post",
@@ -102,8 +133,8 @@
    "id": "worker",
    "title": "The worker picks due retries",
    "body": [
-    "[`drain`](ref:src/webhooks/queue.ts:6), which [`bun run worker`](ref:README.md:3) calls, used to take `pending` deliveries, oldest first. It now takes `pending` and `retrying` ones whose `nextAttemptAt` has passed, soonest first, and hands the same `now` to `deliver`, so one batch sees one clock.",
-    "`Delivery` gains `attempts` and `nextAttemptAt`. The log line carries the attempt number."
+    "The worker is a loop that [`bun run worker`](ref:README.md:3) starts. Each run calls [`drain`](ref:src/webhooks/queue.ts:6), which takes a batch of deliveries and posts each one. Before, `drain` took the `pending` deliveries, oldest first. Now it takes the `pending` and `retrying` deliveries whose `nextAttemptAt` has passed, soonest first.",
+    "`drain` gives the same time, `now`, to each call of `deliver`, so one batch uses one clock. The `Delivery` type gets `attempts` and `nextAttemptAt`. The log line now includes the attempt number."
    ],
    "diagram": {
     "title": "What one run of the worker takes",
@@ -124,7 +155,7 @@
   {
    "id": "signing",
    "title": "Signing in its own module",
-   "body": "`sign` moved unchanged from `deliver.ts` to [`sign.ts`](ref:src/webhooks/sign.ts:4), and `deliver.ts` imports it. The retry code and the code that signs now live apart; the signature format does not change.",
+   "body": "Each post carries a signature, so the customer can check that it comes from us. The function that makes it, `sign`, moves from `deliver.ts` to [`sign.ts`](ref:src/webhooks/sign.ts:4) with no change, and `deliver.ts` imports it. The retry code and the signing code are now in different files. The signature format does not change.",
    "diagram": {
     "title": "Where sign lives",
     "mermaid": "flowchart LR\n  D[\"deliver.ts\"] -->|\"import { sign }\"| S[\"sign.ts: sign(payload, secret, at)\"]:::new\n  D -.->|before| X[\"sign at the end of deliver.ts\"]:::removed",
@@ -148,7 +179,7 @@
    "id": "docs",
    "kind": "docs",
    "title": "Delivery in the docs",
-   "body": "The Delivery section says which answers are retried, how far apart, and when a delivery fails, with [a table](ref:docs/webhooks.md:16) and a drawing of the six posts. It asks receivers to make their handlers idempotent, since a retry can bring an event they already handled.",
+   "body": "The webhooks guide in `docs/webhooks.md` is for the customers who receive our webhooks. Its Delivery section now says which answers get a retry, how long each wait is, and when a delivery fails. It has [a table](ref:docs/webhooks.md:16) and a drawing of the six posts. It also asks customers to make their handlers idempotent, safe to run twice: a retry can bring an event that they already received.",
    "diagram": {
     "title": "What the Delivery section now says",
     "mermaid": "flowchart LR\n  A[\"Delivery: which answers retry, and how often\"]:::changed --> T[\"table of the six posts\"]:::new\n  A --> I[\"drawing of the six posts\"]:::new\n  A --> N[\"make your handler idempotent\"]:::new",
@@ -169,8 +200,8 @@
    "kind": "database",
    "title": "Attempts and due time in the table",
    "body": [
-    "The migration adds `attempts` and `next_attempt_at` with defaults of 0, so rows that exist keep their status and are due at once. The status check gains `retrying`.",
-    "The partial index on pending rows becomes one on `next_attempt_at` for pending and retrying rows, which is the worker's new query."
+    "The `deliveries` table stores one row per delivery. The migration adds two columns, `attempts` and `next_attempt_at`, each with a default of 0. So the rows that exist keep their status and are due at once. The status check now accepts `retrying`.",
+    "The old partial index covered only the pending rows. The new one is on `next_attempt_at`, for pending and retrying rows. That is the query the worker now makes."
    ],
    "diagram": {
     "title": "The deliveries table",
@@ -191,7 +222,7 @@
    "id": "tests",
    "kind": "tests",
    "title": "Tests for retries and backoff",
-   "body": "The 500 case now expects `retrying` and a later `nextAttemptAt`. New cases cover a 404, the sixth failure, the doubling delay and its one-hour cap, and which codes are retryable.",
+   "body": "The tests call `deliver` against a small fake server and a fake database, and check the stored outcome. The 500 case now expects `retrying` and a later `nextAttemptAt`. New cases cover a 404, the sixth failure, the doubling wait with its 1-hour cap, and which codes can retry.",
    "diagram": {
     "title": "The cases the tests cover",
     "mermaid": "flowchart LR\n  D[deliver] --> T1[\"2xx delivers\"]\n  D --> T2[\"a 500 retries later\"]:::changed\n  D --> T3[\"a 404 fails at once\"]:::new\n  D --> T4[\"the 6th failure fails\"]:::new\n  B[backoff] --> T5[\"the delay doubles, up to an hour\"]:::new\n  B --> T6[\"which codes retry\"]:::new",
@@ -213,7 +244,7 @@
    "id": "schema",
    "kind": "generated",
    "title": "The API schema",
-   "body": "`WebhookDelivery` picks up `retrying`, `attempts` and `next_attempt_at` from `src/db.ts`. Nothing else in its shape changes.",
+   "body": "The API schema describes a delivery to the users of the public API. A script generates it from the types in `src/db.ts`. So `WebhookDelivery` gets `retrying`, `attempts` and `next_attempt_at` from those types. Nothing else in its shape changes.",
    "diagram": {
     "title": "Where the schema comes from",
     "mermaid": "flowchart LR\n  S[\"Delivery in src/db.ts\"]:::changed -->|scripts/schema.ts| G[\"WebhookDelivery\"]:::changed\n  G --> F[\"retrying, attempts, next_attempt_at\"]:::new",

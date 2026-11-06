@@ -1,6 +1,6 @@
 ---
 name: guided-review
-description: Builds a guided code review as a Claude Artifact, of a pull request, yours or someone else's, of a branch, of uncommitted local changes, or of several pull requests (a stack, or any set). The page opens with an overview and a diagram of the whole change, then walks the diff as short chapters, each explained beside its code and drawn as a diagram of what it changes, with review marks, a file tree and syntax-highlighted diffs. Readers comment on lines, files or the whole change in a margin beside the code and send the comments to Claude, which changes the code and rebuilds the page, or only answers on someone else's pull request; each sent comment stays as a thread with a Claude agent of its own. Use when asked to walk someone through, explain or prepare a review of what a pull request, a branch, a stack or the working tree changed, to review someone else's pull request, to write a review guide, when review comments arrive from a guide page, or when a pull request you drive is green and about to merge.
+description: Builds a guided code review as a Claude Artifact, of a pull request, yours or someone else's, of a branch, of uncommitted local changes, or of several pull requests (a stack, or any set). The page reads top down for an engineer who does not know the system: it opens with what the system is and how it works today, in short plain sentences, then what changed and why and a diagram, with each word a reader may not know marked and explained in a tooltip, of the whole change, then walks the diff as short chapters, each explained beside its code and drawn as a diagram of what it changes, with review marks, a file tree and syntax-highlighted diffs. Readers comment on lines, files or the whole change in a margin beside the code and send the comments to Claude, which changes the code and rebuilds the page, or only answers on someone else's pull request; each sent comment stays as a thread with a Claude agent of its own. Use when asked to walk someone through, explain or prepare a review of what a pull request, a branch, a stack or the working tree changed, to review someone else's pull request, to write a review guide, when review comments arrive from a guide page, or when a pull request you drive is green and about to merge.
 license: Apache-2.0. Complete terms in LICENSE.txt
 compatibility: Claude Code, or another agent with a shell and git that can publish claude.ai Artifacts. Needs Bun 1.2 or newer; gh for someone else's pull request; Chrome is optional, for screenshots.
 metadata:
@@ -11,11 +11,17 @@ allowed-tools: Bash(bun ${CLAUDE_SKILL_DIR}/scripts/gather.ts *) Bash(bun ${CLAU
 # Guided review
 
 A guided review explains a pull request to a reviewer who did not write it, so they need not jump between files to
-work out what it does. It is one page, published as a Claude Artifact: an **overview** (what changed and why, the
-main steps, and a **diagram** of the whole change, its new, changed and removed parts marked), then **chapters**:
+work out what it does. Write for an engineer on the same team who works on another system: they can read code, but
+they do not know this system's words or history. The page reads top down, from what the system is to what each line
+does. It is one page, published as a Claude Artifact: an **overview** (the **background**, which says what the
+system is and how it works before the change; what changed and why; the main steps;
+and a **diagram** of the whole change, its new, changed and removed parts marked), then **chapters**:
 the files and hunks grouped by idea, in reading order, each a short text beside its code, under a diagram of what
 that chapter changes. The diagrams are Mermaid, drawn when the page is built, in the page's colors. The core
-change comes first; docs follow; database, tests and generated files come last. Readers tick chapters as reviewed,
+change comes first; docs follow; database, tests and generated files come last. Each chapter starts with what its
+part of the system does, then says what changed. Each word a reader from another system may not know (the guide's
+**terms**) is marked where a section first uses it, and its meaning opens in a tooltip. The text is short, plain sentences, close to Simplified Technical
+English ([writing.md](references/writing.md#style)). Readers tick chapters as reviewed,
 and the marks stay in their browser. One page can also hold several pull requests.
 
 ## Files
@@ -99,8 +105,8 @@ request: rebuilding from the same `guide.json` and publishing the same file keep
    never `diff.json`; the description, commits and thread; the callers of each changed function; and, when the
    description has a `Spec:` line, the spec the change was built from. For a snapshot or a clone, use the command
    gather printed.
-3. **Write `<work>/guide.json`.** Plan the chapters first, then each chapter's diagram, then the overview and its
-   diagram:
+3. **Write `<work>/guide.json`.** Plan the chapters first, then each chapter's diagram, then the overview (its
+   background, summary, steps and terms) and its diagram:
    [writing.md](references/writing.md) has the rules and [guide-format.md](references/guide-format.md) the fields.
    Put the pull request's video, if it has one, in `links`, and the spec's link, if it has one, in `spec`, so the
    page points to the spec that produced the change. Leave `diffStyle` out (unified) unless the user asks
@@ -111,7 +117,8 @@ request: rebuilding from the same `guide.json` and publishing the same file keep
    bun ${CLAUDE_SKILL_DIR}/scripts/build.ts --diff=<work>/diff.json --guide=<work>/guide.json
    ```
    Fix every `error`: a file or hunk in no chapter, a ref that names no line, a core chapter after a tests chapter.
-   Read every `warn` and fix the ones that are right: long chapters, a wide or crowded diagram, a hunk shown twice. It
+   Read every `warn` and fix the ones that are right: no background, a long sentence, long chapters, a wide or
+   crowded diagram, a hunk shown twice. It
    writes `<work>/guide.artifact.html` (to publish), `<work>/guide.files/` (its stylesheet, runtime and data,
    published with it) and `<work>/guide.preview.html` (to open locally), and prints the `files` map to publish with.
    Once a day the build first checks any newer @pierre/diffs or @pierre/trees release in a page (`libs: checking …`),

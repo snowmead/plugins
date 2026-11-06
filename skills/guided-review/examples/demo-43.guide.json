@@ -8,10 +8,29 @@
   "head": "endpoint-retrying"
  },
  "overview": {
-  "summary": "#42 added a retrying state, but the endpoint page still counted deliveries as pending, delivered or failed, so a delivery waiting for its next post was invisible. This pull request counts each of the four states and shows when the soonest retry is due.",
+  "background": "Each endpoint, a customer's URL that gets our webhooks, has a page of its own. The page counts the endpoint's deliveries by status. A delivery is one event on its way to that endpoint. #42, the pull request under this one, added a fourth status, retrying: the post failed, and the delivery waits for its next post.",
+  "summary": "The endpoint page still counted only pending, delivered and failed deliveries. So a delivery that waited for a retry showed nowhere. This pull request counts all four statuses, and shows when the next retry is due.",
   "steps": [
-   "`deliveryCounts` counts the four states and finds the soonest retry.",
-   "The docs describe the endpoint page's counts."
+   "A new function counts the deliveries in each status and finds the next retry.",
+   "The docs describe the counts on the endpoint page."
+  ],
+  "terms": [
+   {
+    "term": "retrying",
+    "means": "The status of a delivery whose post failed and that waits for its next post, due at `nextAttemptAt`."
+   },
+   {
+    "term": "`deliveryCounts`",
+    "means": "The new function that gives the endpoint page its numbers."
+   },
+   {
+    "term": "`nextRetryAt`",
+    "means": "When the soonest retrying delivery is due, or `null` when none is retrying."
+   },
+   {
+    "term": "`Db`",
+    "means": "The interface the code uses to read and write the database."
+   }
   ],
   "diagram": {
    "title": "The endpoint page asks for its delivery counts",
@@ -29,8 +48,8 @@
    "id": "counts",
    "title": "Counts for every delivery state",
    "body": [
-    "[`deliveryCounts`](ref:src/api/endpoint.ts:15) asks the store for one count per state, in parallel, and reads the single retrying delivery with the smallest `nextAttemptAt` to say when the next post is due.",
-    "`Db` gains `count`, which takes the same filter as `find`. With no retrying delivery, `nextRetryAt` is `null`."
+    "The endpoint page needs one number per status. The new [`deliveryCounts`](ref:src/api/endpoint.ts:15) gives them: it asks the database for each count, in parallel. It also reads the retrying delivery with the smallest `nextAttemptAt`. That time is `nextRetryAt`, when the next post is due.",
+    "`Db` gets `count`, which takes the same filter as `find`. When no delivery is retrying, `nextRetryAt` is `null`."
    ],
    "table": {
     "title": "What the page shows",
@@ -87,7 +106,7 @@
    "id": "docs",
    "kind": "docs",
    "title": "The endpoint page in the docs",
-   "body": "A new section says what the endpoint page counts, and that Retrying shows when the next post is due.",
+   "body": "The webhooks guide in `docs/webhooks.md` is for the customers who receive our webhooks. A new section says what the endpoint page counts. It also says that the Retrying count shows when the next post is due.",
    "diagram": {
     "title": "The new section of the webhooks docs",
     "mermaid": "flowchart LR\n  W[\"webhooks.md\"] --> E[\"The endpoint page\"]:::new\n  E --> C[\"counts by state\"]:::new\n  E --> R[\"Retrying shows the next post's time\"]:::new",
@@ -103,7 +122,7 @@
    "id": "tests",
    "kind": "tests",
    "title": "Tests for the counts",
-   "body": "One test counts a mix of states and checks that the soonest retry wins; another checks that `nextRetryAt` is `null` with nothing retrying.",
+   "body": "The tests run `deliveryCounts` against a fake database. One test counts a mix of statuses and checks that the soonest retry wins. Another checks that `nextRetryAt` is `null` when no delivery is retrying.",
    "diagram": {
     "title": "The cases the tests cover",
     "mermaid": "flowchart LR\n  T[deliveryCounts] --> A[\"a mix of states; the soonest retry wins\"]:::new\n  T --> B[\"nothing retrying: nextRetryAt is null\"]:::new",

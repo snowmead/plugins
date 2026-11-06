@@ -141,6 +141,30 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .gr-body p { margin: 0 0 10px; }
 .gr-body ol { margin: 0 0 10px; padding-left: 20px; }
 .gr-body li { margin: 0 0 6px; padding-left: 2px; }
+/* the overview's levels: background, this change, terms */
+.gr-sub { margin: 18px 0 6px; font-size: 11px; font-weight: 500; letter-spacing: .03em; text-transform: uppercase; color: var(--muted-fg); }
+.gr-sub:first-child { margin-top: 0; }
+/* a term the guide defines: marked where a section first uses it; its meaning opens in .gr-tip */
+.gr-term {
+  cursor: help; border-radius: 3px; padding: 0 1px;
+  background: color-mix(in oklch, var(--c1) 9%, transparent);
+  border-bottom: 1.5px dashed color-mix(in oklch, var(--c1) 65%, transparent);
+  transition: background .15s;
+}
+.gr-term:hover, .gr-term:focus-visible { background: color-mix(in oklch, var(--c1) 18%, transparent); }
+.gr-term:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.gr-body .gr-term:has(> code) { background: none; padding: 0; border-bottom-width: 0; }
+.gr-body .gr-term > code {
+  background: color-mix(in srgb, var(--c1) 12%, var(--muted)); border: 1px dashed color-mix(in oklch, var(--c1) 60%, transparent);
+}
+.gr-body .gr-term:is(:hover, :focus-visible) > code { background: color-mix(in srgb, var(--c1) 22%, var(--muted)); }
+.gr-tip {
+  position: fixed; z-index: 60; max-width: min(320px, calc(100vw - 16px)); padding: 8px 11px; pointer-events: none;
+  background: var(--card); color: var(--fg-2); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow);
+  font-size: 13px; line-height: 1.5;
+}
+.gr-tip[hidden] { display: none; }
+.gr-tip code { font-size: .86em; background: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: .1em .35em; color: var(--fg); }
 :is(.gr-body, .gr-note-text) code, .gr-table code {
   font-size: .86em; background: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: .1em .35em; color: var(--fg);
 }

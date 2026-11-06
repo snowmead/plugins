@@ -6,6 +6,10 @@ published as a Claude Artifact. The pull request can be yours or someone else's.
 A big diff shown in file order makes the reviewer work out what the change does. A guided review does that work for
 them:
 
+- **Top down, in plain words**: written for an engineer on the team who works on another system. The overview opens
+  with a **background** (what the system is and how it works before the change), then what changed and its steps. Each word a reader may not know is
+  marked where it is first used, and pointing at it, focusing it or tapping it shows what it means. Each chapter starts with what its part of the system does. Sentences are short and
+  plain, close to Simplified Technical English, and the build warns on a long one.
 - **Overview** with a **diagram** of the whole change: the path a request or a record takes now, its new, changed
   and removed parts marked in green, amber and dashed red, each node linked to its line and its chapter.
 - **Chapters**, one idea each, in reading order: text on the left, its code on the right, under a diagram of what

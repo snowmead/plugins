@@ -20,8 +20,10 @@ the diff. [`../examples/demo.guide.json`](../examples/demo.guide.json) uses ever
 
 | Field | Required | What it holds |
 |---|---|---|
-| `summary` | yes | What the pull request changes and why, in 2 to 4 sentences: the state before, then what is different. A string, or an array of paragraphs. |
+| `background` | no, but the build warns without it | What the system or part is, what uses it, and how it works before the change, in 2 to 4 sentences and under 80 words, for a reader who has never worked on it. Plain words; no change yet. A string, or an array of paragraphs. The page shows it first, under **Background**. |
+| `summary` | yes | What the pull request changes and why, in 2 to 4 sentences: what was wrong or missing, then what is different. A string, or an array of paragraphs. The page shows it under **This change**. |
 | `steps` | no | 2 to 5 one-line items: the main moves of the change, in the order the chapters take them. |
+| `terms` | no | Up to 12 words a reader from another system will not know: `[{ "term": "delivery", "means": "One event on its way to one endpoint, with its status." }]`. `term` is a word (it also matches its plural) or a code name in backticks (it matches that code span); `means` is one sentence of 25 words or fewer, with no links. The page shows no list: it marks the term where the overview and each chapter first use it, outside links, and the meaning opens in a tooltip on hover, focus or tap. The build warns on a term no text uses. |
 | `diagram` | yes | The diagram of the whole change, beside the summary. See below. |
 
 ## `diagram`
@@ -58,7 +60,7 @@ when a diagram is over 960 px wide (it shrinks to fit its card), has more than 1
 | `id` | yes | Lower case letters, digits and dashes. It becomes the anchor `#c-<id>` and the key for review marks, so keep it when you rebuild. |
 | `title` | yes | The idea, in a few words: "Merge gate on the board", not "Changes to merge-gate.tsx". |
 | `kind` | no | `core` (default), `docs`, `database`, `tests` or `generated`. Every kind but core shows a label. Database, tests and generated chapters come after every core and docs chapter, and generated ones come last. |
-| `body` | yes | One or two short paragraphs, a string or an array. |
+| `body` | yes | One or two short paragraphs, under 130 words, a string or an array. The first sentence says what this part of the system does; then what changed. |
 | `files` | yes | The code the chapter shows, in the order to read it: a path for the whole file, or `{ "path": "…", "hunks": [2, 3] }` for some of its hunks. Hunk numbers are the ones `gather.ts` prints. |
 | `table` | no | A boxed state table under the body, below. |
 | `diagram` | yes | The diagram of what this chapter changes, above its files. Fields as above. |
@@ -85,9 +87,12 @@ A state table lays out the cases a change decides between, one row per case, wit
 
 ## Text
 
-`summary`, `steps`, `body`, table cells and `note` take a small Markdown subset: `` `code` ``, `**bold**`, `*em*`,
+`background`, `summary`, `steps`, `terms`, `body`, table cells and `note` take a small Markdown subset: `` `code` ``, `**bold**`, `*em*`,
 `[text](https://…)`, and `[text](ref:path:line)` for a link that jumps to a line of the diff (or to GitHub, for an
-unchanged file). Name functions, types and fields in backticks.
+unchanged file). Name functions, types and fields in backticks. The build warns on a sentence of more than 25 words
+in `background`, `summary`, `steps` or a `body`: split it in two. It also warns on a code name in backticks in
+`background`, `summary` or `steps`, which say the change in plain words, and on a chapter `body` that opens on a code
+name or names two in its first sentence.
 
 The text of a comment thread takes the same subset, and the page reads it when it draws the thread. It also links what
 plain text names: an `https://` link; a changed file by its path, or by as much of it as names one file (`src/a.ts`,

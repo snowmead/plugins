@@ -74,6 +74,20 @@ const KINDS: Kind[] = ['core', 'docs', 'database', 'tests', 'generated'];
 const LABEL: Partial<Record<Kind, string>> = { docs: 'Docs', database: 'Database', tests: 'Tests', generated: 'Generated' };
 const LATE = new Set<Kind>(['database', 'tests', 'generated']);
 const words = (s: unknown) => String(s ?? '').replace(/`[^`]*`/g, 'x').split(/\s+/).filter(Boolean).length;
+/** The sentences of a text, with code spans, decimals and abbreviations kept whole. A code span stands in as a capital,
+    so a sentence that starts with one is a sentence of its own. */
+const sentences = (s: unknown) => String(s ?? '')
+  .replace(/`[^`]*`/g, 'X').replace(/\b(e\.g|i\.e|etc|vs)\./gi, '$1').replace(/(\d)\.(\d)/g, '$1$2')
+  .split(/(?<=[.!?:;])\s+(?=[^a-z])/).map((x) => x.trim()).filter(Boolean);
+const LONG_SENTENCE = 25;
+/** The code spans in a text, its links' targets left out. */
+const codeSpans = (s: unknown) => String(s ?? '').replace(/\]\([^)\s]+\)/g, ']').match(/`[^`]+`/g) ?? [];
+/** A text's first sentence, with its code spans and links kept. */
+const firstSentence = (s: unknown) => {
+  const t = String(s ?? '').replace(/\[([^\]]+)\]\([^)\s]+\)/g, '$1');
+  const m = /(?<=[.!?])\s+(?=[A-Z`])/.exec(t.replace(/`[^`]*`/g, (c) => c.replace(/[.!?\s]/g, '_')));
+  return m ? t.slice(0, m.index) : t;
+};
 const paras = (b: Text | undefined) => (Array.isArray(b) ? b : b == null ? [] : [b]).map(String);
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -165,12 +179,43 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     else specUrl = spec.url.includes('#') ? spec.url : spec.url + '#spec';
     if (spec.version != null && !(Number.isInteger(spec.version) && spec.version > 0)) err('spec.version is the design version the spec implements, a whole number.');
   }
+  /** Warn on each sentence a reader must hold in mind too long: Simplified Technical English keeps them short. */
+  const shortSentences = (t: Text | undefined, where: string) => {
+    for (const s of paras(t).flatMap(sentences)) {
+      const n = words(s);
+      if (n > LONG_SENTENCE) warn(`${where}: a sentence has ${n} words ("${s.split(/\s+/).slice(0, 6).join(' ')} …"). Keep each under ${LONG_SENTENCE}; split it in two.`);
+    }
+  };
+  /** The overview is the high level: it says the change in plain words, and the terms and chapters name the code. */
+  const plainWords = (t: Text | undefined, where: string) => {
+    const names = paras(t).flatMap(codeSpans);
+    if (names.length) warn(`${where} names ${names.slice(0, 3).join(', ')}${names.length > 3 ? ' …' : ''}. Say it in plain words, for a reader who does not know the code; terms and the chapters name it.`);
+  };
   const ov = guide.overview ?? ({} as Guide['overview']);
+  if (ov.background == null || !paras(ov.background).join('').trim()) warn('overview.background is missing: say what the system is and how it works before this change, in plain words, for a reader who has never worked on it (writing.md).');
+  else {
+    if (words(paras(ov.background).join(' ')) > 80) warn(`overview.background has ${words(paras(ov.background).join(' '))} words. Keep it under 80: what the system is, what uses it, how it works today.`);
+    shortSentences(ov.background, 'overview.background');
+    plainWords(ov.background, 'overview.background');
+  }
+  const terms = ov.terms ?? [];
+  if (!Array.isArray(terms)) err('overview.terms is a list of { "term": …, "means": … }.');
+  else {
+    if (terms.length > 12) warn(`overview.terms has ${terms.length} items. Keep the 12 or fewer words a reader from another system will not know; explain the rest where they appear.`);
+    terms.forEach((t, i) => {
+      if (!t || typeof t.term !== 'string' || !t.term.trim() || typeof t.means !== 'string' || !t.means.trim()) { err(`overview.terms[${i}] needs a "term" and what it "means".`); return; }
+      if (words(t.means) > 25) warn(`overview.terms[${i}] (${t.term}) has ${words(t.means)} words. Say what it means in 25 or fewer.`);
+    });
+  }
   if (!ov.summary) err('overview.summary is missing: say what the pull request changes in 2 to 4 sentences.');
-  else if (words(paras(ov.summary).join(' ')) > 80) warn(`overview.summary has ${words(paras(ov.summary).join(' '))} words. Keep it under 80; the chapters carry the detail.`);
+  else {
+    if (words(paras(ov.summary).join(' ')) > 80) warn(`overview.summary has ${words(paras(ov.summary).join(' '))} words. Keep it under 80; the chapters carry the detail.`);
+    shortSentences(ov.summary, 'overview.summary');
+    plainWords(ov.summary, 'overview.summary');
+  }
   const steps = ov.steps ?? [];
   if (steps.length > 5) warn(`overview.steps has ${steps.length} items. Keep 2 to 5.`);
-  steps.forEach((s, i) => { if (words(s) > 30) warn(`overview.steps[${i}] has ${words(s)} words. One line each.`); });
+  steps.forEach((s, i) => { if (words(s) > 30) warn(`overview.steps[${i}] has ${words(s)} words. One line each.`); else shortSentences(s, `overview.steps[${i}]`); plainWords(s, `overview.steps[${i}]`); });
   if ('beforeAfter' in ov) err('overview.beforeAfter is gone: the overview draws the change as a diagram. Write overview.diagram instead (guide-format.md).');
 
   const chapters: Chapter[] = guide.chapters ?? [];
@@ -197,7 +242,12 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     const body = paras(ch.body);
     if (!body.length) err(`${where}: body is missing.`);
     const bw = body.reduce((n, p) => n + words(p), 0);
-    if (bw > 110) warn(`${where}: the body has ${bw} words. Keep a chapter under 110; split the idea or cut what the code shows.`);
+    if (bw > 130) warn(`${where}: the body has ${bw} words. Keep a chapter under 130; split the idea or cut what the code shows.`);
+    shortSentences(body, `${where}.body`);
+    // A chapter starts with what its part of the system does, in plain words, before it names the code.
+    const opening = firstSentence(body[0]);
+    if (body.length && (/^\[?`/.test(String(body[0]).trimStart()) || codeSpans(opening).length > 1))
+      warn(`${where}.body opens on code ("${opening.split(/\s+/).slice(0, 6).join(' ')} …"). Start with what this part of the system does, in plain words; name the code after.`);
     const files: { path: string; hunks: number[] | null }[] = [];
     for (const entry of ch.files ?? []) {
       const path = typeof entry === 'string' ? entry : entry?.path;
@@ -328,6 +378,48 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
       + (t.note ? `<footer>${md(t.note, where)}</footer>` : '') + '</div>';
   }
 
+  // -------------------------------------------------------------- terms
+  // A term is marked where a section first uses it, outside links and other code, and its meaning opens in a tooltip.
+  const termDefs = (Array.isArray(terms) ? terms : []).map((t, i) => ({ i, t })).filter(({ t }) => typeof t?.term === 'string' && t.term.trim() && typeof t?.means === 'string' && t.means.trim());
+  const termUsed = new Set<number>();
+  const reEsc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const forms = (w: string) => [w, `${w}s`, `${w}es`, ...(/[^aeiou]y$/i.test(w) ? [`${w.slice(0, -1)}ies`] : [])];
+  const matchers = termDefs.map(({ i, t }) => {
+    const code = /^`[^`]+`$/.test(t.term.trim());
+    const name = esc(code ? t.term.trim().slice(1, -1) : t.term.trim());
+    const re = code ? null : new RegExp(`(?<![\\w-])(?:${forms(name).map(reEsc).sort((a, b) => b.length - a.length).join('|')})(?![\\w-])`, 'i');
+    return { i, code, name, re };
+  });
+  const termOpen = (i: number) => { termUsed.add(i); return `<span class="gr-term" tabindex="0" aria-describedby="${P}term-${i}">`; };
+  /** Mark, in rendered text, each term this section has not marked yet. */
+  function markTerms(html: string, seen: Set<number>) {
+    if (!matchers.length) return html;
+    const parts = html.split(/(<[^>]+>)/);
+    let inA = 0, inCode = 0;
+    for (let k = 0; k < parts.length; k++) {
+      const p = parts[k];
+      if (p.startsWith('<')) {
+        if (/^<a[\s>]/.test(p)) inA++;
+        else if (p === '</a>') inA--;
+        else if (p === '<code>') {
+          const m = inA ? undefined : matchers.find((x) => x.code && !seen.has(x.i) && parts[k + 1] === x.name && parts[k + 2] === '</code>');
+          if (m) { seen.add(m.i); parts[k] = `${termOpen(m.i)}<code>`; parts[k + 2] = '</code></span>'; k += 2; continue; }
+          inCode++;
+        } else if (p === '</code>') inCode--;
+        continue;
+      }
+      if (inA || inCode || !p) continue;
+      const found: string[] = [];
+      let text = p;
+      for (const m of matchers) {
+        if (m.code || seen.has(m.i)) continue;
+        text = text.replace(m.re!, (w) => { seen.add(m.i); return `\u0002${found.push(`${termOpen(m.i)}${w}</span>`) - 1}\u0002`; });
+      }
+      parts[k] = text.replace(/\u0002(\d+)\u0002/g, (_, j: string) => found[+j]);
+    }
+    return parts.join('');
+  }
+
   // -------------------------------------------------------------- sections
   function fileList(files: { path: string; hunks: number[] | null }[]) {
     return `<ul class="gr-filelist">${files.map(({ path, hunks }) => {
@@ -342,9 +434,14 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
   }
   const n = chapters.length;
   const sections: string[] = [];
+  // Top down: what the system is today, then what this change does. The terms' meanings wait, hidden, for a tooltip.
+  const background = paras(ov.background).filter((p) => p.trim());
+  const ovSeen = new Set<number>();
   sections.push(`<section class="gr-sec" id="${P}overview" data-title="Overview"><div class="gr-text"><h2>Overview</h2><div class="gr-body">`
-    + paras(ov.summary).map((p) => `<p>${md(p, 'overview.summary')}</p>`).join('')
-    + (steps.length ? `<ol>${steps.map((s, i) => `<li>${md(s, `overview.steps[${i}]`)}</li>`).join('')}</ol>` : '')
+    + (background.length ? `<h3 class="gr-sub">Background</h3>${background.map((p) => `<p>${markTerms(md(p, 'overview.background'), ovSeen)}</p>`).join('')}<h3 class="gr-sub">This change</h3>` : '')
+    + paras(ov.summary).map((p) => `<p>${markTerms(md(p, 'overview.summary'), ovSeen)}</p>`).join('')
+    + (steps.length ? `<ol>${steps.map((s, i) => `<li>${markTerms(md(s, `overview.steps[${i}]`), ovSeen)}</li>`).join('')}</ol>` : '')
+    + (termDefs.length ? `<div class="gr-term-defs" hidden>${termDefs.map(({ i, t }) => `<span id="${P}term-${i}">${md(t.means, `overview.terms[${i}].means`)}</span>`).join('')}</div>` : '')
     + `</div></div><div class="gr-code-col">${diagram(ov.diagram, 'overview', 'overview.diagram')}</div></section>`);
   let labelStarted = false;
   chapters.forEach((ch, i) => {
@@ -356,10 +453,12 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
       + `<div class="gr-text"><h2>${esc(ch.title)}</h2><div class="gr-chmeta"><span class="gr-count">${pad2(i + 1)} / ${pad2(n)}</span>`
       + (LABEL[kind] ? `<span class="gr-kind">${LABEL[kind]}</span>` : '')
       + `<label class="gr-check"><input type="checkbox" data-review-chapter="${esc(ch.id)}"> Reviewed</label></div>`
-      + `<div class="gr-body">${paras(ch.body).map((p) => `<p>${md(p, `${where}.body`)}</p>`).join('')}</div>`
+      + `<div class="gr-body">${((seen) => paras(ch.body).map((p) => `<p>${markTerms(md(p, `${where}.body`), seen)}</p>`).join(''))(new Set<number>())}</div>`
       + table(ch.table, `${where}.table`) + fileList(sel[i] ?? []) + '</div>'
       + `<div class="gr-code-col">${diagram(ch.diagram, `c-${ch.id}`, `${where}.diagram`)}<div class="gr-files" data-chapter="${esc(ch.id)}"></div></div></section>`);
   });
+
+  for (const { i, t } of termDefs) if (!termUsed.has(i)) warn(`overview.terms[${i}] (${t.term}) is in no text outside a link, so the page marks it nowhere. Write the term as the text uses it, or leave it out.`);
 
   const links = (guide.links ?? []).map((l, i) => {
     if (!/^https:\/\//.test(l.href ?? '')) { err(`links[${i}]: href must start with https://.`); return ''; }
