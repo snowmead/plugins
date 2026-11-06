@@ -2,12 +2,13 @@
    button opens a panel above the dock with an optional message and Submit. Each viewer's answers and message go to
    the page database at responses/<user id> (Claude reads them with ArtifactData); Submit posts a short summary
    with Send to Claude, which wakes the session. Where a viewer cannot send, the summary is copied for the chat. */
-import type { CanSendToClaude, CapabilityMap, CommentsCap, DocRef } from './types';
+import type { CapabilityMap, DocRef } from './types';
 import type { AnswerReport, Question } from './questions';
 import { copyText, h, store } from '../kit/web/dom';
 import { sound } from '../kit/web/sound';
 import { toast } from '../kit/web/toast';
 import { anim } from './libs';
+import { claude, startClaude } from './claude';
 
 const MAX_BYTES = 3900; // a comment holds 4 KiB
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -98,7 +99,7 @@ export function createDock({ page, version, key, questions, onChange, jump }: Do
   form.addEventListener('submit', (e) => { e.preventDefault(); if (approving !== null) void send(approving); });
 
   // ---------------------------------------------------------------- capabilities
-  let docRef: DocRef | null = null, comments: CommentsCap | null = null, canSend: CanSendToClaude = 'off', writeTimer = 0;
+  let docRef: DocRef | null = null, writeTimer = 0;
   const use = <K extends keyof CapabilityMap>(n: K) => window.claude?.use(n).catch(() => null) ?? Promise.resolve(null);
   const snapshot = (extra: Record<string, unknown> = {}) => ({
     pageVersion: version,
@@ -111,12 +112,9 @@ export function createDock({ page, version, key, questions, onChange, jump }: Do
   const schedule = () => { if (!docRef) return; clearTimeout(writeTimer); writeTimer = window.setTimeout(() => void write(), 900); };
   onChange.add(schedule);
 
+  startClaude();
   void (async () => {
-    const [db, user, c] = await Promise.all([use('db'), use('user'), use('comments')]);
-    comments = c;
-    const refresh = async () => { canSend = comments ? await comments.canSendToClaude().catch(() => 'off' as const) : 'off'; };
-    await refresh();
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) void refresh(); });
+    const [db, user] = await Promise.all([use('db'), use('user')]);
     if (!db || !user || (await user.can('data.write')) === false) return;
     const uid = await user.id();
     if (!uid) return;
@@ -167,20 +165,16 @@ export function createDock({ page, version, key, questions, onChange, jump }: Do
     const draft = message;
     const reopen = (msg: string) => { show(approved); box.value = draft; toast(msg); };
     hide();
-    if (canSend === 'available' && comments) {
-      const c = comments;
+    if (claude.on) {
       toast(approved ? 'Approving…' : 'Sending…');
-      try {
-        await Promise.all([write(extra), c.anchorFor(page.querySelector('h1') ?? page).then((anchor) => c.sendToClaude({ anchor, text }))]);
+      const [, result] = await Promise.all([write(extra), claude.send(page.querySelector('h1') ?? page, text)]);
+      if (result === 'sent') {
         store.set(sentKey, answers); // only a send that reached Claude, with the answers as they were when it left
         return sent(approved ? 'Approved. Claude will reply in the comment thread.' : 'Sent. Claude will reply in the comment thread.');
-      } catch (err) {
-        const code = (err as { code?: string })?.code;
-        if (code === 'consent_required') return reopen('Not sent. Allow comments from this page to send feedback.');
-        if (code === 'rate_limited') return reopen('Too many sends. Wait a moment and try again.');
-        canSend = 'off';
-        return reopen('Could not reach Claude. Press Submit again to copy your feedback instead.');
       }
+      if (result === 'consent') return reopen('Not sent. Allow comments from this page to send feedback.');
+      if (result === 'rate') return reopen('Too many sends. Wait a moment and try again.');
+      return reopen('Could not reach Claude. Press Submit again to copy your feedback instead.');
     }
     void write(extra);
     copyText('# ' + text).then( // still inside the click, so the clipboard allows it

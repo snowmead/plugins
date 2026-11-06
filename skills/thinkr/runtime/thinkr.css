@@ -330,7 +330,9 @@ t-spec h1 { margin-bottom: 16px; }
 t-spec h1 + p { margin: 0 0 40px; font-size: 17px; line-height: 1.6; color: var(--muted-fg); }
 t-spec h2 { margin-top: 56px; }
 t-spec h1 + p + h2, t-spec h1 + h2 { margin-top: 0; }
-t-spec .t-spec-copy { margin-left: auto; }
+t-spec .t-eyebrow { flex-wrap: wrap; } /* on a phone, Copy agent spec and Build drop to their own line, together */
+t-spec .t-eyebrow > span:nth-child(2) { white-space: nowrap; }
+t-spec .t-spec-actions { display: flex; gap: 8px; margin-left: auto; }
 t-spec .t-spec-copy .t-spec-icon { display: inline-flex; }
 t-spec .t-spec-copy svg { width: 14px; height: 14px; }
 .t-in-spec .t-dock, .t-in-spec .t-chgnav, .t-in-spec .t-changes-btn { display: none !important; }

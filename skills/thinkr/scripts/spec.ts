@@ -20,6 +20,7 @@
 import { join } from 'node:path';
 import type MarkdownIt from 'markdown-it';
 import { need } from '../kit/build/deps';
+import { LONG_SENTENCE, longSentences } from '../kit/build/prose';
 
 export interface Doc { file: string; md: string; designVersion: number; words: number }
 export interface Specs {
@@ -105,6 +106,14 @@ function check(file: string, md: string, version: number, errors: string[], warn
     const at = lines.findIndex((l) => re.test(l));
     if (at >= 0) warns.push(`spec: ${file}: "${lines[at].trim().slice(0, 70)}" points at ${what}, which the spec's reader never saw. Say the fact itself.`);
   }
+  // Simplified Technical English keeps each sentence short (references/spec.md, Style). Code blocks, headings and
+  // table rows aside; a code span is one word; a list item is a paragraph of its own; bold marks go, so a bold lead-in
+  // ("**Shadow mode.**") ends its own sentence.
+  const paras = body.replace(FENCE, '').replace(/\[([^\]]*)\]\([^)\s]*\)/g, '$1').replace(/\*\*|__/g, '')
+    .split(/\n\s*\n|\n(?=\s*(?:[-*+]|\d+\.)\s)/)
+    .map((p) => p.split('\n').filter((l) => !/^\s*(#|\|)/.test(l)).join(' ').replace(/^\s*(?:[-*+]|\d+\.)\s+/, ''));
+  for (const s of paras.flatMap(longSentences))
+    warns.push(`spec: ${file}: a sentence has ${s.words} words ("${s.start} …"). Keep each under ${LONG_SENTENCE}; split it in two.`);
   // prose words, without tables: a table is something to look at
   const words = lines.filter((l) => !/^\s*\|/.test(l)).join(' ').split(/\s+/).filter((w) => /\w/.test(w)).length;
   return { meta, version: v, body, lines, words };

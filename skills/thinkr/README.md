@@ -12,8 +12,10 @@ Artifact.
   spec is for you: what will happen once it is built, at a glance, in short sentences beside a diagram, the schemas
   and a table of cases. **Spec**, in the design page's bar, shows it. The agent spec is for the agent that builds
   it: every decision, behavior, interface, piece of work and check, complete. The page does not show it; **Copy
-  agent spec** copies it. A fresh agent with no other context builds from it, and
-  [guided-review](../guided-review) links the review of what it built back to the spec.
+  agent spec** copies it. Press **Build** on the spec, and Claude hands the agent spec to a fresh agent with no other
+  context, which builds from it; [guided-review](../guided-review) links the review of what it built back to the
+  spec. Both specs are written about 80% of the way to [ASD-STE100](https://www.asd-ste100.org/) Simplified
+  Technical English, as guided-review's pages are: short sentences, active voice, one word for one thing.
 - **Explainer pages** teach one idea: diagrams you step through, WebGPU figures you can move, quick self-checks, and
   links to the sources behind every claim.
 
@@ -53,8 +55,8 @@ Ask in plain words. The skill triggers on designing, planning and explaining:
 
 Claude writes the page, checks it, publishes it, and gives you the link. On a design page, answer the questions and
 submit; Claude reads your answers and messages and updates the page. Once you approve it with nothing left open,
-Claude writes the specs, puts the one for you under **Spec**, and asks for a go; then a fresh agent builds from the
-agent spec alone.
+Claude writes the specs, puts the one for you under **Spec**, and asks for a go: press **Build** there, or say go in
+the chat. Then a fresh agent builds from the agent spec alone.
 
 ### On the page
 
@@ -74,7 +76,8 @@ Every page gives its reader these, with nothing for Claude to write:
   open at a time; clicking it again closes it. Rows newer than the reader's last visit get a dot, and their count
   shows on the Changes button.
 - In a design with its specs, **Design | Spec** in the bar. Spec shows the spec in the same column, with its own "On
-  this page" and **Copy agent spec**; the dock and Changes step aside. Each view keeps its place, and a link that ends
+  this page", **Copy agent spec** and **Build**, which asks Claude to start the build (where the viewer cannot send,
+  it copies the request for the chat); the dock and Changes step aside. Each view keeps its place, and a link that ends
   in `#spec` opens on the spec.
 - Claude's own comment button (from the artifact viewer) works on any paragraph, figure, question or code line.
 
@@ -84,7 +87,7 @@ Run these in this folder, after `bun install`:
 
 | Command | Does |
 |---|---|
-| `bun run test` | Builds both templates, and the design with its two specs from `templates/`, and drives them in headless Chrome over DevTools: behavior, no console errors, and timing budgets (startup ≤ 30 ms, each interaction ≤ 12 ms); checks the build refuses specs beside an open question, one without the other, or one that is stale or left open |
+| `bun run test` | Builds both templates, and the design with its two specs from `templates/`, and drives them in headless Chrome over DevTools: behavior, no console errors, and timing budgets (startup ≤ 30 ms, each interaction ≤ 12 ms); checks the build refuses specs beside an open question, one without the other, or one that is stale or left open, and warns on a spec sentence over 25 words |
 | `bun run typecheck` | `tsc` over the runtime and the scripts |
 | `bun run examples` | Builds `templates/design.html` and `templates/explain.html` |
 | `bun scripts/build.ts --refresh` | Moves motion, vgpu, d3 and Plot to their newest release that is at least 14 days old (the artifact rule); `--major` crosses a major version. A build refreshes on its own only within each pin's minor |

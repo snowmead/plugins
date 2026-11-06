@@ -29,6 +29,7 @@ import type { Chapter, Diagram, DiagramRef, Diff, DiffFile, Guide, Kind, PageDat
 import { FONTS, ICON, THEME, assets, preview, publishLines, runtime, soundButton, styles, themeButton } from '../kit/build/page';
 import { libs, preloads } from '../kit/build/libs';
 import { diagrams } from '../kit/build/diagram';
+import { LONG_SENTENCE, longSentences } from '../kit/build/prose';
 import { BELL, COMMENT, PANEL } from '../runtime/icons';
 import { previews } from './markdown';
 import { verifier } from './verify';
@@ -74,12 +75,6 @@ const KINDS: Kind[] = ['core', 'docs', 'database', 'tests', 'generated'];
 const LABEL: Partial<Record<Kind, string>> = { docs: 'Docs', database: 'Database', tests: 'Tests', generated: 'Generated' };
 const LATE = new Set<Kind>(['database', 'tests', 'generated']);
 const words = (s: unknown) => String(s ?? '').replace(/`[^`]*`/g, 'x').split(/\s+/).filter(Boolean).length;
-/** The sentences of a text, with code spans, decimals and abbreviations kept whole. A code span stands in as a capital,
-    so a sentence that starts with one is a sentence of its own. */
-const sentences = (s: unknown) => String(s ?? '')
-  .replace(/`[^`]*`/g, 'X').replace(/\b(e\.g|i\.e|etc|vs)\./gi, '$1').replace(/(\d)\.(\d)/g, '$1$2')
-  .split(/(?<=[.!?:;])\s+(?=[^a-z])/).map((x) => x.trim()).filter(Boolean);
-const LONG_SENTENCE = 25;
 /** The code spans in a text, its links' targets left out. */
 const codeSpans = (s: unknown) => String(s ?? '').replace(/\]\([^)\s]+\)/g, ']').match(/`[^`]+`/g) ?? [];
 /** A text's first sentence, with its code spans and links kept. */
@@ -181,10 +176,8 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
   }
   /** Warn on each sentence a reader must hold in mind too long: Simplified Technical English keeps them short. */
   const shortSentences = (t: Text | undefined, where: string) => {
-    for (const s of paras(t).flatMap(sentences)) {
-      const n = words(s);
-      if (n > LONG_SENTENCE) warn(`${where}: a sentence has ${n} words ("${s.split(/\s+/).slice(0, 6).join(' ')} …"). Keep each under ${LONG_SENTENCE}; split it in two.`);
-    }
+    for (const s of paras(t).flatMap(longSentences))
+      warn(`${where}: a sentence has ${s.words} words ("${s.start} …"). Keep each under ${LONG_SENTENCE}; split it in two.`);
   };
   /** The overview is the high level: it says the change in plain words, and the terms and chapters name the code. */
   const plainWords = (t: Text | undefined, where: string) => {

@@ -56,6 +56,26 @@ const REFUSED: { name: string; page: (src: string) => string; spec: string | nul
   { name: 'no checks', page: decided, spec: SPEC, agent: AGENT.replace('## Done when', '## Checks'), says: 'add a "## Done when" section' },
 ];
 
+// A stand-in for the claude.ai viewer: the page database in memory (__docs), a reader "u_me", and a comments
+// capability that records each send's text, fails once with rate_limited when __fail is set, and is off while __off
+// is set (the page asks again when it shows).
+const VIEWER = `(() => {
+  const docs = window.__docs = new Map();
+  window.__sent = [];
+  const db = { doc: (path) => ({ path, get: async () => ({ exists: docs.has(path) }), set: async (d) => { docs.set(path, d); } }) };
+  const comments = {
+    canSendToClaude: async () => (window.__off ? 'off' : 'available'),
+    anchorFor: async () => ({}),
+    sendToClaude: async ({ text }) => {
+      if (window.__fail) { window.__fail = false; throw { code: 'rate_limited' }; }
+      window.__sent.push(text);
+      return { threadId: 't' + window.__sent.length };
+    },
+  };
+  const user = { id: async () => 'u_me', can: async () => true };
+  window.claude = { use: async (name) => ({ db, comments, user })[name] ?? null };
+})();`;
+
 // Each case runs in the page; `r` collects facts, `expect` lists what they must be, and `budget` caps timings
 // in ms: t(fn) times the synchronous work a click or input does before the browser can paint the result. An
 // interaction must fit well inside one 60 Hz frame (16.7 ms), so the next frame already shows its result.
@@ -64,24 +84,7 @@ const BUDGET = { boot: 30, interaction: 12 };
 // before the page's own scripts on every load.
 const cases: Record<string, { viewer?: string; prime?: string; hash?: string; run: string; expect: Record<string, unknown>; budget: Record<string, number> }> = {
   design: {
-    // A stand-in for the claude.ai viewer: the page database in memory (__docs), a reader "u_me", and a comments
-    // capability that records each send's text, or fails once with rate_limited when __fail is set.
-    viewer: `(() => {
-      const docs = window.__docs = new Map();
-      window.__sent = [];
-      const db = { doc: (path) => ({ path, get: async () => ({ exists: docs.has(path) }), set: async (d) => { docs.set(path, d); } }) };
-      const comments = {
-        canSendToClaude: async () => 'available',
-        anchorFor: async () => ({}),
-        sendToClaude: async ({ text }) => {
-          if (window.__fail) { window.__fail = false; throw { code: 'rate_limited' }; }
-          window.__sent.push(text);
-          return { threadId: 't' + window.__sent.length };
-        },
-      };
-      const user = { id: async () => 'u_me', can: async () => true };
-      window.claude = { use: async (name) => ({ db, comments, user })[name] ?? null };
-    })();`,
+    viewer: VIEWER,
     prime:`localStorage.setItem('thinkr:api-rate-limits:design:seen', '1')`, // this reader last saw version 1
     budget: { boot: BUDGET.boot, select: BUDGET.interaction, step: BUDGET.interaction, panel: BUDGET.interaction, toc: BUDGET.interaction, change: BUDGET.interaction },
     run: `
@@ -231,8 +234,8 @@ const cases: Record<string, { viewer?: string; prime?: string; hash?: string; ru
     },
   },
   spec: {
-    // the clipboard, recorded, so Copy Markdown can be read back
-    viewer: `Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (text) => { window.__copied = text; } } });`,
+    // the viewer, and the clipboard, recorded, so Copy agent spec and Build can be read back
+    viewer: VIEWER + `Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (text) => { window.__copied = text; } } });`,
     hash: '#spec', // the link guided-review gives: the page opens on the spec
     budget: { boot: BUDGET.boot, view: BUDGET.interaction },
     run: `
@@ -250,6 +253,23 @@ const cases: Record<string, { viewer?: string; prime?: string; hash?: string; ru
       await new Promise((ok) => setTimeout(ok, 50));
       r.copied = window.__copied === THINKR.agentSpec && window.__copied.length; // the agent's, which the page does not show
 
+      // Build: copied for the chat while the viewer cannot send, sent to Claude once it can
+      const build = $('.t-spec-build');
+      window.__off = true;
+      document.dispatchEvent(new Event('visibilitychange'));
+      await new Promise((ok) => setTimeout(ok, 50));
+      build.click();
+      await new Promise((ok) => setTimeout(ok, 50));
+      r.buildCopied = window.__copied.split('\\n')[0];
+      r.buildNotSent = window.__sent.length;
+      window.__off = false;
+      document.dispatchEvent(new Event('visibilitychange'));
+      await new Promise((ok) => setTimeout(ok, 50));
+      build.click();
+      await new Promise((ok) => setTimeout(ok, 50));
+      r.buildSent = window.__sent.join(' | ').replace(/\\n+/g, ' / ');
+      r.buildAfter = build.textContent + ' ' + build.disabled;
+
       // the switch: each view keeps where the reader was, and the hash follows the view
       const [design, spec] = document.querySelectorAll('.t-views button');
       ms.view = t(() => design.click());
@@ -265,6 +285,9 @@ const cases: Record<string, { viewer?: string; prime?: string; hash?: string; ru
     expect: {
       openedOnSpec: true, tabs: 'Design false, Spec true', barBadge: 'Spec', titleHidden: true, specTitle: 'API Rate Limits', specFor: 'For version 1 of the design',
       specToc: 'What happens to a request, Budgets, What clients see, How it ships, Not in this change', specParts: 'true true true true', dockAway: 'none', copied: AGENT.length,
+      buildCopied: '# Build: API Rate Limits (v1)', buildNotSent: 0,
+      buildSent: 'Build: API Rate Limits (v1) / Start building from the agent spec for version 1 of the design, agent-spec.md beside this page.',
+      buildAfter: 'Build sent true',
       backToDesign: 'Design', noProgress: true, specFromTop: 0, specHash: '#spec', keptScroll: 600,
     },
   },
@@ -319,6 +342,17 @@ try {
     if (!ok) { failed++; console.log(`fail  spec refused, ${r.name}: expected an error with "${r.says}", got:\n${out.stdout}`); }
   }
   if (!failed) console.log(`ok    spec refused (${REFUSED.length} cases)`);
+
+  // a sentence past 25 words in either spec is a warning, not an error: Simplified Technical English keeps them short
+  {
+    const stem = join(tmp, 'long-sentence');
+    await Bun.write(`${stem}.html`, decided(await Bun.file(join(ROOT, 'templates/design.html')).text()));
+    await Bun.write(`${stem}.spec.md`, SPEC.replace('## How it ships', 'The gateway counts each request against the budget of its API key and the budget of its organization, and it refuses the request when either one is spent.\n\n## How it ships'));
+    await Bun.write(`${stem}.agent-spec.md`, AGENT);
+    const out = Bun.spawnSync(['bun', join(ROOT, 'scripts/build.ts'), `${stem}.html`]).stdout.toString();
+    if (out.includes('a sentence has 28 words ("The gateway counts each request against')) console.log('ok    spec long sentence warned');
+    else { failed++; console.log(`fail  spec long sentence: expected a warning on a 28-word sentence, got:\n${out}`); }
+  }
 
   for (const [name, c] of Object.entries(cases)) {
     // built in the temp folder, so the history file the build keeps for a design never lands in templates/

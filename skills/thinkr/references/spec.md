@@ -9,7 +9,7 @@ it is decided, two documents say what gets built, each for its own reader:
 | Says | What will happen once it is built, at a glance | Everything needed to build it end to end, and how to check it is done |
 | Reads like | Short sentences and the shapes to look at: a diagram, the schemas and interfaces, a table of cases | A complete brief: every decision, behavior, interface, file, pull request and check |
 | File | `<name>.spec.md` | `<name>.agent-spec.md` |
-| Where | The page shows it under **Spec** | Not on the page. **Copy agent spec** copies it, and it is published beside the page as `agent-spec.md` |
+| Where | The page shows it under **Spec**, with **Build**, which asks Claude to start the build | Not on the page. **Copy agent spec** copies it, and it is published beside the page as `agent-spec.md` |
 
 An agent that builds from the design page carries the rejected options and the back-and-forth into the code; one that
 builds from the agent spec gets only what to build. A person who reads the agent spec wades through detail they did
@@ -44,6 +44,45 @@ Both take one `# title`, the design's name, and neither leaves anything open: `T
 code is an error. Neither points back at the page or the talk, which their readers never saw: the build warns on a
 question number (`Q2`), "decided in v3", "as discussed", "the design page". Write the fact itself.
 
+## Style
+
+Write both specs about 80% of the way to [ASD-STE100](https://www.asd-ste100.org/) Simplified Technical English. STE
+is a standard for technical text that people read fast, and often not in their first language. An agent reads it
+without guessing, too. Keep its writing rules; drop its fixed dictionary, since code and its domains need their own
+words. guided-review writes its review pages to the same rule, so a spec and the review of what was built read alike.
+
+Keep:
+
+- **Short sentences.** Aim for 20 words or fewer. The build warns at more than 25, in either spec: split the sentence
+  in two. A code span counts as one word; code blocks, headings and table rows are not checked.
+- **One idea per sentence, one topic per paragraph,** and no more than 4 sentences in a paragraph.
+- **Active voice and present tense.** "The gateway answers `429`", not "`429` is returned". Say what the work does
+  once it is built.
+- **The same word for the same thing.** When the spec calls it a budget, do not also call it a quota, an allowance
+  and a limit. Use one word, in both specs.
+- **Define a word where it first appears.** In the agent spec, under **Context**.
+- **No noun strings of more than 3 words.** "The limit of an organization's API keys", not "org API key limit".
+- **Keep "the", "a" and "an".** Do not drop them to make text shorter.
+- **Precise verbs.** "Sends", "stores", "rejects", "counts", not "handles", "deals with", "processes" or "manages".
+- **A verb, not an "-ing" noun.** "When the gateway refuses a request", not "on refusing".
+- **No idioms or metaphors.** "Stops the API", not "takes the API down"; "starts", not "kicks off".
+- **Numbers with their units:** "20 ms", "10 requests a second", "1 minute".
+
+Drop:
+
+- **The STE dictionary.** Use the words the code and the project use, as they are, once you define them.
+- **Its limits on technical verbs.** "Serialize", "deploy" and "rebase" are fine.
+
+Before:
+
+> The gateway takes one token per request before any service code runs, and answers `429` with `Retry-After` when a
+> bucket is empty, so one noisy client can no longer slow the API for everyone else.
+
+After:
+
+> The gateway takes one token for each request, before any service code runs. When a bucket is empty, the gateway
+> answers `429` with `Retry-After`. One client can then no longer slow the API for all other clients.
+
 ## The spec, for people
 
 What will happen once it is built, so a reader knows at a glance. It is not a shorter agent spec: it leaves out the
@@ -51,7 +90,7 @@ files, the steps and the edge cases, and keeps what changes for whoever uses the
 
 - **Show the shape.** A `mermaid` diagram of what happens (mark what is new with `:::new`), the schemas and interfaces
   in code blocks, a table of cases. The page draws the diagram and highlights the code.
-- **Say it plainly.** Short sentences, one idea each, in the words of whoever uses it: "When a client spends its
+- **Say it plainly.** Short sentences, one idea each ([Style](#style)), in the words of whoever uses it: "When a client spends its
   budget, the API answers `429`," not the Lua script that decides it.
 - **Stay high.** Each section is a few sentences beside its diagram, schema or table. The build warns past 500 words
   of prose, and when there is nothing to look at.
@@ -113,7 +152,8 @@ until a publish removes it, so publish that version with `"agent-spec.md": null`
 
 ## Hand it over
 
-After the user's go:
+After the user's go: **Build** on the Spec, or a go in the chat. [design.md](design.md#build) says how to check a
+Build send first.
 
 1. Give the agent spec to a fresh agent, and nothing else from this conversation: a new session, or a subagent,
    whose whole prompt is the agent spec (the file's text, or, from another session, `Artifact` `read` of the design

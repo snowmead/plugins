@@ -3,25 +3,26 @@ design-version: 1
 ---
 # API Rate Limits
 
-Every public API key gets a token bucket in Redis. The gateway takes one token per request before any service code
-runs, and answers `429` with `Retry-After` when a bucket is empty, so one client can no longer slow the API for
-everyone else.
+Every public API key gets a token bucket in Redis. The gateway takes one token for each request, before any service
+code runs. When a bucket is empty, the gateway answers `429` with `Retry-After`. One client can then no longer slow
+the API for all other clients.
 
 ## Context
 
-- The gateway is `gateway/`. Each request runs through the middleware in `gateway/src/pipeline.ts`, in order, and is
-  then proxied to its service. Authentication is the first middleware; it sets `req.apiKey` (`{ id, orgId }`) or
+- The gateway is `gateway/`. Each request runs through the middleware in `gateway/src/pipeline.ts`, in order, and the
+  gateway then sends it on to its service. Authentication is the first middleware; it sets `req.apiKey` (`{ id, orgId }`) or
   answers `401`.
-- Redis is reached through the gateway's existing client, `gateway/src/redis.ts`.
+- The gateway reaches Redis through its existing client, `gateway/src/redis.ts`.
 - A **bucket** holds up to `burst` tokens and refills at `rate` tokens per second. A request takes one token.
 
 ## Decisions
 
 - Count with a [token bucket](https://en.wikipedia.org/wiki/Token_bucket): one bucket per API key and one per
   organization. A request takes a token from both, or from neither.
-- Both buckets are read and updated by one Lua script per request, called with `EVALSHA`, so the check is atomic.
-- When Redis does not answer within 20 ms, let the request through, add 1 to the metric
-  `rate_limit_redis_timeout_total`, and fire the alert `RateLimitRedisDown` when it rises for 1 minute.
+- One Lua script reads and updates both buckets for each request. The gateway calls it with `EVALSHA`, so the check
+  is atomic.
+- When Redis does not answer within 20 ms, let the request through and add 1 to the metric
+  `rate_limit_redis_timeout_total`. Fire the alert `RateLimitRedisDown` when this metric rises for 1 minute.
 - Ship in shadow mode: log what would be rejected, and reject nothing.
 - No customer has a higher limit at launch. `overrides` holds later ones, by organization id.
 
@@ -84,7 +85,7 @@ Two pull requests, the second built on the first.
 
 - Limits by IP address or by endpoint.
 - A dashboard for limits: the logs and the metric are enough.
-- Tuning the values in `limits.yaml`. They are set from shadow-mode logs after this ships.
+- New values in `limits.yaml`. The team sets them from the shadow-mode logs after this ships.
 
 ## Done when
 
