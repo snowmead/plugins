@@ -17,6 +17,8 @@
   --who-claude: oklch(0.56 0.15 42);
   --who-other: var(--c5);
   --text-col: 340px;
+  /* Where what sticks lines up once the page scrolls: under the bar. */
+  --stick-top: calc(var(--bar-h) + env(safe-area-inset-top, 0px));
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -114,10 +116,48 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .gr-meta a:hover { color: var(--fg); text-decoration: underline; }
 .gr-meta .mono { font-size: 12px; }
 
+/* ---------- the title, in the bar ---------- */
+/* Once the header's title has scrolled under the bar, the title, its branches and counts rise into the bar beside
+   the tabs, from the bar's lower edge, where the header went; they sink back out when the header returns (nav.ts
+   sets body.gr-head-stuck). The bar clips them, so they seem to come from under it. */
+/* It fills the room the bar has left, and only that room, so the bar never grows for it; it drops what does not fit. */
+.gr-bar-title {
+  flex: 1 1 0; min-width: 0; align-self: stretch; display: flex; align-items: center; overflow: hidden; margin-left: 6px;
+  container: bar-title / inline-size;
+}
+.gr-bar-title[hidden] { display: none; }
+.gr-bar-title-in {
+  display: flex; align-items: center; gap: 12px; min-width: 0; padding-inline: 2px;
+  transform: translateY(calc(var(--bar-h) / 2 + 12px)); opacity: 0; visibility: hidden;
+  transition: transform .3s cubic-bezier(.2, .8, .2, 1), opacity .2s ease, visibility 0s linear .3s;
+}
+body.gr-head-stuck .gr-bar-title-in { transform: none; opacity: 1; visibility: visible; transition-delay: 0s; }
+.gr-bar-top {
+  display: inline-flex; align-items: baseline; gap: 7px; min-width: 0; flex: 0 1 auto; padding: 3px 8px;
+  border-radius: 6px; font-size: 14px; font-weight: 600; letter-spacing: -.005em; text-align: left;
+}
+.gr-bar-top:hover { background: var(--muted); }
+.gr-bar-top .n { color: var(--muted-fg); font-weight: 400; font-variant-numeric: tabular-nums; flex: none; }
+.gr-bar-top .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gr-bar-title .gr-pick-n { flex: none; }
+.gr-bar-meta { display: flex; align-items: center; gap: 10px; flex: none; color: var(--muted-fg); font-size: 12.5px; white-space: nowrap; }
+.gr-bar-meta > * + *::before { content: ""; display: inline-block; vertical-align: middle; width: 1px; height: 12px; background: var(--border-strong); margin-right: 10px; }
+.gr-bar-meta .br { font-size: 12px; }
+.gr-bar-meta .stat { display: inline-flex; gap: 6px; }
+/* The branches give way first, then the file count, then the counts; with room for less than a few words of the
+   title, none of it shows. */
+@container bar-title (max-width: 660px) { .gr-bar-meta .br { display: none; } }
+@container bar-title (max-width: 500px) { .gr-bar-meta .files, .gr-bar-title .gr-pick-n { display: none; } .gr-bar-meta .stat::before { display: none; } }
+@container bar-title (max-width: 340px) { .gr-bar-meta { display: none; } }
+@container bar-title (max-width: 150px) { .gr-bar-title-in { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .gr-bar-title-in { transform: none; transition: opacity .12s ease, visibility 0s linear .12s; }
+}
+
 /* ---------- sections ---------- */
 .gr-sec {
   display: grid; grid-template-columns: var(--text-col) minmax(0, 1fr); gap: 40px;
-  padding-block: 40px; scroll-margin-top: calc(var(--bar-h) + 8px);
+  padding-block: 40px; scroll-margin-top: calc(var(--stick-top) + 8px);
 }
 .gr-sec + .gr-sec { border-top: 1px solid var(--border); }
 .gr-sec.label-start { border-top: 1px dashed var(--border-strong); }
@@ -125,8 +165,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .gr-guide > .gr-sec:last-child { min-height: 70vh; align-content: start; }
 /* Chapter text taller than the screen scrolls on its own, so its file list stays in reach. */
 .gr-text {
-  position: sticky; top: calc(var(--bar-h) + 20px + env(safe-area-inset-top, 0px)); align-self: start; min-width: 0;
-  max-height: calc(100vh - var(--bar-h) - 40px - env(safe-area-inset-top, 0px)); overflow-y: auto;
+  position: sticky; top: calc(var(--stick-top) + 20px); align-self: start; min-width: 0;
+  max-height: calc(100vh - var(--stick-top) - 40px); overflow-y: auto;
 }
 .gr-text h2 { font-size: 18px; line-height: 1.35; font-weight: 600; margin: 0; text-wrap: balance; letter-spacing: -.005em; }
 .gr-chmeta { display: flex; align-items: center; gap: 10px; margin-top: 6px; color: var(--muted-fg); font-size: 12.5px; }
@@ -210,12 +250,20 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .gr-table footer { padding: 6px 10px; color: var(--muted-fg); border-top: 1px solid var(--border); }
 
 /* ---------- cards ---------- */
-.gr-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); min-width: 0; scroll-margin-top: calc(var(--bar-h) + 12px); }
+.gr-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); min-width: 0; scroll-margin-top: calc(var(--stick-top) + 12px); }
 .gr-card > header {
   display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px 0 6px; border-bottom: 1px solid var(--border);
   font-size: 13px; min-width: 0;
 }
 .gr-card.collapsed > header { border-bottom: 0; }
+/* A file's header stays in view while its code scrolls under it, so the file's name and its Reviewed box are always
+   in reach. Stuck (nav.ts), it loses its round top corners and casts a line of shadow over the code. */
+.gr-file > header {
+  position: sticky; top: var(--stick-top); z-index: 5; background: var(--card);
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0; transition: box-shadow .15s;
+}
+.gr-file.collapsed > header { border-radius: calc(var(--radius) - 1px); }
+.gr-file > header.is-stuck { border-radius: 0; box-shadow: 0 6px 10px -8px color-mix(in oklch, var(--fg) 30%, transparent); }
 .gr-card.collapsed > :not(header) { display: none; }
 .gr-fold { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 5px; color: var(--muted-fg); flex: none; }
 .gr-fold:hover { background: var(--muted); color: var(--fg); }
@@ -294,7 +342,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 .gr-prose { padding: 18px 28px 22px 44px; color: var(--fg); font-size: 14.5px; line-height: 1.65; overflow-wrap: break-word; border-radius: 0 0 10px 10px; }
 .gr-prose-body > :not(.gr-md-fold) { max-width: 884px; }
-.gr-md-b { position: relative; display: flow-root; margin-inline: -12px; padding-inline: 12px; border-radius: 6px; scroll-margin-top: calc(var(--bar-h) + 40px); }
+.gr-md-b { position: relative; display: flow-root; margin-inline: -12px; padding-inline: 12px; border-radius: 6px; scroll-margin-top: calc(var(--stick-top) + 52px); }
 .gr-md-b + .gr-md-b, .gr-md-fold + .gr-md-b, .gr-md-b + .gr-md-fold { margin-top: 12px; }
 .gr-md-b:has(> h1, > h2) { margin-top: 24px; }
 .gr-md-b:first-child { margin-top: 0; }
@@ -391,11 +439,11 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* ---------- diff view ---------- */
 .gr-diff { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 28px; padding-block: 28px 40px; }
-.gr-tree { position: sticky; top: calc(var(--bar-h) + 16px + env(safe-area-inset-top, 0px)); align-self: start; min-width: 0; }
+.gr-tree { position: sticky; top: calc(var(--stick-top) + 16px); align-self: start; min-width: 0; }
 .gr-tree h3 { font-size: 12px; font-weight: 500; color: var(--muted-fg); margin: 0 0 8px; }
 .gr-tree .gr-filelist { margin: 0; }
 .gr-tree-host {
-  display: block; height: calc(100vh - var(--bar-h) - 84px); min-height: 240px;
+  display: block; height: calc(100vh - var(--stick-top) - 84px); min-height: 240px;
   --trees-bg-override: var(--bg); --trees-fg-override: var(--fg-2); --trees-fg-muted-override: var(--muted-fg);
   --trees-font-family-override: var(--font); --trees-font-size-override: 13px;
   --trees-selected-bg-override: var(--muted); --trees-selected-fg-override: var(--fg);
@@ -618,6 +666,7 @@ body.gr-diff-panel-closed .gr-tree { display: none; }
   .gr-card .fdir { display: none; }
   .gr-card .gr-check .rv, .gr-card .fstat .st { display: none; }
   .gr-head h1 { font-size: 21px; }
+  .gr-bar-top { font-size: 13.5px; padding-inline: 6px; }
 }
 .gr-files { display: grid; gap: 16px; min-width: 0; }
 

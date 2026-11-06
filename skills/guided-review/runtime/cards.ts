@@ -300,7 +300,31 @@ export function card(ctx: Ctx, f: DiffFile, hunkIds: number[] | null, chapter: s
   }
   fileNotes(ctx, el);
   if (f.kind === 'generated') setFold(el, true);
+  watcher?.observe(el);
   return el;
+}
+
+// ---------------------------------------------------------------- stuck headers
+// A file's header sticks under the pinned header while its code scrolls (guide.css). Only the cards on screen can
+// have one stuck, so only they are measured as the page scrolls.
+const onScreen = new Set<Element>();
+const watcher = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (e.isIntersecting) onScreen.add(e.target);
+    else { onScreen.delete(e.target); e.target.firstElementChild?.classList.remove('is-stuck'); }
+  }
+  markStuck();
+}) : null;
+/** Mark each header on screen that is stuck: its card's top has scrolled above the line it sticks to, and the card
+    still runs on below it. */
+export function markStuck() {
+  let line: number | null = null;
+  for (const el of onScreen) {
+    const head = el.firstElementChild as HTMLElement;
+    line ??= parseFloat(getComputedStyle(head).top) || 0;
+    const r = el.getBoundingClientRect();
+    head.classList.toggle('is-stuck', r.top < line - 0.5 && r.bottom > line + head.offsetHeight + 0.5);
+  }
 }
 
 export function setFold(el: Element | null, folded: boolean) {

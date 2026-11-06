@@ -439,6 +439,7 @@ const expect: Record<string, unknown> = {
   jumpInGuide: true, jumpFoldToDiff: true, foldRow: true, diffCards: 11, tree: true, treeTick: true, soundOff: 'false', soundSaved: false,
   styleStart: 'true', split: true, styleSaved: 'split', splitJump: true, unified: true,
   textShut: true, panelSaved: '{"guide":true,"diff":false}', treeOwn: 'true false', treeShut: true, panelsOpen: '{"guide":false,"diff":false}',
+  titleAtTop: 'false false', titleInBar: 'true true', headSticks: true, tickKeepsPlace: true, chapterKeepsPlace: true,
 };
 
 const RUN = `
@@ -522,7 +523,29 @@ const RUN = `
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true }));
   $('.gr-tab[data-view="guide"]').click();
   $('[data-panel-toggle]').click();
-  r.panelsOpen = !shut('.gr-tree') && !shut('#c-worker .gr-body') && localStorage.getItem('gr:panel-closed');`;
+  r.panelsOpen = !shut('.gr-tree') && !shut('#c-worker .gr-body') && localStorage.getItem('gr:panel-closed');
+
+  // the title moves into the bar once the header's title has scrolled under it, and is gone again at the top
+  const pinned = () => document.body.classList.contains('gr-head-stuck') + ' ' + !$('.gr-bar-title').inert;
+  scrollTo(0, 0); await sleep(80);
+  r.titleAtTop = pinned();
+  scrollTo(0, 400); await sleep(80);
+  r.titleInBar = pinned();
+  // halfway down a file its header sticks under the bar, and its Reviewed box there folds the file and keeps
+  // the reader's place: the file's header where a jump lands, the next file right under it
+  const tall = [...document.querySelectorAll('.gr-guide .gr-file:not(.collapsed)')].sort((a, b) => b.offsetHeight - a.offsetHeight)[0];
+  const head = tall.querySelector('header');
+  scrollBy(0, tall.getBoundingClientRect().top + tall.offsetHeight / 2 - 300); await sleep(80);
+  r.headSticks = Math.abs(head.getBoundingClientRect().top - $('.gr-bar').getBoundingClientRect().bottom) < 2 && head.classList.contains('is-stuck');
+  head.querySelector('input[data-review-file]').click();
+  r.tickKeepsPlace = tall.classList.contains('collapsed') && Math.abs(tall.getBoundingClientRect().top - parseFloat(getComputedStyle(tall).scrollMarginTop)) < 2;
+  head.querySelector('input[data-review-file]').click();
+  // so does the chapter's own box, ticked from its text deep into the chapter: the chapter stays at the top
+  const sec = tall.closest('.gr-sec');
+  scrollBy(0, sec.getBoundingClientRect().top + 500); await sleep(80);
+  sec.querySelector('input[data-review-chapter]').click();
+  r.chapterKeepsPlace = Math.abs(sec.getBoundingClientRect().top - parseFloat(getComputedStyle(sec).scrollMarginTop)) < 2;
+  sec.querySelector('input[data-review-chapter]').click();`;
 
 // A Markdown card opens in Preview: the document with its change marked, folded around it. A fold opens; Changes off
 // shows the whole document, and the Diff tab's card of the same file keeps its own switch; Source draws the diff and

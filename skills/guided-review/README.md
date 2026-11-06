@@ -29,6 +29,10 @@ them:
 - **Full width**: the page fills the window, so long lines show in full. The panel button at the left of the bar (`b`)
   closes the chapter text in the guide, leaving each chapter's title above its code, and the file tree in the Diff
   tab; each view remembers its own.
+- **Title in the bar**: once the title scrolls under the bar, it rises into the bar beside the tabs, with its
+  branches and counts, and sinks back when the header returns; clicked, it goes back to the top. Each file's
+  header stays at the top while its code scrolls, so its name and its **Reviewed** box are always in reach. Ticked
+  there, the file folds and the next one comes up under it.
 - **Review marks**: tick a chapter or a file to fold it and count it toward "3 of 6 chapters reviewed". `j` and `k`
   move between chapters, `r` marks one. Marks stay in the reader's browser and survive a rebuild for a new head.
 - **Review comments**: press the **+** in a card's gutter to comment on a line. For a block of lines, click a line

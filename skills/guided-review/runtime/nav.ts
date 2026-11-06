@@ -1,7 +1,7 @@
 /* Moving around: the pull request on screen, its Guide and Diff views and their left columns, jumps from a ref to its
    line, the chapter rail, j and k. */
 import { $, $$, esc, store } from '../kit/web/dom';
-import { type CardState, card, cards, findRow, select, setFold } from './cards';
+import { type CardState, card, cards, findRow, markStuck, select, setFold } from './cards';
 import { type Ctx, active, ctxs, diffOf, guideOf, setActive } from './ctx';
 import { buildTree, progress, restoreChapters, showFile } from './marks';
 
@@ -181,10 +181,34 @@ export function onScroll() {
   ticking = true;
   requestAnimationFrame(() => {
     ticking = false;
-    $('.gr-bar')?.classList.toggle('is-scrolled', scrollY > 60);
+    const bar = $('.gr-bar');
+    bar?.classList.toggle('is-scrolled', scrollY > 60);
+    // The title moves into the bar once the header's title has gone under it.
+    const title = $('.gr-head h1', active().root);
+    const stuck = !!bar && !!title && title.getBoundingClientRect().bottom <= bar.getBoundingClientRect().bottom;
+    document.body.classList.toggle('gr-head-stuck', stuck);
+    for (const s of $$('.gr-bar-title')) s.inert = !stuck || !!s.hidden;
+    markStuck();
     const cur = current();
     for (const b of $$('.gr-rail button')) b.classList.toggle('on', b.dataset.target === cur?.id);
   });
+}
+/** Back to the top of the pull request, where its header is. */
+export function toTop() {
+  unpin();
+  scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+/** Run a change that folds or opens what is in el, and keep the reader's place. When el's top had scrolled above
+    the line it lands on after a jump (its scroll margin), as when a file's header is stuck and its Reviewed box is
+    ticked, el comes back to that line, with what follows it right below, instead of the page jumping on. */
+export function keepPlace(el: Element | null, change: () => void) {
+  if (!el) { change(); return; }
+  const line = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+  const above = el.getBoundingClientRect().top < line;
+  change();
+  if (!above) return;
+  const top = el.getBoundingClientRect().top;
+  if (top < line) scrollBy(0, top - line);
 }
 /** Move to the next (1) or previous (-1) section. Returns whether it moved. */
 export function go(delta: number) {

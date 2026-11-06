@@ -12,14 +12,15 @@ import { cards, commentBlock, openProseFold, setDiffStyle, setFold, setProse, st
 import { headingIn } from './prose';
 import { type Ctx, active, byId, byOwnId, ctxOf, ctxs, diffOf } from './ctx';
 import { markChapter, markFile, progress, saveMarks } from './marks';
-import { choose, current, go, jump, onScroll, pin, show, step, toCard, togglePanel, view } from './nav';
+import { choose, current, go, jump, keepPlace, onScroll, pin, show, step, toCard, toTop, togglePanel, view } from './nav';
 import { startComments, toggleNotes } from './comments';
 import { followNode, startDiagrams } from './diagrams';
 import { startTerms } from './terms';
 
-/** Mark a chapter from a click or a key, with its sound; the last chapter reviewed sounds its own. */
+/** Mark a chapter from a click or a key, with its sound; the last chapter reviewed sounds its own. Its files fold or
+    open, and the reader stays at the chapter. */
 function reviewChapter(c: Ctx, id: string, on: boolean) {
-  markChapter(c, id, on);
+  keepPlace(byOwnId(c, `c-${id}`), () => markChapter(c, id, on));
   saveMarks(c);
   sound.play(on && progress(c) === c.pr.chapters.length ? 'reveal' : on ? 'select' : 'deselect');
 }
@@ -55,12 +56,13 @@ document.addEventListener('click', (e) => {
   if (t.dataset.pick) { pick(byId(t.dataset.pick)); return; }
   if (t.dataset.diffStyle) { if (setDiffStyle(t.dataset.diffStyle as DiffStyle)) sound.play('toggle'); return; }
   if (t.hasAttribute('data-panel-toggle')) { togglePanel(); sound.play('toggle'); return; }
+  if (t.hasAttribute('data-to-top')) { toTop(); sound.play('nav'); return; }
   if (t.classList.contains('gr-tab')) {
     if (t.dataset.view !== view()) sound.play('toggle');
     show(t.dataset.view as 'guide' | 'diff');
     return;
   }
-  if (t.classList.contains('gr-fold')) { const el = t.closest('.gr-card')!; setFold(el, !el.classList.contains('collapsed')); return; }
+  if (t.classList.contains('gr-fold')) { const el = t.closest('.gr-card')!; keepPlace(el, () => setFold(el, !el.classList.contains('collapsed'))); return; }
   // A Markdown card: Source or Preview, Changes on or off, a fold of its preview, a comment on a block, a link to a
   // heading of the same file.
   const file = t.closest<HTMLElement>('.gr-file');
@@ -104,7 +106,8 @@ document.addEventListener('change', (e) => {
   const c = ctxOf(box);
   if (!c) return;
   if (box.dataset.reviewFile) {
-    markFile(c, box.dataset.reviewCh || null, box.dataset.reviewFile, box.checked);
+    // Ticked from a header stuck halfway down its file, the file folds and the next one comes up under it.
+    keepPlace(box.closest('.gr-card'), () => markFile(c, box.dataset.reviewCh || null, box.dataset.reviewFile!, box.checked));
     saveMarks(c);
     sound.play(box.checked ? 'select' : 'deselect');
   }
