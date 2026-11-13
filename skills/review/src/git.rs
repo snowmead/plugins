@@ -44,7 +44,7 @@ impl<'a> Git<'a> {
         let bytes = self.output(args)?;
         let text = String::from_utf8(bytes)
             .map_err(|_| failure(args, "printed text that is not UTF-8".into()))?;
-        Ok(text.strip_suffix('\n').unwrap_or(&text).to_owned())
+        Ok(text.trim_suffix('\n').to_owned())
     }
 
     /// Whether git with `args` succeeds; its output is dropped.

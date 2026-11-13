@@ -2,7 +2,7 @@
 name = "claude-review"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.99"
+rust-version = "1.100"
 description = "Runs the Claude pull request review in GitHub Actions and posts its result"
 publish = false
 

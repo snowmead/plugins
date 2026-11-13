@@ -284,7 +284,7 @@ struct Reply {
 /// `login` without the `[bot]` an app's login ends with, as the review names
 /// every author, itself included.
 pub(crate) fn without_bot(login: &str) -> &str {
-    login.strip_suffix("[bot]").unwrap_or(login)
+    login.trim_suffix("[bot]")
 }
 
 /// The login of a REST `user`, without the `[bot]` an app's carries; empty

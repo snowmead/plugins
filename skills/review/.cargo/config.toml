@@ -1,0 +1,4 @@
+# Dependency cooldown: `cargo update` skips crate versions published in the
+# last seven days. Versions already in Cargo.lock stay.
+[registry]
+global-min-publish-age = "7 days"
