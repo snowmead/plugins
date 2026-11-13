@@ -1,6 +1,6 @@
 # Standard library choices
 
-Use these APIs when their contracts fit. This reference targets Rust 1.99.0.
+Use these APIs when their contracts fit. This reference targets Rust 1.100.0.
 Check the selected compiler's docs for signatures, target support, and const
 availability. A runtime-stable method is not necessarily const-stable.
 
@@ -20,6 +20,9 @@ availability. A runtime-stable method is not necessarily const-stable.
 | Copyable stored ranges | `core::range::{Range, RangeFrom, RangeInclusive, RangeToInclusive}`; iterate with `IntoIterator` |
 | Flexible range parameter | `impl RangeBounds<T>` when the implementation supports those bound forms |
 | Strip both delimiters | `str::strip_circumfix` or slice `strip_circumfix` |
+| Remove an optional prefix or suffix | `str` / slice / `Path` `trim_prefix`, `str` / slice `trim_suffix`; each removes at most one occurrence, unlike `trim_start_matches`. Use `strip_prefix` / `strip_suffix` when the caller must know whether it was present |
+| Build a vector from each index | `Vec::from_fn(len, f)`; `f` receives the indexes `0..len` in order |
+| Compare with a borrowed-or-owned slice | `Vec` / `&[T]` / `&mut [T]` `==` `Cow<[U]>` directly |
 | Locate an existing borrowed region | `str::substr_range`, slice `subslice_range`, or `element_offset` |
 | Decimal integer formatting into reusable storage | `integer.format_into(&mut core::fmt::NumBuffer::new())`; bind the buffer when retaining the returned borrow |
 | Nonzero integer parsing | `NonZero::<I>::from_str_radix` |
@@ -79,7 +82,8 @@ protection while changing from exclusive to shared access.
 Use `LazyCell::from` or `LazyLock::from` for already-built values. Use their
 `get`, `get_mut`, and `force_mut` associated functions according to whether
 initialization is allowed. Use a const initializer in `thread_local!` when the
-value can be constructed at compile time.
+value can be constructed at compile time. `Once` implements `Default`, so a type
+holding one can derive `Default`.
 
 ## Memory and pointers
 
@@ -90,6 +94,21 @@ value can be constructed at compile time.
 - Use `Box::into_non_null` / `from_non_null`, or `into_raw` / `from_raw`, for an
   allocation that will be freed later. Do not write
   `NonNull::new_unchecked(Box::into_raw(boxed))`.
+- Implement `std::alloc::Allocator` for a custom allocator, or use `Global` or
+  `System`. `Vec::new_in` / `with_capacity_in` and `Box::new_in` take one, and
+  `allocator()` returns it. The raw-part functions have `*_in` and
+  `*_with_allocator` forms that carry it. Other collections and the `Rc` /
+  `Arc` constructors still need nightly.
+- Use `Box::map`, `Rc::map`, and `Arc::map` to transform a pointee and reuse the
+  allocation when possible. They are associated functions; `Rc` / `Arc` pass
+  `&T`. `Box::take` returns the value and a `Box<MaybeUninit<T>>` that
+  `Box::write` refills.
+- Use `UnsafeCell::replace`, `as_ref_unchecked`, and `as_mut_unchecked` only
+  with a proof that no conflicting reference to the contents exists.
+- Use `mem::conjure_zst` to create a value of an inhabited zero-sized type, in
+  place of transmuting `()` or `MaybeUninit::uninit().assume_init()`. It is
+  unsound for `!`, empty enums, and token types whose existence proves a
+  condition, such as a lock being held.
 - Use `MaybeUninit` array `From` / `AsRef` / `AsMut` implementations and `Cell`
   array/slice views. Conversion of storage does not initialize its elements.
 - Use `MaybeUninit` slice `write_copy_of_slice` or `write_clone_of_slice` to
@@ -141,7 +160,11 @@ algebraic transformations and their floating-point consequences. Use
 
 Use `hint::cold_path` and `hint::select_unpredictable` when workload evidence
 supports the hint. Unchecked integer negation and shifts require proofs of
-their documented bounds; they are not default arithmetic operations.
+their documented bounds; they are not default arithmetic operations. Use
+`-Cprofile-sample-use=<profile>` for sample-based profile-guided optimization
+when a sampling profile of a representative workload exists.
+
+Flip a flag in place with `bool::toggle`, which is also const.
 
 ## Files, FFI, and tooling
 
@@ -151,7 +174,10 @@ Solaris. Use `fs::set_times` with `FileTimes` to change timestamps by path, and
 `fs::set_times_nofollow` to change a symlink itself, instead of opening the file
 for `File::set_times`. Use `Duration::from_nanos_u128` for a `u128` nanosecond
 count and `Location::file_as_c_str` when a caller location needs C string
-representation.
+representation. `ENOTSUP` maps to `io::ErrorKind::Unsupported`; match that kind
+rather than the raw OS error code. On Windows, set a child's initial window
+state with `CommandExt::show_window` and reach its main thread with
+`ChildExt::main_thread_handle`.
 
 Use `#[unsafe(naked)]` with a `naked_asm!` body for functions whose complete
 prologue, epilogue, and ABI obligations are implemented in assembly. Apply
@@ -160,6 +186,10 @@ Variadic foreign declarations support `C`, `sysv64`, `win64`, `efiapi`, and
 `aapcs` on applicable targets. Keep `#[track_caller]` consistent across matching
 declarations. Raw borrows of union fields can be formed in safe code; reading
 the field still requires a validity proof.
+
+Declare a naked function whose assembly follows no ABI the compiler knows as
+`unsafe extern "custom"`. It takes no parameters and returns `()`, and only
+inline assembly can call it. Document its register contract in the item docs.
 
 Define a C-variadic function as an `unsafe extern "C"` or `"C-unwind"` function
 whose final parameter is `...`. That parameter is a `core::ffi::VaList`:
@@ -202,10 +232,17 @@ workspace release. With Cargo 1.99+, an edition 2024 member can set
 `default-features = false` on a `workspace = true` dependency; older Cargo
 rejects that manifest, and earlier editions ignore the field with a warning.
 Write `[lints]` names with underscores, such as `unexpected_cfgs`; hyphenated
-names are deprecated. Let rustc choose its default linker and symbol mangling
-unless a target or external tool requires an override. Declare intended WASM
-imports with `#[link(wasm_import_module = "...")]`; keep unresolved symbols
-as link errors. Check the current [platform support] table for distribution
-and CI target decisions.
+names are deprecated. When `cargo::unused_dependencies` flags a dependency kept
+only to enable a feature of a transitive dependency, move it to
+`[target.'cfg(false)'.dependencies]`. The lint skips `[dev-dependencies]` and
+checks `[dependencies]` only when every target that could use them is built.
+A dependency cooldown never holds back a version whose registry entry has no
+publish time. Quote a target tuple that contains a dot in `.cargo/config.toml`,
+such as `[target."thumbv8m.main-none-eabihf"]`. Let rustc choose its default
+linker and symbol mangling unless a target or external tool requires an
+override. Declare intended WASM imports with
+`#[link(wasm_import_module = "...")]`; keep unresolved symbols as link errors.
+Check the current [platform support] table for distribution and CI target
+decisions; `wasm32-wasip3` is tier 2 from Rust 1.100.
 
 [platform support]: https://doc.rust-lang.org/rustc/platform-support.html

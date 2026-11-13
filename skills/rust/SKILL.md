@@ -11,7 +11,7 @@ repository is silent. Keep unrelated cleanup out of behavioral changes.
 
 ## Toolchain
 
-Use edition 2024 and Rust 1.99.0 or newer for new projects. Respect an existing
+Use edition 2024 and Rust 1.100.0 or newer for new projects. Respect an existing
 crate's declared minimum supported Rust version, edition, and release channel.
 Set `rust-version` to the oldest compiler the crate actually supports and tests.
 Check the manifest and toolchain before choosing APIs.
@@ -29,10 +29,25 @@ features actually used and pin a dated nightly for code that requires them.
 When setting up CI, test the supported release toolchain and add a current
 nightly compatibility job. Nightly coverage does not establish stable support.
 For a warning-free CI build on Cargo 1.97+, use
-`CARGO_BUILD_WARNINGS=deny cargo test --keep-going`. Keep linker warnings visible;
-suppress a specific diagnostic only when its cause is understood. Cargo 1.99+
-disables incremental compilation when `CI` is set; do not add
-`CARGO_INCREMENTAL=0` for it.
+`CARGO_BUILD_WARNINGS=deny cargo test --keep-going`. It also fails on Cargo's
+own lints, which `cargo clippy -- -D warnings` lets through. Keep linker warnings
+visible; suppress a specific diagnostic only when its cause is understood.
+Cargo 1.99+ disables incremental compilation when `CI` is set; do not add
+`CARGO_INCREMENTAL=0` for it. Cargo 1.100 changed the build directory's internal
+layout: find build outputs through `--message-format=json`. Final binaries stay
+at `target/<profile>/<name>`.
+
+Give new projects a dependency cooldown in `.cargo/config.toml`, so the resolver
+skips crate versions published in the last seven days:
+
+```toml
+[registry]
+global-min-publish-age = "7 days"
+```
+
+Versions already in `Cargo.lock` stay. To take one urgent release sooner, run
+`CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update <crate> --precise <version>`.
+Cargo before 1.100 ignores the setting, and `cargo install` always ignores it.
 
 Verify changing feature status against the [Rust release notes] and the selected
 toolchain's API documentation. An RFC, project goal, or final comment period is
@@ -87,7 +102,9 @@ Enable these lints individually. Never enable all of Clippy's `restriction`
 group. Leave `clippy::redundant_pub_crate` off to avoid conflicting visibility
 advice. Omit a lint the crate's oldest supported toolchain does not know:
 `definition_in_module_root`, the rest-pattern lints, and
-`raw_borrows_via_references` need Rust 1.99.
+`raw_borrows_via_references` need Rust 1.99. Cargo's own lints go in
+`[lints.cargo]` from Cargo 1.100, where `unused_dependencies` already warns by
+default; older Cargo reports that table as an unused manifest key.
 
 ```toml
 [lints.clippy]
@@ -188,6 +205,13 @@ or `TryFrom`, and preserve them through every mutation and conversion. Encode
 only constraints established by requirements or existing code. Never infer
 nonzero, positivity, ordering, or other validation rules from a name.
 
+Write `!` where a signature needs an error or result type that cannot occur,
+such as `type Err = !` for parsing that cannot fail, and bind the value with
+`let Ok(value) = result;`. From Rust 1.100, `core::convert::Infallible` is an
+alias of `!`; older toolchains need `Infallible`. Never-type fallback now
+picks `!` on every edition, so name the type where only a diverging path would
+decide it, such as `make::<()>()?;` for a discarded generic result.
+
 Do not expose partially initialized domain values. Use typestate for
 state-dependent APIs: expose only operations valid in that state, and make
 transitions consume the old state and return the new one. If construction has
@@ -268,7 +292,11 @@ assert_eq!(positive_number(Some("0")), None);
 
 Use iterator combinators when they expose the computation. Use a loop or match
 when a chain hides branching or error policy. Validate before mutation unless
-partial progress is the documented contract.
+partial progress is the documented contract. When a later step can fail after
+mutation starts, wrap the state in `core::mem::DropGuard` with a rollback
+closure, and call `DropGuard::dismiss` once every step succeeds. Use the same
+guard for cleanup that must run on every exit path, in place of a hand-written
+guard type or the `scopeguard` crate.
 
 Never use `anyhow`. Use `thiserror` or the framework's typed equivalent to
 represent failures explicitly. Map each failure deliberately, preserving its
