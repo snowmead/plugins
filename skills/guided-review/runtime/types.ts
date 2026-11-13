@@ -169,7 +169,9 @@ export interface DiagramRef { path: string; line: number; side?: Side; ch?: stri
 /** A drawn diagram: the SVG for its box (kit/build/diagram.ts), and its nodes' refs by node id. */
 export interface PageDiagram { html: string; refs?: Record<string, DiagramRef> }
 export interface PageData {
-  libs: Record<'diffs' | 'trees', string>;
+  /** The pinned module URLs: @pierre/diffs, @pierre/trees, and the theme catalog @pierre/diffs loads (its
+      @pierre/theming/themes), which the code theme menu lists. */
+  libs: Record<'diffs' | 'trees', string> & { themes?: string };
   diffStyle: DiffStyle;
   prs: PagePr[];
 }
@@ -262,10 +264,19 @@ export interface PierreFileDiff {
   setSelectedLines(range: PierreLineRange | null): void;
 }
 export interface PierreDiffs {
+  /** Loads a theme by name (from the catalog, over the network the first time) and keeps it for every card. */
+  resolveTheme(name: string): Promise<unknown>;
   parsePatchFiles(patch: string): { files: PierreFileDiffMeta[] }[];
   hydratePartialDiff(mode: 'mutate', fd: PierreFileDiffMeta, files: { oldFile: { name: string; contents: string }; newFile: { name: string; contents: string } }): void;
   setCustomExtension(ext: string, lang: string): void;
   FileDiff: new (o: Record<string, unknown>) => PierreFileDiff;
+}
+/** One theme in @pierre/theming's catalog. Shiki's have no displayName. */
+export interface ThemeDescriptor { name: string; displayName?: string; collection?: string; colorScheme?: 'light' | 'dark' }
+/** @pierre/theming's `themes`: Pierre's themes, then Shiki's, in that order. Listing them loads none. */
+export interface ThemeCatalog {
+  getThemes(o?: { colorScheme?: 'light' | 'dark' }): readonly ThemeDescriptor[];
+  getTheme(name: string): ThemeDescriptor | undefined;
 }
 export interface TreeDecoration { text: string; title?: string; parts?: { text: string; color?: string }[] }
 export interface PierreFileTree {

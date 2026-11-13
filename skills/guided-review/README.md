@@ -21,6 +21,10 @@ them:
   that name the function they hide, moved code marked at both ends. A **Diff** tab lists every file in a
   [`@pierre/trees`](https://trees.software) tree. Unified or split: the guide sets where it starts (`diffStyle`),
   and each reader can switch from the bar.
+- **Code themes**: the palette button in the bar lists every theme `@pierre/diffs` can draw: Pierre's own, then
+  [Shiki's](https://shiki.style/themes) (GitHub, Catppuccin, Rosé Pine, Solarized, Tokyo Night and more). Moving
+  through the list shows each theme on the code; Enter or a click keeps it. Light and dark each keep their own pick,
+  in your browser, on that page.
 - **Markdown** files open in **Preview**, as GitHub shows them: rendered when the guide is built (with
   [markdown-it](https://github.com/markdown-it/markdown-it) and a GitHub-like sanitizer), with the change marked:
   added and removed blocks, and the words that changed inside a block, folded around it. **Changes** off shows the whole

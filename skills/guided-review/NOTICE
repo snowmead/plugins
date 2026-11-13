@@ -17,5 +17,6 @@ Not included, but used:
 
 - At build time, installed from npm: pele (MIT), which draws the diagrams, and markdown-it (MIT) and sanitize-html
   (MIT), which render Markdown files.
-- When a guide is viewed, loaded from cdn.jsdelivr.net: @pierre/diffs (Apache-2.0) and @pierre/trees (Apache-2.0);
+- When a guide is viewed, loaded from cdn.jsdelivr.net: @pierre/diffs (Apache-2.0) and @pierre/trees (Apache-2.0),
+  and, through @pierre/diffs, the code themes a reader picks: @pierre/theme (Apache-2.0) and @shikijs/themes (MIT);
   from Google Fonts: Geist (SIL Open Font License 1.1).
