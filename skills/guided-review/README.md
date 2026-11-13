@@ -119,7 +119,7 @@ Run these in this folder, after `bun install`:
 | `bun run test` | gather and build against a scratch repository (kinds, scopes, moves, refs, escaping, every refusal, a working tree's snapshot, a pull request from a stand-in for GitHub), then the demo in headless Chrome over DevTools: behavior, no console errors, and timing budgets (boot ≤ 30 ms, each interaction ≤ 12 ms) |
 | `bun run typecheck` | `tsc` over the runtime and the scripts |
 | `bun run example` | Builds the demo into `examples/demo.preview.html`, and the two stacked demo pull requests into `examples/stack.preview.html` |
-| `bun scripts/build.ts --refresh` | Moves @pierre/diffs and @pierre/trees to their newest release that is at least 14 days old (the artifact rule) and that works: `scripts/verify.ts` opens the demo with each newer release in headless Chrome, light and dark, and a release whose file cards or tree do not draw goes into `runtime/libs.json`'s `skip` with the reason. A build does this on its own once a day, within each pin's major; `--major` crosses a major version |
+| `bun scripts/build.ts --refresh` | Moves @pierre/diffs and @pierre/trees to their newest release that is at least 14 days old (the artifact rule) and that works: `scripts/verify.ts` opens the demo with each newer release in headless Chrome, light, dark, and dark with a Shiki code theme picked, and a release whose file cards or tree do not draw, or whose code does not draw in that theme, goes into `runtime/libs.json`'s `skip` with the reason. A build does this on its own once a day, within each pin's major; `--major` crosses a major version |
 
 ```
 SKILL.md                          what Claude reads first

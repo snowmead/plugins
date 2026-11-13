@@ -18,6 +18,10 @@ import { browser, chromeBinary } from '../kit/build/chrome';
 import type { Verify } from '../kit/build/libs';
 import { buildDemo } from './demo';
 
+/** The theme catalog in an import graph of @pierre/diffs: the @pierre/theming/themes it loads, which the page's code
+    theme menu lists (build.ts puts it in the page data as libs.themes). */
+export const themeCatalog = (modules: string[]) => modules.find((m) => /\/@pierre\/theming@[^/]+\/themes\/\+esm$/.test(m));
+
 /** The dark check's code theme, and the background it draws on. */
 const SHIKI = { name: 'github-dark', bg: 'rgb(36, 41, 46)' };
 
@@ -70,7 +74,7 @@ function demoPage(): Page {
 export function verifier(): Verify {
   let page: Page | null = null;
   let n = 0;
-  return async (name, url) => {
+  return async (name, url, modules) => {
     if (!chromeBinary()) throw new Error('no Chrome to open a page in; set CHROME');
     page ??= demoPage();
     const was = page.libs[name];
@@ -82,7 +86,15 @@ export function verifier(): Verify {
     const pair = (u: string) => `${JSON.stringify(name)}:${JSON.stringify(u)}`;
     const src = readFileSync(data, 'utf8');
     if (!src.includes(pair(was))) throw new Error(`the demo page's data names ${name} some other way`);
-    writeFileSync(data, src.replace(pair(was), pair(url)));
+    let next = src.replace(pair(was), pair(url));
+    // A release of @pierre/diffs brings its own theme catalog, and the page lists it by its own URL: swap that too.
+    // With none in the release's graph, the page has no catalog, and the code theme pass fails.
+    if (name === 'diffs') {
+      const old = page.libs.themes, now = themeCatalog(modules);
+      const entry = (u: string) => `,${JSON.stringify('themes')}:${JSON.stringify(u)}`;
+      if (old) next = next.replace(entry(old), now ? entry(now) : '');
+    }
+    writeFileSync(data, next);
     const problems = new Set<string>();
     try {
       const passes = [{ theme: 'light', code: '' }, { theme: 'dark', code: '' }, { theme: 'dark', code: SHIKI.name }];

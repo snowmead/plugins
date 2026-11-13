@@ -32,7 +32,7 @@ import { diagrams } from '../kit/build/diagram';
 import { LONG_SENTENCE, longSentences } from '../kit/build/prose';
 import { BELL, COMMENT, PALETTE, PANEL } from '../runtime/icons';
 import { previews } from './markdown';
-import { verifier } from './verify';
+import { themeCatalog, verifier } from './verify';
 
 const ROOT = join(import.meta.dir, '..');
 const RT = join(ROOT, 'runtime');
@@ -578,7 +578,7 @@ ${p.footer}
 // ---------------------------------------------------------------- pack
 const data: PageData = {
   // The theme catalog @pierre/diffs loads, at the version it loads, for the code theme menu to list.
-  libs: { diffs: libmap.diffs.url, trees: libmap.trees.url, themes: libmap.diffs.modules.find((m) => /\/@pierre\/theming@[^/]+\/themes\/\+esm$/.test(m)) },
+  libs: { diffs: libmap.diffs.url, trees: libmap.trees.url, themes: themeCatalog(libmap.diffs.modules) },
   diffStyle,
   prs: prs.map((p) => p.data),
 };
