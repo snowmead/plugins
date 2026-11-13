@@ -74,4 +74,4 @@ package.json, bun.lock            dev dependencies (TypeScript, Bun's types)
 ```
 
 Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`: earshot
-(MIT).
+(MIT) and Ioskeley Mono (SIL Open Font License 1.1).

@@ -107,4 +107,4 @@ package.json, bun.lock            build dependencies; the first build installs t
 ```
 
 Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`: earshot
-(MIT).
+(MIT) and Ioskeley Mono (SIL Open Font License 1.1).
