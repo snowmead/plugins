@@ -8,9 +8,9 @@
    Moving through the menu shows each theme on the cards; Enter or a click keeps it, and Escape, Tab or a click
    outside goes back. The picks stay in this browser (gr:code-theme), on this page only.
 
-   The default pair, Pierre Light and Pierre Dark, draws on the page's code background, as it always has. Any other
-   theme draws on its own background, and the folds and moved-code chips take its colors: data-code-bg="theme" on
-   the root while one shows (guide.css). */
+   A theme colors the code only: its syntax and its plain text. Every theme draws on the page's code background, and
+   added, removed and changed lines keep the default pair's green, red and blue (CODE_CSS), so a change reads the
+   same in every theme. */
 import type { ThemeCatalog, ThemeDescriptor } from './types';
 import { $, $$, h, store } from '../kit/web/dom';
 import { sound } from '../kit/web/sound';
@@ -32,9 +32,16 @@ let shown: Picks = { ...DEFAULT };
 const cbs = new Set<() => void>();
 const mode = (): Mode => (isDark() ? 'dark' : 'light');
 
-/** Settles once the stored picks are checked against the catalog. A card waits for it before it draws, since a
-    name the catalog does not have leaves a card empty. */
-export const codeReady = libs.then(({ themes }) => {
+/** What every card draws with, whatever its theme: the page's code background, and the default pair's colors for
+    added, removed and changed lines. @pierre/diffs takes each from the theme in use, and mixes the line colors into
+    the background; these win over it (the unsafe layer). The line colors are added once codeReady has read them. */
+let CODE_CSS = ':host { --diffs-light-bg: var(--surface); --diffs-dark-bg: var(--surface); }';
+/** The colors @pierre/diffs reads from a theme for a line's change, in its own order of preference. */
+const GIT = { addition: ['gitDecoration.addedResourceForeground', 'terminal.ansiGreen'], deletion: ['gitDecoration.deletedResourceForeground', 'terminal.ansiRed'], modified: ['gitDecoration.modifiedResourceForeground', 'terminal.ansiBlue'] };
+
+/** Settles once the stored picks are checked against the catalog, and the default pair's line colors are read. A
+    card waits for it before it draws, since a name the catalog does not have leaves a card empty. */
+export const codeReady = libs.then(async ({ diffs, themes }) => {
   catalog = themes;
   const saved = store.get<Partial<Picks>>(KEY);
   for (const m of ['light', 'dark'] as Mode[]) {
@@ -42,28 +49,29 @@ export const codeReady = libs.then(({ themes }) => {
     if (typeof name === 'string' && themes?.getTheme(name)?.colorScheme === m) kept[m] = name;
   }
   shown = { ...kept };
-  mark();
+  // The default pair loads for the first card anyway; if it does not, each theme keeps its own line colors.
+  const vars: string[] = [];
+  for (const m of ['light', 'dark'] as Mode[]) {
+    try {
+      const { colors = {} } = (await diffs?.resolveTheme(DEFAULT[m])) as { colors?: Record<string, string> } ?? {};
+      for (const [kind, keys] of Object.entries(GIT)) {
+        const color = keys.map((k) => colors[k]).find(Boolean);
+        if (color) vars.push(`--diffs-${m}-${kind}-color: ${color};`);
+      }
+    } catch { /* the theme's own */ }
+  }
+  if (vars.length) CODE_CSS = CODE_CSS.replace(' }', ` ${vars.join(' ')} }`);
 });
 
-/** The options a card draws with: the theme pair, and the page's code background for each mode that shows its
-    default. */
-export function codeOptions() {
-  const own = (['light', 'dark'] as Mode[]).filter((m) => shown[m] === DEFAULT[m]).map((m) => `--diffs-${m}-bg: var(--surface);`);
-  return { theme: { ...shown }, unsafeCSS: own.length ? `:host { ${own.join(' ')} }` : '' };
-}
+/** The options a card draws with. */
+export const codeOptions = () => ({ theme: { ...shown }, unsafeCSS: CODE_CSS });
 
 /** Call cb when the cards must draw in other colors. */
 export const onCodeTheme = (cb: () => void) => { cbs.add(cb); };
 
-function mark() {
-  const root = document.documentElement;
-  if (shown[mode()] === DEFAULT[mode()]) delete root.dataset.codeBg;
-  else root.dataset.codeBg = 'theme';
-}
 function show(next: Picks) {
   if (next.light === shown.light && next.dark === shown.dark) return;
   shown = next;
-  mark();
   cbs.forEach((cb) => cb());
 }
 
@@ -191,5 +199,5 @@ export function startCodeTheme() {
   addEventListener('pointerdown', (e) => { if (!menu.hidden && !wrap.contains(e.target as Node)) void set(false); }, true);
   addEventListener('blur', () => { void set(false); }); // a click outside the frame
   // The other mode has its own pick: a change of mode closes the menu and shows that pick.
-  onTheme(() => { if (mode() !== listed) void set(false); mark(); });
+  onTheme(() => { if (mode() !== listed) void set(false); });
 }

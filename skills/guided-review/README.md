@@ -23,7 +23,8 @@ them:
   and each reader can switch from the bar.
 - **Code themes**: the palette button in the bar lists every theme `@pierre/diffs` can draw: Pierre's own, then
   [Shiki's](https://shiki.style/themes) (GitHub, Catppuccin, Rosé Pine, Solarized, Tokyo Night and more). Moving
-  through the list shows each theme on the code; Enter or a click keeps it. Light and dark each keep their own pick,
+  through the list shows each theme on the code; Enter or a click keeps it. A theme colors the code only: the
+  background and the green and red of added and removed lines stay the same. Light and dark each keep their own pick,
   in your browser, on that page.
 - **Markdown** files open in **Preview**, as GitHub shows them: rendered when the guide is built (with
   [markdown-it](https://github.com/markdown-it/markdown-it) and a GitHub-like sanitizer), with the change marked:

@@ -22,12 +22,12 @@ import { buildDemo } from './demo';
     theme menu lists (build.ts puts it in the page data as libs.themes). */
 export const themeCatalog = (modules: string[]) => modules.find((m) => /\/@pierre\/theming@[^/]+\/themes\/\+esm$/.test(m));
 
-/** The dark check's code theme, and the background it draws on. */
-const SHIKI = { name: 'github-dark', bg: 'rgb(36, 41, 46)' };
+/** The third pass's code theme, and the color of its plain text. */
+const SHIKI = { name: 'github-dark', fg: 'rgb(225, 228, 232)' };
 
-// Stops at the first thing that did not draw: one is enough to refuse the release. BG is the background the code must
-// draw on, or empty for any.
-const CHECK = (BG: string) => `(async () => {
+// Stops at the first thing that did not draw: one is enough to refuse the release. FG is the color the code's plain
+// text must draw in, or empty for any.
+const CHECK = (FG: string) => `(async () => {
   const sleep = (n) => new Promise((ok) => setTimeout(ok, n));
   const until = async (fn, ms) => { const end = Date.now() + ms; while (!fn() && Date.now() < end) await sleep(50); return fn(); };
   let cards = 0;
@@ -40,8 +40,8 @@ const CHECK = (BG: string) => `(async () => {
       const plain = () => code.querySelector('.gr-plain');
       await until(() => lines() || plain(), cards++ ? 5000 : 15000);
       if (!lines()) return c.dataset.path + (plain() ? ' fell back to plain text' : ' drew no code');
-      const bg = getComputedStyle(lines().closest('pre')).backgroundColor;
-      if (${JSON.stringify(BG)} && bg !== ${JSON.stringify(BG)}) return c.dataset.path + ' drew on ' + bg + ', not in the code theme';
+      const fg = getComputedStyle(lines().closest('pre')).color;
+      if (${JSON.stringify(FG)} && fg !== ${JSON.stringify(FG)}) return c.dataset.path + ' drew in ' + fg + ', not in the code theme';
     }
     return null;
   };
@@ -107,7 +107,7 @@ export function verifier(): Verify {
             await tab.send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('gr:code-theme', ${JSON.stringify(picks)})` });
           }
           await tab.open(`file://${join(run, 'demo.preview.html')}`);
-          const out = await tab.run(CHECK(code ? SHIKI.bg : ''));
+          const out = await tab.run(CHECK(code ? SHIKI.fg : ''));
           if (typeof out !== 'string' || out.startsWith('ERR ')) throw new Error(`the check did not run (${out})`);
           for (const e of tab.errors) problems.add(e.split('\n')[0]);
           if (out) problems.add(`${code || theme}: ${out}`);
