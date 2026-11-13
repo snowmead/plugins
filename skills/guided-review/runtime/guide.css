@@ -324,14 +324,6 @@ body.gr-head-stuck .gr-bar-title-in { transform: none; opacity: 1; visibility: v
 .gr-move.add { background: var(--add-bg-soft); }
 .gr-move button { color: var(--muted-fg); }
 .gr-move button:hover { color: var(--fg); }
-/* A code theme other than the default draws on its own background (codetheme.ts). The folds and moved-code chips
-   are ours but sit among its lines, so they take its colors: @pierre/diffs sets these variables around them. */
-:root[data-code-bg="theme"] .gr-sep .in { background: var(--diffs-bg-separator); color: var(--diffs-fg-number); border-color: color-mix(in srgb, var(--diffs-fg) 10%, transparent); }
-:root[data-code-bg="theme"] .gr-sep :is(.ar, .sc, .ar button), :root[data-code-bg="theme"] .gr-move, :root[data-code-bg="theme"] .gr-move button { color: var(--diffs-fg-number); }
-:root[data-code-bg="theme"] .gr-sep .ar button:hover { color: var(--diffs-fg); background: var(--diffs-bg-buffer); }
-:root[data-code-bg="theme"] .gr-sep .lb button, :root[data-code-bg="theme"] .gr-move button:hover { color: var(--diffs-fg); }
-:root[data-code-bg="theme"] .gr-move.del { background: var(--diffs-bg-deletion); }
-:root[data-code-bg="theme"] .gr-move.add { background: var(--diffs-bg-addition); }
 /* Markdown: a card shows the file as it reads (Preview) or its source diff (Source), as GitHub does. The preview
    reads like GitHub's: a document column, its blocks marked when they changed (a bar at the left, and the words that
    changed inside a block). A speech bubble at a block's left starts a comment on its lines. */

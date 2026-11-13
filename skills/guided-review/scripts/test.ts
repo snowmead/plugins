@@ -439,7 +439,7 @@ const expect: Record<string, unknown> = {
   progress: '1 of 7 chapters reviewed', chapterFolds: true, saved: true, keyMoves: true, keyMarks: '2 of 7 chapters reviewed',
   jumpInGuide: true, jumpFoldToDiff: true, foldRow: true, diffCards: 11, tree: true, treeTick: true, soundOff: 'false', soundSaved: false,
   styleStart: 'true', split: true, styleSaved: 'split', splitJump: true, unified: true,
-  ctOpen: 'pierre-light true false', ctPreview: true, ctBack: true, ctKept: '{"light":"solarized-light","dark":"pierre-dark"}', ctOtherMode: true, ctUnknown: true,
+  ctOpen: 'pierre-light true false', ctPreview: true, ctBack: true, ctKept: '{"light":"solarized-light","dark":"pierre-dark"}', ctCodeOnly: true, ctOtherMode: true, ctUnknown: true,
   splitKeepsLight: true,
   textShut: true, panelSaved: '{"guide":true,"diff":false}', treeOwn: 'true false', treeShut: true, panelsOpen: '{"guide":false,"diff":false}',
   titleAtTop: 'false false', titleInBar: 'true true', headSticks: true, tickKeepsPlace: true, chapterKeepsPlace: true,
@@ -516,30 +516,39 @@ const RUN = `
 
   // the code theme: the palette's menu lists the themes of the mode on screen, with the kept one focused. The theme
   // under the pointer shows on the cards, Escape goes back, and a click keeps it for that mode only: dark mode still
-  // shows what it showed. Solarized Light draws on its own background, #fdf6e3. The page is set light and dark here,
-  // whatever the system is.
+  // shows what it showed. A theme colors the code only: Solarized Light's text is #657b83, and the background and
+  // the added and removed lines stay as the default draws them. The page is set light and dark here, whatever the
+  // system is.
   const ct = $('[data-code-theme]'), ctBtn = ct.querySelector('button'), ctMenu = ct.querySelector('[role="menu"]');
-  const codeBg = () => { const pre = dcard()?.querySelector('pre'); return pre ? getComputedStyle(pre).backgroundColor : null; };
-  const SOLARIZED = 'rgb(253, 246, 227)';
+  const look = () => {
+    const root = dcard(), pre = root?.querySelector('pre'), bg = (q) => { const e = root?.querySelector(q); return e ? getComputedStyle(e).backgroundColor : null; };
+    return pre ? { fg: getComputedStyle(pre).color, bg: getComputedStyle(pre).backgroundColor, add: bg('[data-line-type="change-addition"]'), del: bg('[data-line-type="change-deletion"]') } : {};
+  };
+  const fg = () => look().fg;
+  const SOLARIZED = 'rgb(101, 123, 131)';
   const ctOpen = async () => { ctBtn.click(); await until(() => !ctMenu.hidden && ctMenu.querySelector('[value="solarized-light"]')); };
   const light = () => { document.documentElement.dataset.theme = 'light'; }, dark = () => { document.documentElement.dataset.theme = 'dark'; };
   // Under a dark system the cards are dark already; under a light one, wait for them to turn.
-  const start = codeBg();
-  dark(); if (!matchMedia('(prefers-color-scheme: dark)').matches) await until(() => codeBg() !== start);
-  const darkBg0 = codeBg();
-  light(); await until(() => codeBg() !== darkBg0);
-  r.ctBg0 = codeBg();
+  const start = fg();
+  dark(); if (!matchMedia('(prefers-color-scheme: dark)').matches) await until(() => fg() !== start);
+  const darkFg0 = fg();
+  light(); await until(() => fg() !== darkFg0);
+  const look0 = look();
+  r.ctFg0 = look0.fg; r.ctBg0 = look0.bg;
   await ctOpen();
   r.ctOpen = [document.activeElement.value, !!ctMenu.querySelector('[value="github-light"]'), !!ctMenu.querySelector('[value="github-dark"]')].join(' ');
   ctMenu.querySelector('[value="solarized-light"]').dispatchEvent(new PointerEvent('pointermove', { bubbles: true }));
-  r.ctPreview = await until(() => codeBg() === SOLARIZED);
+  r.ctPreview = await until(() => fg() === SOLARIZED);
   document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  r.ctBack = (await until(() => codeBg() === r.ctBg0)) && ctMenu.hidden && document.activeElement === ctBtn;
+  r.ctBack = (await until(() => fg() === r.ctFg0)) && ctMenu.hidden && document.activeElement === ctBtn;
   await ctOpen();
   ctMenu.querySelector('[value="solarized-light"]').click();
-  r.ctKept = (await until(() => codeBg() === SOLARIZED)) && localStorage.getItem('gr:code-theme');
+  r.ctKept = (await until(() => fg() === SOLARIZED)) && localStorage.getItem('gr:code-theme');
+  const lookKept = look();
+  r.ctCodeOnly = !!look0.add && !!look0.del && [lookKept.bg, lookKept.add, lookKept.del].join(' | ') === [look0.bg, look0.add, look0.del].join(' | ')
+    || JSON.stringify({ default: look0, solarized: lookKept });
   dark();
-  r.ctOtherMode = await until(() => codeBg() === darkBg0);
+  r.ctOtherMode = await until(() => fg() === darkFg0);
   delete document.documentElement.dataset.theme;
 
   // the panel button closes the left column of the view on screen, each view's on its own, and remembers
@@ -1173,11 +1182,12 @@ try {
     const { r: again } = await inPage(tab, `
       $('#c-retry-decision').scrollIntoView();
       const root = () => card('#c-retry-decision', 'src/webhooks/deliver.ts')?.querySelector('diffs-container')?.shadowRoot;
-      const bg = () => { const pre = root()?.querySelector('[data-line]')?.closest('pre'); return pre ? getComputedStyle(pre).backgroundColor : null; };
+      const pre = () => root()?.querySelector('[data-line]')?.closest('pre');
+      const bg = () => pre() ? getComputedStyle(pre()).backgroundColor : null;
       await until(() => bg());
       $('.k-theme button').click();
       $('.k-theme [role="menu"] button[value="light"]').click();
-      r.unknown = await until(() => bg() === ${JSON.stringify(r.ctBg0)});
+      r.unknown = await until(() => pre() && getComputedStyle(pre()).color === ${JSON.stringify(r.ctFg0)});
       $('[data-diff-style="split"]').click();
       await until(() => root()?.querySelector('[data-diff-type="split"]'));
       await sleep(300);
