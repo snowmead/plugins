@@ -1,7 +1,8 @@
 # kit
 
 What the Artifact skills share, so their pages look, sound and behave as one family: thinkr, guided-review and
-changelog. The look is shadcn/ui's neutral theme in Geist, light and dark, as thinkr has always had it.
+changelog. The look is shadcn/ui's neutral theme in Geist, light and dark, as thinkr has always had it, with code and
+other monospace text in Ioskeley Mono.
 
 The kit is not a skill. Each skill that uses it has a symlink to it, `skills/<skill>/kit -> ../../kit`, and imports
 from `kit/` as if it were its own folder, so a skill also works on its own. The plugin `snowmead` is the whole
@@ -15,10 +16,11 @@ macOS and Linux; on Windows, Developer Mode and `core.symlinks=true`).
 |---|---|
 | `tokens.css` | The tokens every page builds on, light and dark, and the base rules (box sizing, focus ring, selection, reduced motion). |
 | `ui.css` | The shared parts: the sticky bar (`.k-bar`), buttons (`.k-btn` with `is-primary`, `is-ghost`, `is-icon`, `is-sm`), the segmented control (`.k-seg`), badges (`.k-badge`), the toast (`.k-toast`), the speaker button (`.k-sound`), the theme button (`.k-theme`) and its menu (`.k-menu`), and diagrams (`.k-dia`, with pele's colors and fonts set to the tokens). |
+| `fonts/` | Ioskeley Mono, the `--mono` face: Regular, Italic, Medium and SemiBold, cut to Latin, punctuation, arrows, math and box drawing, without programming ligatures, and its license (`OFL.txt`). `scripts/fonts.py` writes them. |
 | `sounds.json` | One earshot kit: `nav`, `step`, `select`, `deselect`, `reveal`, `toggle`, `send` and `hover`. |
 | `web/` | Browser code each page's runtime bundles: `dom.ts` (`h`, `$`, `$$`, `esc`, `slug`, `store`, `onScroll`, `barLine`, `copyText`), `icons.ts` (`ICON`, `soundButton`, `themeButton`), `theme.ts` (`themeType`, `isDark`, `onTheme`, `setTheme`, `bindThemeButton`), `sound.ts`, `toast.ts`, `types.ts`. |
-| `build/` | Helpers for each skill's scripts: `page.ts` (the Google Fonts link for Geist, the stylesheet, the runtime with its sounds, the files a page publishes beside it, the preview document), `libs.ts` (libraries pinned in `runtime/libs.json`, refreshed under the artifact rule; releases in a pin's `skip` list, or whose import graph does not resolve on jsDelivr, are passed over. A skill that passes `verify`, a check that opens one of its pages with the release, gets only releases that pass it, each day within the pin's major, and a release that fails goes into `skip` with the reason; without `verify`, a build refreshes on its own each week within the pin's minor, and a new minor waits for `--refresh`), `chrome.ts` (find Chrome, drive it over DevTools for tests, and `themeChecks`, the theme button's test for every page), `shot.ts` (screenshots), `deps.ts` (a skill's build dependencies, installed once from its lockfile on a fresh copy), `words.ts` (`align`, the longest common subsequence the builds mark what changed with), `prose.ts` (`sentences` and `longSentences`, the short-sentence check guided-review's text and thinkr's specs share: both are written about 80% of the way to ASD-STE100, and the builds warn past 25 words), `diagram.ts` (Mermaid drawn into SVG with pele, below). |
-| `scripts/` | Maintenance: `sounds.py` re-renders the sounds. |
+| `build/` | Helpers for each skill's scripts: `page.ts` (the Google Fonts link for Geist, the stylesheet with Ioskeley Mono embedded, the runtime with its sounds, the files a page publishes beside it, the preview document), `libs.ts` (libraries pinned in `runtime/libs.json`, refreshed under the artifact rule; releases in a pin's `skip` list, or whose import graph does not resolve on jsDelivr, are passed over. A skill that passes `verify`, a check that opens one of its pages with the release, gets only releases that pass it, each day within the pin's major, and a release that fails goes into `skip` with the reason; without `verify`, a build refreshes on its own each week within the pin's minor, and a new minor waits for `--refresh`), `chrome.ts` (find Chrome, drive it over DevTools for tests, and `themeChecks`, the theme button's test for every page), `shot.ts` (screenshots), `deps.ts` (a skill's build dependencies, installed once from its lockfile on a fresh copy), `words.ts` (`align`, the longest common subsequence the builds mark what changed with), `prose.ts` (`sentences` and `longSentences`, the short-sentence check guided-review's text and thinkr's specs share: both are written about 80% of the way to ASD-STE100, and the builds warn past 25 words), `diagram.ts` (Mermaid drawn into SVG with pele, below). |
+| `scripts/` | Maintenance: `sounds.py` re-renders the sounds; `fonts.py` writes the monospace faces. |
 
 ## Tokens
 
@@ -72,7 +74,8 @@ its `package.json`, at a release at least 14 days old.
   `bindSoundButton` and `bindThemeButton`. A runtime that imports nothing from `theme.ts` still imports it, so that
   the button works.
 - **Tests and shots:** `browser()` and `findChrome()` from `kit/build/chrome.ts`; `scripts/shot.ts` calls `shotCli()`.
-  Both open the preview, which loads Geist from Google Fonts, so they need the network for the real type. A page
+  Both open the preview, which loads Geist from Google Fonts, so they need the network for the real type (Ioskeley
+  Mono is in the stylesheet). A page
   with a theme button runs `themeChecks()` on its preview.
 - **tsconfig.json** includes `kit/**/*.ts`, so `bun run typecheck` covers the kit.
 
@@ -85,6 +88,9 @@ bump `version` in `.claude-plugin/plugin.json`: an installed copy updates only w
 | Command (from the repository root) | Does |
 |---|---|
 | `uv run --no-project --python 3.13 --with numpy --with scipy --with soundfile --with soxr python -I kit/scripts/sounds.py` | Re-renders the sounds from earshot's newest commit into `kit/sounds.json`; `--no-pull` renders from the commit already cached |
+| `uv run --no-project --python 3.13 --with fonttools --with brotli python -I kit/scripts/fonts.py` | Downloads the Ioskeley Mono release pinned in the script and writes its faces into `kit/fonts/` |
 
-Geist loads from Google Fonts, under the SIL Open Font License 1.1; the sounds are rendered with
+Geist loads from Google Fonts, under the SIL Open Font License 1.1; Ioskeley Mono
+([ahatem/IoskeleyMono](https://github.com/ahatem/IoskeleyMono), built on Iosevka) is included in `fonts/`, under the
+SIL Open Font License 1.1 (`fonts/OFL.txt`); the sounds are rendered with
 [earshot](https://github.com/Leonxlnx/earshot) (MIT); diagrams are drawn with [pele](https://pele.run) (MIT).

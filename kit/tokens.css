@@ -1,5 +1,6 @@
-/* kit: the tokens and base every page shares. shadcn/ui's neutral theme in Geist, light and dark: the system picks,
-   unless data-theme on the root says otherwise (kit/web/theme.ts). Pages build on these names and add only what is theirs. */
+/* kit: the tokens and base every page shares. shadcn/ui's neutral theme in Geist, with code in Ioskeley Mono, light
+   and dark: the system picks, unless data-theme on the root says otherwise (kit/web/theme.ts). Pages build on these
+   names and add only what is theirs. */
 :root {
   --bg: oklch(1 0 0);
   --fg: oklch(0.145 0 0);
@@ -22,7 +23,7 @@
   --c4: oklch(0.62 0.21 350);  /* pink */
   --c5: oklch(0.56 0.22 295);  /* violet */
   --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --mono: "Ioskeley Mono", ui-monospace, "SF Mono", Menlo, monospace;  /* embedded by kit/build/page.ts */
   --radius: 0.625rem;
   --shadow: 0 1px 2px oklch(0 0 0 / 0.04), 0 8px 24px -12px oklch(0 0 0 / 0.12);
   --bar-h: 52px;

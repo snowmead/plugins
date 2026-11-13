@@ -41,7 +41,7 @@ interface Pele {
     source, when pele knows it). `id` is unique in the page: letters, digits, - and _. */
 export async function diagrams(dir: string) {
   const pele = await need<Pele>('pele', dir);
-  const options = { fontFamily: 'Geist', fontFamilyMono: 'Geist Mono', fontSize: 13, responsive: false };
+  const options = { fontFamily: 'Geist', fontFamilyMono: 'Ioskeley Mono', fontSize: 13, responsive: false };
   return (source: string, id: string): Drawn | { error: string } => {
     let wide, narrow;
     try {

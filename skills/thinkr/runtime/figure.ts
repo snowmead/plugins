@@ -40,7 +40,7 @@ export function tokens(): Tokens {
     const [r, g, b, a] = rgba(cssVar(t));
     out[t === 'muted-fg' ? 'mutedFg' : t] = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},${+a.toFixed(3)})`;
   }
-  return { ...(out as Omit<Tokens, 'dark' | 'font' | 'mono'>), dark: isDark(), font: 'Geist, system-ui, sans-serif', mono: '"Geist Mono", ui-monospace, monospace' };
+  return { ...(out as Omit<Tokens, 'dark' | 'font' | 'mono'>), dark: isDark(), font: 'Geist, system-ui, sans-serif', mono: '"Ioskeley Mono", ui-monospace, monospace' };
 }
 
 onTheme(() => { const t = tokens(); themeCbs.forEach((cb) => cb(t)); });

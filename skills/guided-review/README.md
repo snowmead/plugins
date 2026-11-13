@@ -64,9 +64,9 @@ them:
   between them.
 
 The page holds only its markup: its styles, its data and one small bundled runtime are files published beside it,
-Geist and Geist Mono load from Google Fonts, and the libraries are preloaded with their whole import graphs. It
-shares its look, its quiet UI sounds and its bar with [thinkr](../thinkr) and [changelog](../changelog) through the
-[kit](../../kit): a sound confirms a mark, and the speaker button mutes them.
+Geist loads from Google Fonts, code is set in Ioskeley Mono (embedded in the styles), and the libraries are preloaded
+with their whole import graphs. It shares its look, its quiet UI sounds and its bar with [thinkr](../thinkr) and
+[changelog](../changelog) through the [kit](../../kit): a sound confirms a mark, and the speaker button mutes them.
 
 ## Install
 

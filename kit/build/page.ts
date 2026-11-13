@@ -16,19 +16,35 @@ export const esc = (s: unknown) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '
 /** JSON to put inside a <script>: no string in it can close the tag. */
 export const json = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c');
 
-/** Geist and Geist Mono from Google Fonts, the one stylesheet host artifacts allow. Text shows in the fallback face
-    until they arrive (display=swap). */
+/** Geist from Google Fonts, the one stylesheet host artifacts allow. Text shows in the fallback face until it
+    arrives (display=swap). The monospace face is in the stylesheet (MONO). */
 export const FONTS = '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
-  + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap">';
+  + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&display=swap">';
+
+/** Ioskeley Mono, the --mono face: an open Iosevka build in the manner of Berkeley Mono (SIL Open Font License 1.1,
+    kit/fonts/OFL.txt). It is not on Google Fonts, and host artifacts load a font from nowhere else, so each face goes
+    into the stylesheet as a data URI. kit/scripts/fonts.py writes the files; each is about 45 KB. A weight between
+    two faces takes the nearer heavier one (450 takes Medium). */
+const MONO = [['Regular', 400, 'normal'], ['Italic', 400, 'italic'], ['Medium', 500, 'normal'], ['SemiBold', 600, 'normal']] as const;
+
+async function monoFaces() {
+  const faces = await Promise.all(MONO.map(async ([file, weight, style]) => {
+    const data = Buffer.from(await Bun.file(join(KIT, 'fonts', `IoskeleyMono-${file}.woff2`)).arrayBuffer()).toString('base64');
+    return `@font-face { font-family: "Ioskeley Mono"; font-style: ${style}; font-weight: ${weight}; font-display: swap; `
+      + `src: url(data:font/woff2;base64,${data}) format("woff2"); }`;
+  }));
+  return '/* kit: Ioskeley Mono (kit/fonts, SIL Open Font License 1.1) */\n' + faces.join('\n');
+}
 
 /** Puts the reader's kept theme on the root before the first paint: the runtime loads after the markup, too late to
     stop a flash of the other theme. It goes right after the title. kit/web/theme.ts keeps the choice. */
 export const THEME = `<script>try{const t=JSON.parse(localStorage.getItem('kit:theme'));if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script>`;
 
-/** The page's stylesheet: the kit's tokens and parts, then each of `files` (the skill's own CSS) on top. */
+/** The page's stylesheet: the kit's tokens and parts, then each of `files` (the skill's own CSS) on top, then the
+    monospace faces. */
 export async function styles(...files: string[]) {
   const parts = await Promise.all([join(KIT, 'tokens.css'), join(KIT, 'ui.css'), ...files].map((f) => Bun.file(f).text()));
-  return parts.join('\n');
+  return [...parts, await monoFaces()].join('\n');
 }
 
 /** The page's script: the sounds it plays, from kit/sounds.json, handed to kit/web/sound.ts, then its runtime entry

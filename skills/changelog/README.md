@@ -24,7 +24,7 @@ narrow a run.
 The page is a quiet feed of entries on a date rail, in Geist, with soft UI sounds (earshot) that wait for your first
 click. It shares its look, its sounds and its bar with [thinkr](../thinkr) and [guided-review](../guided-review)
 through the [kit](../../kit), publishes its styles and script beside a small page, loads
-Geist from Google Fonts, and reads its entries live.
+Geist from Google Fonts (Ioskeley Mono, its monospace face, is embedded in the styles), and reads its entries live.
 
 ## Install
 

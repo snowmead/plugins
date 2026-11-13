@@ -22,8 +22,8 @@ Artifact.
 It looks like shadcn/ui's default theme in Geist: one reading column, an "On this page" rail that lists the
 questions, motion that stays out of the way, and quiet UI sounds made with
 [earshot](https://github.com/Leonxlnx/earshot). Pages stay small and open fast: math and code are rendered
-ahead of time, libraries are preloaded, the styles and runtime are files published beside the page, and Geist loads
-from Google Fonts.
+ahead of time, libraries are preloaded, the styles and runtime are files published beside the page, Geist loads
+from Google Fonts, and code is set in Ioskeley Mono, embedded in the styles.
 
 ## Install
 
