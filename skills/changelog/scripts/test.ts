@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Entry } from '../runtime/types';
 import { type RawPr, type Run, dateIn, inWindow, label, loadConfig, prStats, runsOf, span, windowCi } from './lib';
-import { browser, findChrome, themeChecks } from '../kit/build/chrome';
+import { browser, findChrome, fontChecks, themeChecks } from '../kit/build/chrome';
 
 const ROOT = join(import.meta.dir, '..');
 const argv = Bun.argv.slice(2);
@@ -194,6 +194,7 @@ try {
     failed += bad.length + slow.length + tab.errors.length;
   }
   failed += await themeChecks('file://' + join(tmp, 'changelog.preview.html'), join(tmp, 'profile-theme'));
+  failed += await fontChecks('file://' + join(tmp, 'changelog.preview.html'), join(tmp, 'profile-font'));
 } finally {
   tab.close();
   rmSync(tmp, { recursive: true, force: true });

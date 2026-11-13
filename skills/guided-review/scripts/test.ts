@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Diff, DiffFile, Guide } from '../runtime/types';
 import { buildDemo, buildStack as buildStackDemo, git } from './demo';
-import { browser, findChrome, themeChecks } from '../kit/build/chrome';
+import { browser, findChrome, fontChecks, themeChecks } from '../kit/build/chrome';
 
 const ROOT = join(import.meta.dir, '..');
 let failed = 0;
@@ -1225,6 +1225,7 @@ try {
     Object.assign(r, at);
   });
   failed += await themeChecks('file://' + join(dir, 'demo.preview.html'), join(dir, 'profile-theme'));
+  failed += await fontChecks('file://' + join(dir, 'demo.preview.html'), join(dir, 'profile-font'));
   // A phone's bar, with Send up or not: the page never scrolls sideways, the bell and Send stay on the screen, and the
   // theme button shows until Send needs its room.
   const phone = await browser(join(dir, 'profile-phone'));

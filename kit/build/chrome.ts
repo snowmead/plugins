@@ -168,3 +168,31 @@ export async function themeChecks(url: string, profile: string) {
   }
   return failed;
 }
+
+/** The kit's monospace face on a page: each face kit/build/page.ts embeds loads as itself (its weight and style, not
+    a neighbour), and --mono names it first. A face that does not decode, or a family name spelled two ways, would
+    fall back to the system's monospace with no other test noticing. Prints what failed and returns how many failed. */
+export async function fontChecks(url: string, profile: string) {
+  const tab = await browser(profile);
+  try {
+    await tab.open(url);
+    const out = await tab.run(`(async () => {
+      const bad = [];
+      for (const [font, weight, style] of [['400 13px', '400', 'normal'], ['italic 400 13px', '400', 'italic'], ['500 13px', '500', 'normal'], ['600 13px', '600', 'normal']]) {
+        try {
+          const got = await document.fonts.load(font + ' "Ioskeley Mono"');
+          if (!got.some((f) => f.family.replace(/"/g, '') === 'Ioskeley Mono' && f.weight === weight && f.style === style && f.status === 'loaded')) bad.push(font + ' did not load');
+        } catch (e) { bad.push(font + ' failed: ' + e.message); }
+      }
+      const mono = getComputedStyle(document.documentElement).getPropertyValue('--mono').trim();
+      if (!mono.startsWith('"Ioskeley Mono",')) bad.push('--mono is ' + mono);
+      return JSON.stringify(bad);
+    })()`);
+    const bad = (typeof out === 'string' && out.startsWith('[') ? JSON.parse(out) : [`the check did not run (${out})`]) as string[];
+    for (const b of bad) console.log(`fail  font: ${b}`);
+    if (!bad.length) console.log('ok    font (Ioskeley Mono: 4 faces load, and --mono names it)');
+    return bad.length;
+  } finally {
+    tab.close();
+  }
+}
