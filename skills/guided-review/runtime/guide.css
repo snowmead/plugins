@@ -324,6 +324,14 @@ body.gr-head-stuck .gr-bar-title-in { transform: none; opacity: 1; visibility: v
 .gr-move.add { background: var(--add-bg-soft); }
 .gr-move button { color: var(--muted-fg); }
 .gr-move button:hover { color: var(--fg); }
+/* A code theme other than the default draws on its own background (codetheme.ts). The folds and moved-code chips
+   are ours but sit among its lines, so they take its colors: @pierre/diffs sets these variables around them. */
+:root[data-code-bg="theme"] .gr-sep .in { background: var(--diffs-bg-separator); color: var(--diffs-fg-number); border-color: color-mix(in srgb, var(--diffs-fg) 10%, transparent); }
+:root[data-code-bg="theme"] .gr-sep :is(.ar, .sc, .ar button), :root[data-code-bg="theme"] .gr-move, :root[data-code-bg="theme"] .gr-move button { color: var(--diffs-fg-number); }
+:root[data-code-bg="theme"] .gr-sep .ar button:hover { color: var(--diffs-fg); background: var(--diffs-bg-buffer); }
+:root[data-code-bg="theme"] .gr-sep .lb button, :root[data-code-bg="theme"] .gr-move button:hover { color: var(--diffs-fg); }
+:root[data-code-bg="theme"] .gr-move.del { background: var(--diffs-bg-deletion); }
+:root[data-code-bg="theme"] .gr-move.add { background: var(--diffs-bg-addition); }
 /* Markdown: a card shows the file as it reads (Preview) or its source diff (Source), as GitHub does. The preview
    reads like GitHub's: a document column, its blocks marked when they changed (a bar at the left, and the words that
    changed inside a block). A speech bubble at a block's left starts a comment on its lines. */
@@ -500,6 +508,14 @@ body.gr-diff-panel-closed .gr-tree { display: none; }
 }
 .gr-note-toggle[aria-pressed="false"] { color: var(--muted-fg); }
 .gr-note-toggle[aria-pressed="false"] svg { opacity: .55; }
+/* the code theme: the palette button and its menu (codetheme.ts), a kit menu that scrolls, with a heading for each
+   collection of themes */
+.gr-ct { position: relative; display: inline-flex; }
+.gr-ct > .k-btn svg { width: 16px; height: 16px; }
+.gr-ct-menu { min-width: 15rem; max-width: calc(100vw - 24px); max-height: min(26rem, calc(100dvh - var(--bar-h) - 24px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.gr-ct-menu > button { white-space: nowrap; }
+.gr-ct-head { padding: 6px 8px 2px; font: 500 12.5px/1.4 var(--font); color: var(--fg); }
+.gr-ct-group { padding: 10px 8px 4px; font: 500 11px/1.4 var(--font); letter-spacing: .05em; text-transform: uppercase; color: var(--muted-fg); }
 /* the bell, and its list of the threads with an answer not read yet */
 .gr-bell-wrap { position: relative; display: inline-flex; }
 .gr-bell { position: relative; }
@@ -542,11 +558,11 @@ body.gr-diff-panel-closed .gr-tree { display: none; }
 .gr-inbox-item .more { color: var(--c1); font-size: 12px; }
 .gr-inbox-empty { margin: 0; padding: 16px 14px; color: var(--muted-fg); }
 /* a phone: the list spans the screen under the bar, and the bar keeps room for the bell and Send by leaving out the
-   sound, the left column's button (the chapter text sits above the code there anyway), the comments' count and, while
-   Send shows, the theme button; the links scroll in their own strip when they still do not fit */
+   sound, the code theme button, the left column's button (the chapter text sits above the code there anyway), the
+   comments' count and, while Send shows, the theme button; the links scroll in their own strip when they still do not fit */
 @media (max-width: 560px) {
   .gr-inbox { position: fixed; top: calc(var(--bar-h) + env(safe-area-inset-top, 0px) + 4px); left: 12px; right: 12px; width: auto; }
-  .gr-bar .k-sound, .gr-bar .gr-panel-toggle, .gr-note-toggle .gr-note-count, .gr-bar:has(.gr-send:not([hidden])) .k-theme { display: none; }
+  .gr-bar .k-sound, .gr-bar .gr-ct, .gr-bar .gr-panel-toggle, .gr-note-toggle .gr-note-count, .gr-bar:has(.gr-send:not([hidden])) .k-theme { display: none; }
   .gr-barlinks { overflow-x: auto; scrollbar-width: none; }
   .gr-barlinks::-webkit-scrollbar { display: none; }
 }

@@ -21,6 +21,10 @@ them:
   that name the function they hide, moved code marked at both ends. A **Diff** tab lists every file in a
   [`@pierre/trees`](https://trees.software) tree. Unified or split: the guide sets where it starts (`diffStyle`),
   and each reader can switch from the bar.
+- **Code themes**: the palette button in the bar lists every theme `@pierre/diffs` can draw: Pierre's own, then
+  [Shiki's](https://shiki.style/themes) (GitHub, Catppuccin, Rosé Pine, Solarized, Tokyo Night and more). Moving
+  through the list shows each theme on the code; Enter or a click keeps it. Light and dark each keep their own pick,
+  in your browser, on that page.
 - **Markdown** files open in **Preview**, as GitHub shows them: rendered when the guide is built (with
   [markdown-it](https://github.com/markdown-it/markdown-it) and a GitHub-like sanitizer), with the change marked:
   added and removed blocks, and the words that changed inside a block, folded around it. **Changes** off shows the whole
@@ -64,9 +68,9 @@ them:
   between them.
 
 The page holds only its markup: its styles, its data and one small bundled runtime are files published beside it,
-Geist and Geist Mono load from Google Fonts, and the libraries are preloaded with their whole import graphs. It
-shares its look, its quiet UI sounds and its bar with [thinkr](../thinkr) and [changelog](../changelog) through the
-[kit](../../kit): a sound confirms a mark, and the speaker button mutes them.
+Geist loads from Google Fonts, code is set in Ioskeley Mono (embedded in the styles), and the libraries are preloaded
+with their whole import graphs. It shares its look, its quiet UI sounds and its bar with [thinkr](../thinkr) and
+[changelog](../changelog) through the [kit](../../kit): a sound confirms a mark, and the speaker button mutes them.
 
 ## Install
 
@@ -115,7 +119,7 @@ Run these in this folder, after `bun install`:
 | `bun run test` | gather and build against a scratch repository (kinds, scopes, moves, refs, escaping, every refusal, a working tree's snapshot, a pull request from a stand-in for GitHub), then the demo in headless Chrome over DevTools: behavior, no console errors, and timing budgets (boot ≤ 30 ms, each interaction ≤ 12 ms) |
 | `bun run typecheck` | `tsc` over the runtime and the scripts |
 | `bun run example` | Builds the demo into `examples/demo.preview.html`, and the two stacked demo pull requests into `examples/stack.preview.html` |
-| `bun scripts/build.ts --refresh` | Moves @pierre/diffs and @pierre/trees to their newest release that is at least 14 days old (the artifact rule) and that works: `scripts/verify.ts` opens the demo with each newer release in headless Chrome, light and dark, and a release whose file cards or tree do not draw goes into `runtime/libs.json`'s `skip` with the reason. A build does this on its own once a day, within each pin's major; `--major` crosses a major version |
+| `bun scripts/build.ts --refresh` | Moves @pierre/diffs and @pierre/trees to their newest release that is at least 14 days old (the artifact rule) and that works: `scripts/verify.ts` opens the demo with each newer release in headless Chrome, light, dark, and dark with a Shiki code theme picked, and a release whose file cards or tree do not draw, or whose code does not draw in that theme, goes into `runtime/libs.json`'s `skip` with the reason. A build does this on its own once a day, within each pin's major; `--major` crosses a major version |
 
 ```
 SKILL.md                          what Claude reads first
@@ -129,4 +133,4 @@ package.json, bun.lock            dev dependencies (TypeScript, Bun's types)
 
 The page layout comes from the guided review in [haaku-co/corpus-christi](https://github.com/haaku-co/corpus-christi).
 Licensed under Apache-2.0 (`LICENSE.txt`). Third-party parts keep their own licenses, listed in `NOTICE`:
-earshot (MIT).
+earshot (MIT) and Ioskeley Mono (SIL Open Font License 1.1).

@@ -8,6 +8,11 @@ This product includes third-party material, under its own license:
   Copyright (c) 2026 Leon Lin (https://github.com/Leonxlnx/earshot)
   MIT License
 
+- Ioskeley Mono (kit/fonts), the monospace face, embedded in each page's styles
+  Copyright (c) 2015-2026, Renzhi Li (aka. Belleve Invis) (Iosevka)
+  Copyright (c) 2025, Ahmed Hatem (https://github.com/ahatem/IoskeleyMono)
+  SIL Open Font License 1.1 (kit/fonts/OFL.txt)
+
 Not included, but used:
 
-- When the page is viewed, loaded from Google Fonts: Geist and Geist Mono (SIL Open Font License 1.1).
+- When the page is viewed, loaded from Google Fonts: Geist (SIL Open Font License 1.1).

@@ -1,6 +1,6 @@
 {
  "note": "scripts/build.ts refreshes these to the newest stable release that is at least 14 days old (the artifact rule), within the same major unless --major. Single-file builds (global) wherever the package ships one; for ESM, modules lists the whole import graph so pages preload it in one parallel round. vgpu-prepare is @vgpu/wgsl's prepareShader, which the runtime runs on each shader string (vgpu 0.6 takes only prepared shaders); keep it at vgpu's version.",
- "checked": "2026-10-28",
+ "checked": "2026-11-13",
  "libs": {
   "motion": {
    "pkg": "motion",

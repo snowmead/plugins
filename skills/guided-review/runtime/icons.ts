@@ -13,3 +13,8 @@ export const COMMENT = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColo
 export const PANEL = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
   + '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6 2.5v11"/>'
   + '<rect class="gr-panel-fill" x="2.75" y="3.25" width="2.5" height="9.5" rx=".75" fill="currentColor" stroke="none" opacity=".35"/></svg>';
+
+/** A painter's palette: the colors code is drawn in. */
+export const PALETTE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+  + '<path d="M8 1.75a6.25 6.25 0 0 0 0 12.5c.85 0 1.4-.55 1.4-1.3 0-.4-.15-.7-.4-1-.25-.3-.4-.6-.4-1 0-.75.6-1.3 1.4-1.3h1.6a2.65 2.65 0 0 0 2.65-2.65C14.25 4.15 11.45 1.75 8 1.75Z"/>'
+  + '<g fill="currentColor" stroke="none"><circle cx="4.6" cy="7.6" r=".9"/><circle cx="6" cy="4.6" r=".9"/><circle cx="9.3" cy="4.2" r=".9"/><circle cx="11.6" cy="6.4" r=".9"/></g></svg>';

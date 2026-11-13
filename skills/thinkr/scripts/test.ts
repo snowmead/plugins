@@ -7,7 +7,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { browser, findChrome, themeChecks } from '../kit/build/chrome';
+import { browser, findChrome, fontChecks, themeChecks } from '../kit/build/chrome';
 
 const ROOT = join(import.meta.dir, '..');
 findChrome();
@@ -399,6 +399,7 @@ try {
     }
   }
   failed += await themeChecks('file://' + join(tmp, 'design.preview.html'), join(tmp, 'profile-theme'));
+  failed += await fontChecks('file://' + join(tmp, 'design.preview.html'), join(tmp, 'profile-font'));
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

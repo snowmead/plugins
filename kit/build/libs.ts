@@ -26,8 +26,9 @@ type Lib = { pkg: string; version: string; url: string; global?: string; deps?: 
 type LibFile = { note: string; checked: string; libs: Record<string, Lib> };
 export type LibMap = Record<string, { url: string; global?: string; deps?: string[]; modules: string[] }>;
 /** Whether the release of library `name` at `url` works in a page of the skill: null when it does, else why not.
-    Throws when it cannot tell (no Chrome, a page that does not build), and then the pin stays. */
-export type Verify = (name: string, url: string) => Promise<string | null>;
+    `modules` is the release's import graph, for a page that also loads a part of it by its own URL. Throws when it
+    cannot tell (no Chrome, a page that does not build), and then the pin stays. */
+export type Verify = (name: string, url: string, modules: string[]) => Promise<string | null>;
 
 /** Semver order, prereleases included: 1.0.0-beta.2 < 1.0.0-beta.10 < 1.0.0-rc.1 < 1.0.0 < 1.0.1. */
 export function compare(a: string, b: string): number {
@@ -57,7 +58,7 @@ async function refresh(file: string, reach: Reach, verify: Verify | undefined, m
   const changed: string[] = [];
   // One check at a time: each builds and opens a page.
   let queue: Promise<unknown> = Promise.resolve();
-  const check = (name: string, url: string) => { const p = queue.then(() => verify!(name, url)); queue = p.catch(() => {}); return p; };
+  const check = (name: string, url: string, modules: string[]) => { const p = queue.then(() => verify!(name, url, modules)); queue = p.catch(() => {}); return p; };
   await Promise.all(Object.entries(data.libs).map(async ([name, lib]) => {
     let meta: { time?: Record<string, string> };
     try {
@@ -102,7 +103,7 @@ async function refresh(file: string, reach: Reach, verify: Verify | undefined, m
       if (!pin && verify) {
         console.log(`  libs: checking ${name} ${v} in a page`);
         try {
-          const why = await check(name, url);
+          const why = await check(name, url, modules);
           if (why) {
             (lib.skip ??= {})[v] = why;
             console.log(`  libs: ${name} ${v} does not work, so it goes into skip: ${why}`);

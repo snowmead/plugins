@@ -9,6 +9,7 @@ import { D, split, stat } from './dom';
 import { libs } from './libs';
 import { COMMENT } from './icons';
 import { type Note, commentNotes, fileNotes, noteEl, noteMounted, openLine, reflow } from './comments';
+import { codeOptions, codeReady, onCodeTheme } from './codetheme';
 import type { Ctx } from './ctx';
 import { firstNew, firstOld, rebuildOld } from './hunks';
 import { type Prose, blockAt, light, paint, proseOf, reveal, showSwitches, switches } from './prose';
@@ -69,7 +70,8 @@ const stale = new Set<CardState>();
 const idle = window.requestIdleCallback ?? ((cb: IdleRequestCallback) => setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 8 }), 1));
 function redraw(st: CardState) {
   stale.delete(st);
-  st.opts = { ...st.opts, diffStyle: diffStyle() };
+  // The theme type too: a change of theme reaches the card through setThemeType, not its options.
+  st.opts = { ...st.opts, diffStyle: diffStyle(), themeType: themeType(), ...codeOptions() };
   st.inst!.setOptions(st.opts);
   st.inst!.rerender();
 }
@@ -107,6 +109,8 @@ export function setDiffStyle(s: DiffStyle) {
 export function startDiffStyle() {
   showStyle();
   narrow.addEventListener('change', restyle);
+  // A new code theme redraws the cards the same way: those on screen first, the rest in idle time.
+  onCodeTheme(() => requestAnimationFrame(restyle));
 }
 
 const chaptersOf = (ctx: Ctx, f: DiffFile, hunks: Hunk[]) => ctx.pr.chapters.filter((c) => c.files.some((x) => x.path === f.path && (!x.hunks || x.hunks.some((id) => hunks.some((h) => h.id === id)))));
@@ -183,14 +187,13 @@ function plain(hunks: Hunk[]) {
 }
 
 // ---------------------------------------------------------------- mount
-// The code sits on the page's card surface in both themes.
-const CODE_CSS = ':host { --diffs-light-bg: var(--surface); --diffs-dark-bg: var(--surface); }';
 
 export function mount(card: Element): Promise<void> | undefined {
   const st = cards.get(card);
   if (!st || st.mounting) return st?.mounting;
   st.mounting = (async () => {
     const { diffs } = await libs;
+    await codeReady;
     const host = $('.gr-code', card)!;
     const { f, hunks } = st;
     const fallback = () => { host.innerHTML = plain(hunks); host.style.minHeight = ''; };
@@ -209,7 +212,7 @@ export function mount(card: Element): Promise<void> | undefined {
     }
     st.fd = fd;
     st.opts = {
-      theme: { dark: 'pierre-dark', light: 'pierre-light' },
+      ...codeOptions(),
       themeType: themeType(),
       diffStyle: diffStyle(),
       disableFileHeader: true,
@@ -226,7 +229,6 @@ export function mount(card: Element): Promise<void> | undefined {
       onGutterUtilityClick: (range: PierreLineRange) => openLine(st, range),
       // A selection the reader starts outlives a jump's highlight of its line.
       onLineSelectionStart: () => clearTimeout(st.flashTimer),
-      unsafeCSS: CODE_CSS,
     };
     st.inst = new diffs.FileDiff(st.opts);
     st.inst.render({ fileDiff: fd, containerWrapper: host, lineAnnotations: notesOf(st) });

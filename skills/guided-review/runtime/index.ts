@@ -2,8 +2,8 @@
    columns and keys, for one pull request or several.
    With several, the title is a menu of them (a stack from its base up, or any set to review together), and the page
    shows one at a time. build.ts bundles this into one script, loaded after the page's markup and its data file (window.GR_DATA).
-   Code renders with @pierre/diffs and the Diff tab's tree with @pierre/trees, both imported from the pinned jsDelivr
-   URLs in the data. */
+   Code renders with @pierre/diffs, in the reader's code theme (codetheme.ts), and the Diff tab's tree with
+   @pierre/trees, both imported from the pinned jsDelivr URLs in the data. */
 import type { DiffStyle } from './types';
 import { $$ } from '../kit/web/dom';
 import { sound } from '../kit/web/sound';
@@ -16,6 +16,7 @@ import { choose, current, go, jump, keepPlace, onScroll, pin, show, step, toCard
 import { startComments, toggleNotes } from './comments';
 import { followNode, startDiagrams } from './diagrams';
 import { startTerms } from './terms';
+import { startCodeTheme } from './codetheme';
 
 /** Mark a chapter from a click or a key, with its sound; the last chapter reviewed sounds its own. Its files fold or
     open, and the reader stays at the chapter. */
@@ -154,6 +155,7 @@ function start() {
   for (const x of ctxs) progress(x);
   choose(c);
   startDiffStyle();
+  startCodeTheme();
   startComments();
   startDiagrams();
   startTerms();

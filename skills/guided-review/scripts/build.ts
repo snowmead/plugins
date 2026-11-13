@@ -30,9 +30,9 @@ import { FONTS, ICON, THEME, assets, preview, publishLines, runtime, soundButton
 import { libs, preloads } from '../kit/build/libs';
 import { diagrams } from '../kit/build/diagram';
 import { LONG_SENTENCE, longSentences } from '../kit/build/prose';
-import { BELL, COMMENT, PANEL } from '../runtime/icons';
+import { BELL, COMMENT, PALETTE, PANEL } from '../runtime/icons';
 import { previews } from './markdown';
-import { verifier } from './verify';
+import { themeCatalog, verifier } from './verify';
 
 const ROOT = join(import.meta.dir, '..');
 const RT = join(ROOT, 'runtime');
@@ -559,7 +559,7 @@ const barTitle = (p: Built, i: number) => `<div class="gr-bar-title" data-pr="${
 const markup = `<div class="k-bar gr-bar"><div class="gr-wrap">
 <button type="button" class="k-btn is-ghost is-icon is-sm gr-panel-toggle" data-panel-toggle aria-expanded="true" aria-label="Hide the chapter text" title="Hide the chapter text (b)">${PANEL}</button>
 <div class="k-seg is-sm gr-tabs" role="tablist"><button type="button" class="gr-tab" role="tab" data-view="guide" aria-selected="true">Guide</button><button type="button" class="gr-tab" role="tab" data-view="diff" aria-selected="false">Diff</button></div>
-${prs.map(barTitle).join('')}${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span>${themeButton('k-btn is-ghost is-icon is-sm')}${soundButton('k-btn is-ghost is-icon is-sm')}<span class="gr-bell-wrap"><button type="button" class="k-btn is-ghost is-icon is-sm gr-bell" data-bell aria-haspopup="dialog" aria-expanded="false" aria-controls="gr-inbox" aria-label="Unread answers from Claude" title="Unread answers from Claude">${BELL}<span class="gr-bell-n" hidden></span></button><div class="gr-inbox" id="gr-inbox" role="dialog" aria-label="Unread answers from Claude" data-uncommentable hidden></div></span><button type="button" class="k-btn is-sm gr-note-toggle" data-notes-toggle aria-pressed="true" aria-label="Hide comments" title="Hide comments (c)">${COMMENT}<span class="long">Comments</span><span class="gr-note-count" hidden>0</span></button><button type="button" class="k-btn is-sm gr-send" data-note-send hidden><span class="n">Send</span><span class="long">to Claude</span></button>${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
+${prs.map(barTitle).join('')}${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span><span class="gr-ct" data-code-theme data-uncommentable><button type="button" class="k-btn is-ghost is-icon is-sm" aria-haspopup="menu" aria-expanded="false" aria-label="Code theme" title="Code theme">${PALETTE}</button><div class="k-menu gr-ct-menu" role="menu" aria-label="Code theme" hidden></div></span>${themeButton('k-btn is-ghost is-icon is-sm')}${soundButton('k-btn is-ghost is-icon is-sm')}<span class="gr-bell-wrap"><button type="button" class="k-btn is-ghost is-icon is-sm gr-bell" data-bell aria-haspopup="dialog" aria-expanded="false" aria-controls="gr-inbox" aria-label="Unread answers from Claude" title="Unread answers from Claude">${BELL}<span class="gr-bell-n" hidden></span></button><div class="gr-inbox" id="gr-inbox" role="dialog" aria-label="Unread answers from Claude" data-uncommentable hidden></div></span><button type="button" class="k-btn is-sm gr-note-toggle" data-notes-toggle aria-pressed="true" aria-label="Hide comments" title="Hide comments (c)">${COMMENT}<span class="long">Comments</span><span class="gr-note-count" hidden>0</span></button><button type="button" class="k-btn is-sm gr-send" data-note-send hidden><span class="n">Send</span><span class="long">to Claude</span></button>${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
 </div></div>
 <div class="gr-wrap">
 ${prs.map((p, i) => `<div class="gr-pr" id="${multi ? p.id : 'gr-pr'}" data-pr="${p.id}"${hide(i)}>
@@ -577,7 +577,8 @@ ${p.footer}
 
 // ---------------------------------------------------------------- pack
 const data: PageData = {
-  libs: { diffs: libmap.diffs.url, trees: libmap.trees.url },
+  // The theme catalog @pierre/diffs loads, at the version it loads, for the code theme menu to list.
+  libs: { diffs: libmap.diffs.url, trees: libmap.trees.url, themes: themeCatalog(libmap.diffs.modules) },
   diffStyle,
   prs: prs.map((p) => p.data),
 };

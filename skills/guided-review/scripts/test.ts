@@ -8,7 +8,8 @@
       snapshot of a working tree, and a pull request read from a stand-in for GitHub.
    2. page: builds the demo (scripts/demo.ts) and drives it in headless Chrome over DevTools: what the reader sees
       after each action, review comments (the gutter's "+" dragged with real mouse events, the margin, the sends, the
-      threads sent comments leave, outdated ones, and the page database through a stand-in for the viewer), no
+      threads sent comments leave, outdated ones, and the page database through a stand-in for the viewer), the code
+      theme menu (a preview, Escape, a pick kept per mode, a stored name the catalog lacks), no
       console errors, and timing budgets (boot ≤ 30 ms, each interaction ≤ 12 ms, a redraw of the cards on screen ≤
       one frame). */
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -16,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Diff, DiffFile, Guide } from '../runtime/types';
 import { buildDemo, buildStack as buildStackDemo, git } from './demo';
-import { browser, findChrome, themeChecks } from '../kit/build/chrome';
+import { browser, findChrome, fontChecks, themeChecks } from '../kit/build/chrome';
 
 const ROOT = join(import.meta.dir, '..');
 let failed = 0;
@@ -438,6 +439,8 @@ const expect: Record<string, unknown> = {
   progress: '1 of 7 chapters reviewed', chapterFolds: true, saved: true, keyMoves: true, keyMarks: '2 of 7 chapters reviewed',
   jumpInGuide: true, jumpFoldToDiff: true, foldRow: true, diffCards: 11, tree: true, treeTick: true, soundOff: 'false', soundSaved: false,
   styleStart: 'true', split: true, styleSaved: 'split', splitJump: true, unified: true,
+  ctOpen: 'pierre-light true false', ctPreview: true, ctBack: true, ctKept: '{"light":"solarized-light","dark":"pierre-dark"}', ctOtherMode: true, ctUnknown: true,
+  splitKeepsLight: true,
   textShut: true, panelSaved: '{"guide":true,"diff":false}', treeOwn: 'true false', treeShut: true, panelsOpen: '{"guide":false,"diff":false}',
   titleAtTop: 'false false', titleInBar: 'true true', headSticks: true, tickKeepsPlace: true, chapterKeepsPlace: true,
 };
@@ -510,6 +513,34 @@ const RUN = `
   r.splitJump = await until(() => dcard()?.querySelector('[data-additions] [data-line="27"][data-selected-line]'));
   $('[data-diff-style="unified"]').click();
   r.unified = await until(() => dcard()?.querySelector('[data-diff-type="single"]'));
+
+  // the code theme: the palette's menu lists the themes of the mode on screen, with the kept one focused. The theme
+  // under the pointer shows on the cards, Escape goes back, and a click keeps it for that mode only: dark mode still
+  // shows what it showed. Solarized Light draws on its own background, #fdf6e3. The page is set light and dark here,
+  // whatever the system is.
+  const ct = $('[data-code-theme]'), ctBtn = ct.querySelector('button'), ctMenu = ct.querySelector('[role="menu"]');
+  const codeBg = () => { const pre = dcard()?.querySelector('pre'); return pre ? getComputedStyle(pre).backgroundColor : null; };
+  const SOLARIZED = 'rgb(253, 246, 227)';
+  const ctOpen = async () => { ctBtn.click(); await until(() => !ctMenu.hidden && ctMenu.querySelector('[value="solarized-light"]')); };
+  const light = () => { document.documentElement.dataset.theme = 'light'; }, dark = () => { document.documentElement.dataset.theme = 'dark'; };
+  // Under a dark system the cards are dark already; under a light one, wait for them to turn.
+  const start = codeBg();
+  dark(); if (!matchMedia('(prefers-color-scheme: dark)').matches) await until(() => codeBg() !== start);
+  const darkBg0 = codeBg();
+  light(); await until(() => codeBg() !== darkBg0);
+  r.ctBg0 = codeBg();
+  await ctOpen();
+  r.ctOpen = [document.activeElement.value, !!ctMenu.querySelector('[value="github-light"]'), !!ctMenu.querySelector('[value="github-dark"]')].join(' ');
+  ctMenu.querySelector('[value="solarized-light"]').dispatchEvent(new PointerEvent('pointermove', { bubbles: true }));
+  r.ctPreview = await until(() => codeBg() === SOLARIZED);
+  document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  r.ctBack = (await until(() => codeBg() === r.ctBg0)) && ctMenu.hidden && document.activeElement === ctBtn;
+  await ctOpen();
+  ctMenu.querySelector('[value="solarized-light"]').click();
+  r.ctKept = (await until(() => codeBg() === SOLARIZED)) && localStorage.getItem('gr:code-theme');
+  dark();
+  r.ctOtherMode = await until(() => codeBg() === darkBg0);
+  delete document.documentElement.dataset.theme;
 
   // the panel button closes the left column of the view on screen, each view's on its own, and remembers
   const shut = (q) => getComputedStyle($(q)).display === 'none';
@@ -1131,7 +1162,30 @@ try {
   const demo = buildDemo(join(dir, 'demo'), true);
   const stack = buildStackDemo(join(dir, 'stack'), true);
   if (demo.code || stack.code) { console.log(demo.log + stack.log); process.exit(1); }
-  await runPage('page', join(dir, 'demo.preview.html'), RUN, expect, budget);
+  await runPage('page', join(dir, 'demo.preview.html'), RUN, expect, budget, async (tab, r) => {
+    // A stored theme the catalog does not have (renamed, or from another release) would leave every card empty: the
+    // page shows the default instead, and the cards draw. The run's other state goes, so the chapter is not folded.
+    // Then, under a dark system, the reader picks light: a redraw (Split here) keeps the light the reader picked.
+    await tab.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+    await tab.run(`localStorage.clear(); localStorage.setItem('gr:code-theme', JSON.stringify({ light: 'no-such-theme', dark: 'pierre-dark' }))`);
+    await tab.open('about:blank');
+    await tab.open('file://' + join(dir, 'demo.preview.html'));
+    const { r: again } = await inPage(tab, `
+      $('#c-retry-decision').scrollIntoView();
+      const root = () => card('#c-retry-decision', 'src/webhooks/deliver.ts')?.querySelector('diffs-container')?.shadowRoot;
+      const bg = () => { const pre = root()?.querySelector('[data-line]')?.closest('pre'); return pre ? getComputedStyle(pre).backgroundColor : null; };
+      await until(() => bg());
+      $('.k-theme button').click();
+      $('.k-theme [role="menu"] button[value="light"]').click();
+      r.unknown = await until(() => bg() === ${JSON.stringify(r.ctBg0)});
+      $('[data-diff-style="split"]').click();
+      await until(() => root()?.querySelector('[data-diff-type="split"]'));
+      await sleep(300);
+      r.split = bg();
+      $('[data-diff-style="unified"]').click();`);
+    r.ctUnknown = again.unknown;
+    r.splitKeepsLight = again.split === r.ctBg0;
+  });
   // A term is marked in the text; pointing at it opens its meaning in one tooltip, beside it and inside the window.
   await runPage('terms', join(dir, 'demo.preview.html'), `
     const terms = [...document.querySelectorAll('#overview .gr-term')];
@@ -1171,6 +1225,7 @@ try {
     Object.assign(r, at);
   });
   failed += await themeChecks('file://' + join(dir, 'demo.preview.html'), join(dir, 'profile-theme'));
+  failed += await fontChecks('file://' + join(dir, 'demo.preview.html'), join(dir, 'profile-font'));
   // A phone's bar, with Send up or not: the page never scrolls sideways, the bell and Send stay on the screen, and the
   // theme button shows until Send needs its room.
   const phone = await browser(join(dir, 'profile-phone'));

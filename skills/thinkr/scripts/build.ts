@@ -207,7 +207,7 @@ function check(src: string, nodes: Node[], spec: boolean) {
     else if (!/[@/]\d+\.\d+\.\d+/.test(url)) errors.push(`Pin an exact version: ${url}`);
   }
   for (const [, href] of src.matchAll(/<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g))
-    errors.push(`Remove the stylesheet link ${href}: it blocks the first paint. Geist is built in; put page styles in <style>.`);
+    errors.push(`Remove the stylesheet link ${href}: it blocks the first paint. Geist and Ioskeley Mono are built in; put page styles in <style>.`);
   for (const [, name] of src.matchAll(/load\(\s*['"`](hljs|mathjax)['"`]/g))
     errors.push(`load('${name}') is gone: code highlighting and math are rendered at build time. Remove the call.`);
   const banned: [RegExp, string][] = [

@@ -6,7 +6,8 @@
    The first check builds the demo (scripts/demo.ts) with the libraries pinned now; each check copies it, points the
    one library at the release, and opens it in headless Chrome, light and dark. Every open file card on the Guide and
    Diff tabs must draw its lines with @pierre/diffs (the plain-text fallback counts as a failure here), the Diff tab's
-   tree must draw its rows with @pierre/trees, and the page must log no error or warning. A release that loads and
+   tree must draw its rows with @pierre/trees, and the page must log no error or warning. A third pass, in dark, has the
+   cards draw in a code theme from Shiki's part of the catalog (SHIKI), which loads on its own when a reader picks it. A release that loads and
    fails goes into libs.json's `skip` with the reason; delete the entry to have it checked again. One that does not
    load in Chrome at all, without Chrome, or when the demo does not build, the check throws: the pin stays and the
    release is checked again on the next refresh. */
@@ -17,8 +18,16 @@ import { browser, chromeBinary } from '../kit/build/chrome';
 import type { Verify } from '../kit/build/libs';
 import { buildDemo } from './demo';
 
-// Stops at the first thing that did not draw: one is enough to refuse the release.
-const CHECK = `(async () => {
+/** The theme catalog in an import graph of @pierre/diffs: the @pierre/theming/themes it loads, which the page's code
+    theme menu lists (build.ts puts it in the page data as libs.themes). */
+export const themeCatalog = (modules: string[]) => modules.find((m) => /\/@pierre\/theming@[^/]+\/themes\/\+esm$/.test(m));
+
+/** The dark check's code theme, and the background it draws on. */
+const SHIKI = { name: 'github-dark', bg: 'rgb(36, 41, 46)' };
+
+// Stops at the first thing that did not draw: one is enough to refuse the release. BG is the background the code must
+// draw on, or empty for any.
+const CHECK = (BG: string) => `(async () => {
   const sleep = (n) => new Promise((ok) => setTimeout(ok, n));
   const until = async (fn, ms) => { const end = Date.now() + ms; while (!fn() && Date.now() < end) await sleep(50); return fn(); };
   let cards = 0;
@@ -31,6 +40,8 @@ const CHECK = `(async () => {
       const plain = () => code.querySelector('.gr-plain');
       await until(() => lines() || plain(), cards++ ? 5000 : 15000);
       if (!lines()) return c.dataset.path + (plain() ? ' fell back to plain text' : ' drew no code');
+      const bg = getComputedStyle(lines().closest('pre')).backgroundColor;
+      if (${JSON.stringify(BG)} && bg !== ${JSON.stringify(BG)}) return c.dataset.path + ' drew on ' + bg + ', not in the code theme';
     }
     return null;
   };
@@ -63,7 +74,7 @@ function demoPage(): Page {
 export function verifier(): Verify {
   let page: Page | null = null;
   let n = 0;
-  return async (name, url) => {
+  return async (name, url, modules) => {
     if (!chromeBinary()) throw new Error('no Chrome to open a page in; set CHROME');
     page ??= demoPage();
     const was = page.libs[name];
@@ -75,18 +86,31 @@ export function verifier(): Verify {
     const pair = (u: string) => `${JSON.stringify(name)}:${JSON.stringify(u)}`;
     const src = readFileSync(data, 'utf8');
     if (!src.includes(pair(was))) throw new Error(`the demo page's data names ${name} some other way`);
-    writeFileSync(data, src.replace(pair(was), pair(url)));
+    let next = src.replace(pair(was), pair(url));
+    // A release of @pierre/diffs brings its own theme catalog, and the page lists it by its own URL: swap that too.
+    // With none in the release's graph, the page has no catalog, and the code theme pass fails.
+    if (name === 'diffs') {
+      const old = page.libs.themes, now = themeCatalog(modules);
+      const entry = (u: string) => `,${JSON.stringify('themes')}:${JSON.stringify(u)}`;
+      if (old) next = next.replace(entry(old), now ? entry(now) : '');
+    }
+    writeFileSync(data, next);
     const problems = new Set<string>();
     try {
-      for (const theme of ['light', 'dark']) {
-        const tab = await browser(join(run, `profile-${theme}`), { warnings: true });
+      const passes = [{ theme: 'light', code: '' }, { theme: 'dark', code: '' }, { theme: 'dark', code: SHIKI.name }];
+      for (const [i, { theme, code }] of passes.entries()) {
+        const tab = await browser(join(run, `profile-${i}`), { warnings: true });
         try {
           await tab.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
+          if (code) {
+            const picks = JSON.stringify({ light: 'pierre-light', dark: code });
+            await tab.send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('gr:code-theme', ${JSON.stringify(picks)})` });
+          }
           await tab.open(`file://${join(run, 'demo.preview.html')}`);
-          const out = await tab.run(CHECK);
+          const out = await tab.run(CHECK(code ? SHIKI.bg : ''));
           if (typeof out !== 'string' || out.startsWith('ERR ')) throw new Error(`the check did not run (${out})`);
           for (const e of tab.errors) problems.add(e.split('\n')[0]);
-          if (out) problems.add(`${theme}: ${out}`);
+          if (out) problems.add(`${code || theme}: ${out}`);
         } finally {
           tab.close();
         }
