@@ -1,0 +1,14 @@
+tigerstyle
+Copyright 2026 Michael Assaf
+Licensed under the Apache License, Version 2.0 (LICENSE.txt).
+
+This product includes third-party material, under its own license:
+
+- TigerStyle (references/tiger-style.md), unchanged
+  From https://github.com/tigerbeetle/tigerbeetle/blob/0aeb306561365e21b97775c729bfc439f6c16d72/docs/TIGER_STYLE.md
+  Apache License 2.0
+
+Not included, but used:
+
+- "Effective Swarm Riding for Engineers" by Georgios Konstantopoulos, Paradigm, November 2026
+  (https://www.paradigm.xyz/writing/swarms). SKILL.md paraphrases its ideas and links to it; it copies no text from it.
