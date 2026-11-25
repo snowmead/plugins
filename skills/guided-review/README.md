@@ -6,6 +6,12 @@ published as a Claude Artifact. The pull request can be yours or someone else's.
 A big diff shown in file order makes the reviewer work out what the change does. A guided review does that work for
 them:
 
+- **Condensed first**: the page opens on a tab that shows only the core of the change, so a reviewer checks its
+  direction in minutes: what changed and why (**Before** and **Now**), the decisions, each with its reason and
+  trade-off, the code cut by hand to the contracts and the lines that decide, and the tests that state something
+  about the system. It shows at most a fifth of the change's lines. The build finds each shown line in the real file,
+  so the tab never shows code the change does not have, and a comment on a cut line lands on its real line. The
+  **Guided** and **Diff** tabs hold the rest.
 - **Top down, in plain words**: written for an engineer on the team who works on another system. The overview opens
   with a **background** (what the system is and how it works before the change), then what changed and its steps. Each word a reader may not know is
   marked where it is first used, and pointing at it, focusing it or tapping it shows what it means. Each chapter starts with what its part of the system does. Sentences are short and

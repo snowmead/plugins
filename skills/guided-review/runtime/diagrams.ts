@@ -47,6 +47,6 @@ export function followNode(el: Element): boolean {
   const r = c?.pr.diagrams[box!.dataset.dia!]?.refs?.[node!.dataset.id!];
   if (!c || !r) return false;
   if (r.url) open(r.url, '_blank', 'noopener');
-  else void jump(c, r.path, r.line, r.side ?? 'n', r.ch ?? box!.closest<HTMLElement>('.gr-sec')?.dataset.chapter ?? null, node);
+  else void jump(c, r.path, r.line, r.side ?? 'n', r.ch ?? r.sec ?? box!.closest<HTMLElement>('.gr-sec')?.dataset.chapter ?? box!.closest<HTMLElement>('.gr-sec')?.dataset.section ?? null, node);
   return true;
 }

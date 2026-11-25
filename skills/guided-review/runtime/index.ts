@@ -5,6 +5,7 @@
    Code renders with @pierre/diffs, in the reader's code theme (codetheme.ts), and the Diff tab's tree with
    @pierre/trees, both imported from the pinned jsDelivr URLs in the data. */
 import type { DiffStyle } from './types';
+import type { View } from './nav';
 import { $$ } from '../kit/web/dom';
 import { sound } from '../kit/web/sound';
 import { T0 } from './dom';
@@ -12,7 +13,7 @@ import { cards, commentBlock, openProseFold, setDiffStyle, setFold, setProse, st
 import { headingIn } from './prose';
 import { type Ctx, active, byId, byOwnId, ctxOf, ctxs, diffOf } from './ctx';
 import { markChapter, markFile, progress, saveMarks } from './marks';
-import { choose, current, go, jump, keepPlace, onScroll, pin, show, step, toCard, toTop, togglePanel, view } from './nav';
+import { choose, current, go, jump, keepPlace, onScroll, pin, show, startOn, step, toCard, toTop, togglePanel, view } from './nav';
 import { startComments, toggleNotes } from './comments';
 import { followNode, startDiagrams } from './diagrams';
 import { startTerms } from './terms';
@@ -60,7 +61,7 @@ document.addEventListener('click', (e) => {
   if (t.hasAttribute('data-to-top')) { toTop(); sound.play('nav'); return; }
   if (t.classList.contains('gr-tab')) {
     if (t.dataset.view !== view()) sound.play('toggle');
-    show(t.dataset.view as 'guide' | 'diff');
+    show(t.dataset.view as View);
     return;
   }
   if (t.classList.contains('gr-fold')) { const el = t.closest('.gr-card')!; keepPlace(el, () => setFold(el, !el.classList.contains('collapsed'))); return; }
@@ -94,7 +95,8 @@ document.addEventListener('click', (e) => {
     e.preventDefault();
     // The chapter a ref belongs to: the one it is written in. On the Diff tab only a comment holds a ref, and it stays
     // on that tab. Ask the view, not the link: the click marks an answer read, which draws its thread again.
-    const ch = t.closest<HTMLElement>('.gr-sec')?.dataset.chapter ?? null;
+    const sec = t.closest<HTMLElement>('.gr-sec');
+    const ch = sec?.dataset.chapter ?? sec?.dataset.section ?? null;
     const from = view() === 'diff' ? diffOf(c) : t;
     void jump(c, t.dataset.ref, Number(t.dataset.line) || 0, (t.dataset.side as 'o' | 'n') || 'n', ch, from);
     return;
@@ -135,9 +137,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === '[' || e.key === ']') { if (step(e.key === ']' ? 1 : -1)) sound.play('nav'); return; }
   if (e.key === 'c') { toggleNotes(); sound.play('toggle'); return; }
   if (e.key === 'b') { togglePanel(); sound.play('toggle'); return; }
-  if (view() !== 'guide') return;
+  if (view() === 'diff') return;
   if (e.key === 'j' || e.key === 'k') { if (go(e.key === 'j' ? 1 : -1)) sound.play('nav'); }
-  else if (e.key === 'r') {
+  else if (e.key === 'r' && view() === 'guide') {
     const id = current()?.dataset.chapter;
     const c = active();
     if (id) reviewChapter(c, id, !c.marks.c[id]);
@@ -152,6 +154,10 @@ function start() {
   const hash = location.hash.slice(1);
   const c = ctxs.find((x) => x.pr.prefix && hash.startsWith(x.pr.prefix)) ?? ctxOf(hash ? document.getElementById(hash) : null) ?? ctxs[0];
   const rest = c.pr.prefix && hash.startsWith(c.pr.prefix) ? hash.slice(c.pr.prefix.length) : hash;
+  // The view the anchor names, or the one its element is in, is the first drawn.
+  const target = rest ? byOwnId(c, rest) : null;
+  if (rest === 'diff' || rest === 'guide' || rest === 'condensed') startOn(rest);
+  else if (target && !target.classList.contains('gr-pr')) startOn(target.closest('.gr-condensed') ? 'condensed' : 'guide');
   for (const x of ctxs) progress(x);
   choose(c);
   startDiffStyle();
@@ -159,8 +165,7 @@ function start() {
   startComments();
   startDiagrams();
   startTerms();
-  if (rest === 'diff') show('diff');
-  else if (rest && byOwnId(c, rest) && !byOwnId(c, rest)!.classList.contains('gr-pr')) pin(byOwnId(c, rest)!);
+  if (target && !target.classList.contains('gr-pr')) pin(target);
   performance.measure('gr:boot', { start: T0, end: performance.now() });
 }
 start();

@@ -15,6 +15,7 @@ the diff. [`../examples/demo.guide.json`](../examples/demo.guide.json) uses ever
 | `spec` | no | The spec the change was built from, when a thinkr design produced it: `{ "url": "https://claude.ai/code/artifact/…#spec", "version": 3 }`. `url` is the design page's link from the description's `Spec:` line (the build adds `#spec`, which opens the page on its spec, when the link has no `#`); `version` is the design version the spec implements, its `design-version`. The bar gets a **Spec** button, and the header says "built from its spec, design v3". `https://` only. |
 | `overview` | yes | The opening section. See below. |
 | `chapters` | yes | The chapters, in reading order. See below. |
+| `condensed` | no, but write it | The Condensed tab, the page's first: only the core of the change, its code cut by hand. See [below](#condensed). Without it, the page opens on Guided. |
 
 ## `overview`
 
@@ -49,6 +50,8 @@ Mark the nodes of a flowchart with what the pull request does to them: `:::new` 
   "refs": { "D": "src/webhooks/deliver.ts:11", "R": "src/webhooks/deliver.ts:31" }
 }
 ```
+
+A Condensed diagram's node refs a line the same way; its tooltip names the section that shows the line.
 
 `build.ts` stops on source pele cannot read, with its line, and on a ref to a node the diagram does not have. It warns
 when a diagram is over 960 px wide (it shrinks to fit its card), has more than 14 nodes, or marks no node.
@@ -99,6 +102,61 @@ plain text names: an `https://` link; a changed file by its path, or by as much 
 `a.ts:31`, `a.ts:31-33`, `a.ts:12 (old)`); and `folder/file.ext:line` for a file the pull request does not change,
 which opens GitHub. Anything else stays text. Build checks a chapter's refs; nothing checks a thread's, so a ref written
 in one needs its file to exist. A line number stays the one it was written with when the code moves.
+
+## `condensed`
+
+The Condensed tab. [condensed.md](condensed.md) says what to show and how to cut it; this is the shape.
+
+| Field | Required | What it holds |
+|---|---|---|
+| `lede` | yes | What changed and why, in one to three lines, under 60 words. A line can start with `**Before**` or `**Now**`. A string, or an array of lines. |
+| `notes` | no | Why the change exists, its scope, and follow-ups, in short paragraphs. |
+| `decisions` | no | Decisions about the whole change. See below. |
+| `discarded` | no | Approaches dropped for the whole change, each a string (or an array of paragraphs) that says the approach and why it was dropped. The page shows them muted. |
+| `diagram` | no | A flow chart, only when the change adds, removes or moves a link between parts of the system. Fields as in [`diagram`](#diagram). |
+| `sections` | yes | One per part of the system, in the order the data moves. See below. |
+
+A **section**:
+
+| Field | Required | What it holds |
+|---|---|---|
+| `id` | yes | Lower case letters, digits and dashes. Its anchor is `#x-<id>`. Keep it when you rebuild. |
+| `title` | yes | The part of the system, in a few words. |
+| `body` | no | Only what the code cannot show, under 80 words. |
+| `decisions` | no | The decisions this part shapes. They show at the top of the section. |
+| `code` | no | Snippets, in reading order. See below. |
+| `examples` | no | `[{ "title": "…", "lang": "typescript", "code": "…" }]`: calls that are not in the change, to show how a caller uses it. They do not count toward the budget. |
+| `table` | no | A state table, as in [`table`](#table). |
+| `diagram` | no | As in [`diagram`](#diagram). |
+| `tests` | no | `[{ "path": "tests/deliver.ts", "tests": [{ "name": "a 404 fails at once", "line": 18, "change": "added", "group": "deliver" }] }]`. `line` is where the test starts at the head, or at the base for a `removed` test. `change` is `added`, `modified` or `removed`. `group` is its `describe` block, in words. Each name counts as one shown line. |
+| `discarded` | no | Approaches dropped for this part, shown at the end of the section. |
+
+A section must show something: code, tests, examples, a table or a diagram.
+
+A **decision** is `{ "title": "…", "implicit": true, "why": "…", "tradeoff": "…", "discarded": "…" }`. `title` and
+`why` are required. `implicit` marks a choice made while building, with no discussion.
+
+A **snippet** is one piece of a file, cut by hand:
+
+| Field | Required | What it holds |
+|---|---|---|
+| `path` | yes | The file, at the head (at the base for a deleted file). |
+| `old` | one of the two | The code at the base, cut. Leave it out for a new file. |
+| `new` | one of the two | The code at the head, cut. Leave it out for a deleted file. |
+| `name` | no | A shorter name than the path for the card's header. |
+
+In `old` and `new`, as JSON strings with `\n` between lines:
+
+- `// ...` (or `# ...`, `-- ...`, `<!-- ... -->`) on its own line leaves out statements;
+- `/* ... */` or `…` inside a line leaves out part of it, and one such line can stand for several real ones;
+- `//> text` (or `#> text`, `--> text`) is a note on the page only;
+- a blank line is for reading;
+- every other line is copied from the file, with the repository's indentation.
+
+`build.ts` diffs the two sides, finds each copied line in the file, and keeps its real line number, so comments and
+refs on the tab land on the real lines. It stops on a line that is not in the file, on unchanged code shown as added
+or removed, and when the tab shows more than its budget: 20% of the change's added and removed lines, and at least
+30. It warns on a cut with no `// ...` and on an import.
 
 ## stack.json
 

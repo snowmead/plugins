@@ -1,6 +1,6 @@
 ---
 name: guided-review
-description: Builds a guided code review as a Claude Artifact, of a pull request, yours or someone else's, of a branch, of uncommitted local changes, or of several pull requests (a stack, or any set). The page reads top down for an engineer who does not know the system: it opens with what the system is and how it works today, in short plain sentences, then what changed and why and a diagram, with each word a reader may not know marked and explained in a tooltip, of the whole change, then walks the diff as short chapters, each explained beside its code and drawn as a diagram of what it changes, with review marks, a file tree and syntax-highlighted diffs. Readers comment on lines, files or the whole change in a margin beside the code and send the comments to Claude, which changes the code and rebuilds the page, or only answers on someone else's pull request; each sent comment stays as a thread with a Claude agent of its own. Use when asked to walk someone through, explain or prepare a review of what a pull request, a branch, a stack or the working tree changed, to review someone else's pull request, to write a review guide, when review comments arrive from a guide page, or when a pull request you drive is green and about to merge.
+description: Builds a guided code review as a Claude Artifact, of a pull request, yours or someone else's, of a branch, of uncommitted local changes, or of several pull requests (a stack, or any set). It opens on a Condensed tab that shows only the core of the change, its code cut by hand to what a reviewer checks, with its decisions and tests; a Guided tab reads top down for an engineer who does not know the system: it opens with what the system is and how it works today, in short plain sentences, then what changed and why and a diagram, with each word a reader may not know marked and explained in a tooltip, of the whole change, then walks the diff as short chapters, each explained beside its code and drawn as a diagram of what it changes, with review marks, a file tree and syntax-highlighted diffs. Readers comment on lines, files or the whole change in a margin beside the code and send the comments to Claude, which changes the code and rebuilds the page, or only answers on someone else's pull request; each sent comment stays as a thread with a Claude agent of its own. Use when asked to walk someone through, explain or prepare a review of what a pull request, a branch, a stack or the working tree changed, to review someone else's pull request, to write a review guide, when review comments arrive from a guide page, or when a pull request you drive is green and about to merge.
 license: Apache-2.0. Complete terms in LICENSE.txt
 compatibility: Claude Code, or another agent with a shell and git that can publish claude.ai Artifacts. Needs Bun 1.2 or newer; gh for someone else's pull request; Chrome is optional, for screenshots.
 metadata:
@@ -11,9 +11,17 @@ allowed-tools: Bash(bun ${CLAUDE_SKILL_DIR}/scripts/gather.ts *) Bash(bun ${CLAU
 # Guided review
 
 A guided review explains a pull request to a reviewer who did not write it, so they need not jump between files to
-work out what it does. Write for an engineer on the same team who works on another system: they can read code, but
-they do not know this system's words or history. The page reads top down, from what the system is to what each line
-does. It is one page, published as a Claude Artifact: an **overview** (the **background**, which says what the
+work out what it does. The page has three tabs:
+
+- **Condensed**, the first: only the core of the change. A few lines of why, the decisions, and the code cut by hand
+  to the contracts and the lines that decide, at most a fifth of the change. A reviewer checks the direction here in
+  minutes. [condensed.md](references/condensed.md) says how to write it.
+- **Guided**: every hunk, in chapters, explained top down. It is described below.
+- **Diff**: every file, whole, beside a file tree.
+
+The Guided tab is for an engineer on the same team who works on another system: they can read code, but
+they do not know this system's words or history. It reads top down, from what the system is to what each line
+does. The page is published as a Claude Artifact. Guided holds an **overview** (the **background**, which says what the
 system is and how it works before the change; what changed and why; the main steps;
 and a **diagram** of the whole change, its new, changed and removed parts marked), then **chapters**:
 the files and hunks grouped by idea, in reading order, each a short text beside its code, under a diagram of what
@@ -30,8 +38,10 @@ and the marks stay in their browser. One page can also hold several pull request
 |---|---|
 | `scripts/gather.ts` | Reads the diff from git, the working tree or GitHub into `diff.json`, and prints an outline of every file and hunk, numbered. |
 | `scripts/build.ts` | Checks each `guide.json` against its `diff.json`, then packs the page to publish, with its stylesheet, runtime and data in `<out>.files/`. |
+| `scripts/snippets.ts` | Finds each line of the Condensed tab's cut code in the real file, and diffs the two sides. `build.ts` uses it. |
 | `scripts/shot.ts` | Screenshots a built guide at desktop and phone width, light and dark. |
 | `references/writing.md` | How to read the change, plan chapters and write the text. Read it before your first guide. |
+| `references/condensed.md` | What the Condensed tab shows, how to cut code for it, and its budget. Read it before your first guide. |
 | `references/guide-format.md` | Every field of `guide.json`. Read it before your first guide. |
 | `references/stack.md` | Several pull requests on one page. Read it only for a stack or a set. |
 | `references/comments.md` | Review comments: the capabilities a guide declares, what a send holds, and how to act on it. Read it before the first publish, and when a send arrives. |
@@ -108,15 +118,19 @@ request: rebuilding from the same `guide.json` and publishing the same file keep
 3. **Write `<work>/guide.json`.** Plan the chapters first, then each chapter's diagram, then the overview (its
    background, summary, steps and terms) and its diagram:
    [writing.md](references/writing.md) has the rules and [guide-format.md](references/guide-format.md) the fields.
-   Put the pull request's video, if it has one, in `links`, and the spec's link, if it has one, in `spec`, so the
-   page points to the spec that produced the change. Leave `diffStyle` out (unified) unless the user asks
+   Then write `condensed`, the first tab, as [condensed.md](references/condensed.md) says: the lede, the
+   decisions, one section per part of the system with its code cut by hand, and the tests. Put the pull request's
+   video, if it has one, in `links`, and the spec's link, if it has one, in `spec`, so the page points to the spec
+   that produced the change. Leave `diffStyle` out (unified) unless the user asks
    for split, or most changes rewrite lines in place.
 4. **Build and check.** Run it in the checkout, or pass the checkout with `--repo` (`--repo=<work>/checkout` after
    `--pr`): refs to files the pull request does not change are checked there.
    ```sh
    bun ${CLAUDE_SKILL_DIR}/scripts/build.ts --diff=<work>/diff.json --guide=<work>/guide.json
    ```
-   Fix every `error`: a file or hunk in no chapter, a ref that names no line, a core chapter after a tests chapter.
+   Fix every `error`: a file or hunk in no chapter, a ref that names no line, a core chapter after a tests chapter,
+   a Condensed line that is not in the file or shows unchanged code as changed, a Condensed tab over its budget.
+   Read the `condensed:` line: it lists the files the tab does not show, and each must be one the reviewer can skip.
    Read every `warn` and fix the ones that are right: no background, a long sentence, long chapters, a wide or
    crowded diagram, a hunk shown twice. It
    writes `<work>/guide.artifact.html` (to publish), `<work>/guide.files/` (its stylesheet, runtime and data,
@@ -142,7 +156,8 @@ request: rebuilding from the same `guide.json` and publishing the same file keep
    else's pull request, say that comments get answers, the code does not change, and the comments can become a review
    on GitHub when they ask. Post the link on the pull request only when the user asks you to.
 8. **Rebuild for a new head** when the pull request moves on: gather again the same way (`--worktree` takes a new
-   snapshot, `--pr` moves the clone to the new head), update the chapters the new commits touch, keep the chapter ids,
+   snapshot, `--pr` moves the clone to the new head), update the chapters the new commits touch, cut the Condensed
+   code again where its lines changed (the build names each line it no longer finds), keep the chapter and section ids,
    rebuild, and publish to the same link. The page says which commit it was written for. Comment threads carry over on
    their own, and the page marks the ones whose code changed as outdated. Git may prune a snapshot after about two
    weeks, since no ref holds it, so gather again before you rebuild an old review of uncommitted changes. The same
@@ -184,8 +199,11 @@ differs. On someone else's pull request, the comments can become a pending revie
   user. Where the code departs from its spec, the chapter that holds it says so, as a plain fact.
 - **Explain; do not grade.** Findings belong on the pull request. A risk the reader should know is a plain fact in
   the chapter that holds it.
-- **Every file and hunk appears once.** `build.ts` refuses a guide that leaves one out. Split a file by hunks when
-  its parts belong to different chapters.
+- **Every file and hunk appears once in Guided.** `build.ts` refuses a guide that leaves one out. Split a file by
+  hunks when its parts belong to different chapters.
+- **Condensed shows only the core, and only real code.** Each shown line is copied from the file, cut with `// ...`
+  and `/* ... */`; the build refuses a line the file does not have. Leave out what a reviewer does not need: the
+  Guided and Diff tabs hold the rest.
 - **Keep ids stable.** Review marks are kept per pull request by chapter id and file path, and links use chapter
   ids, so keep the ids when you rebuild for a new head. A pull request's marks are the same on its own page and in a
   stack.
