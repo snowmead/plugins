@@ -31,10 +31,10 @@ import { ICON } from '../kit/web/icons';
 import { sound } from '../kit/web/sound';
 import { toast } from '../kit/web/toast';
 import { split } from './dom';
-import { type CardState, allDrawn, cards, findRow, mount, previewOn, redrawNotes, rowOf, select, setFold } from './cards';
+import { type CardState, allDrawn, cards, findRow, mount, previewOn, rangeToReal, redrawNotes, rowOf, select, setFold } from './cards';
 import { reveal as revealProse } from './prose';
 import { plainText, richText } from './rich';
-import { type Ctx, active, ctxOf, ctxs, diffOf, guideOf } from './ctx';
+import { type Ctx, active, condensedOf, ctxOf, ctxs, diffOf, guideOf } from './ctx';
 import { choose, pin, renderDiff, show, view } from './nav';
 import { type Post, type Target, type Thread, authorOf, codeOf, keepLocal, mark, newId, onThreads, outgoing, placeOf, refFor, rowAt, rowsOf, saveSend, startThreads, threadOf, threadsOf, watchThreads, whoOf } from './threads';
 
@@ -261,12 +261,14 @@ function openNew(c: Ctx, t: Target, label: string, st?: CardState, range?: Pierr
 }
 
 /** The gutter's "+": a composer for the lines picked (`what` names them, as "the block" of a preview). */
-export function openLine(st: CardState, range: PierreLineRange, what?: string) {
-  if (!takeDraft()) return;
+export function openLine(st: CardState, picked: PierreLineRange, what?: string) {
+  // Cut code (the Condensed tab) numbers its own lines: the comment goes on the real ones.
+  const range = st.snip ? rangeToReal(st, picked) : picked;
+  if (!range || !takeDraft()) return;
   const toSide = (s?: string): Side => (s === 'deletions' ? 'o' : 'n');
   let a = { line: range.start, side: toSide(range.side) }, b = { line: range.end, side: toSide(range.endSide ?? range.side) };
   // The gutter reports the lines in the order they were dragged; a comment runs down the page.
-  const rows = rowsOf(st.f);
+  const rows = st.snip ? rowsIn(st) : rowsOf(st.f);
   const ia = rowAt(rows, a.line, a.side), ib = rowAt(rows, b.line, b.side);
   if (ia >= 0 && ib >= 0 ? ia > ib : a.side === b.side && a.line > b.line) [a, b] = [b, a];
   const t: Target = { kind: 'line', path: st.f.path, start: a.line, side: a.side, end: b.line, endSide: b.side };
@@ -333,7 +335,7 @@ function itemsOf(c: Ctx): Item[] {
   if (draft?.c === c && draft.target) out.push({ key: 'draft', c, cm: { id: 'draft', ...draft.target, text: '', head: c.pr.head, at: '' }, at: draft.target });
   return byPlace(c, out, (x) => x.at ?? x.cm);
 }
-const viewOf = (c: Ctx) => (view() === 'guide' ? guideOf(c) : diffOf(c));
+const viewOf = (c: Ctx) => (view() === 'guide' ? guideOf(c) : view() === 'condensed' ? condensedOf(c) ?? guideOf(c) : diffOf(c));
 const rowCache = new WeakMap<CardState, Line[]>();
 const rowsIn = (st: CardState) => { let r = rowCache.get(st); if (!r) rowCache.set(st, r = st.hunks.flatMap((hk) => hk.lines)); return r; };
 
@@ -1094,7 +1096,7 @@ export function startComments() {
   startThreads();
   paintBar();
   const ro = new ResizeObserver(() => relayout());
-  for (const c of ctxs) { ro.observe(guideOf(c)); ro.observe(diffOf(c)); }
+  for (const c of ctxs) { ro.observe(guideOf(c)); ro.observe(diffOf(c)); const cx = condensedOf(c); if (cx) ro.observe(cx); }
   relayout();
   if (!window.claude) return;
   void (async () => {

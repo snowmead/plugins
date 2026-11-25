@@ -25,7 +25,9 @@
    The font link, the shared stylesheet, the sounds, the speaker button, the library pinning and the diagrams come
    from the kit (kit/build/). */
 import { dirname, join, resolve } from 'node:path';
-import type { Chapter, Diagram, DiagramRef, Diff, DiffFile, Guide, Kind, PageData, PageDiagram, PagePr, Stack, StateTable, Text } from '../runtime/types';
+import type { Chapter, Decision, Diagram, DiagramRef, Diff, DiffFile, Guide, Kind, PageData, PageDiagram, PagePr, PageSection, Stack, StateTable, TestFile, Text } from '../runtime/types';
+import { rebuildOld } from '../runtime/hunks';
+import { mapSnippet, width } from './snippets';
 import { FONTS, ICON, THEME, assets, preview, publishLines, runtime, soundButton, styles, themeButton } from '../kit/build/page';
 import { libs, preloads } from '../kit/build/libs';
 import { diagrams } from '../kit/build/diagram';
@@ -103,7 +105,7 @@ interface Built {
   id: string; prefix: string; number: number | null; title: string; url: string | null; name?: string; repo: string;
   base: string; branch: string | null; add: number; del: number; files: number;
   errors: string[]; warns: string[]; report: string[];
-  meta: string; sections: string; diffView: string; footer: string; links: string; data: PagePr;
+  meta: string; sections: string; condensed: string; diffView: string; footer: string; links: string; data: PagePr;
 }
 
 function buildPr(guide: Guide, diff: Diff, index: number): Built {
@@ -451,6 +453,158 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
       + `<div class="gr-code-col">${diagram(ch.diagram, `c-${ch.id}`, `${where}.diagram`)}<div class="gr-files" data-chapter="${esc(ch.id)}"></div></div></section>`);
   });
 
+  // -------------------------------------------------------------- the Condensed tab
+  // Only the core of the change: a few lines of why, the decisions, and the code cut by hand to what a reviewer
+  // checks. Each shown line is found in the real file (scripts/snippets.ts), so the tab shows no code the pull request
+  // does not have, and a comment on a shown line lands on its real line.
+  const cx = guide.condensed;
+  const cxSections: PageSection[] = [];
+  let condensedHtml = '';
+  let shownLines = 0;
+  let cxReport = '';
+  if (cx == null) warn('condensed is missing, so the page opens on Guided. Write the Condensed tab: only the core of the change, its code cut by hand (references/condensed.md).');
+  if (cx != null) {
+    const texts = new Map<string, string[] | null>();
+    /** A file's lines at the base ('o') or the head ('n'), or null when it is not there. */
+    const realText = (path: string, side: 'o' | 'n'): string[] | null => {
+      const key = `${side}:${path}`;
+      if (texts.has(key)) return texts.get(key)!;
+      const f = FILES.get(path);
+      let out: string[] | null = null;
+      if (f && side === 'n' && f.status !== 'deleted') out = f.new;
+      if (f && side === 'o' && f.status !== 'added') out = f.old ?? (f.new ? rebuildOld(f) : null);
+      if (!out && f && !(side === 'n' ? f.status === 'deleted' : f.status === 'added')) {
+        const p = Bun.spawnSync(['git', '-C', checkout, 'show', `${side === 'n' ? diff.head : diff.base}:${side === 'o' ? (f.oldPath ?? f.path) : f.path}`], { stdout: 'pipe', stderr: 'ignore' });
+        if (!p.exitCode) out = p.stdout.toString().replace(/\n$/, '').split('\n');
+      }
+      texts.set(key, out);
+      return out;
+    };
+    /** The head line each base line of a file stays as, or null for a line the pull request removes. */
+    const sameAsOf = (f: DiffFile) => {
+      const inHunk = new Map<number, number | null>();
+      for (const h of f.hunks) for (const l of h.lines) if (l[0] !== '+') inHunk.set(l[1]!, l[0] === ' ' ? l[2] : null);
+      return (o: number) => {
+        if (inHunk.has(o)) return inHunk.get(o)!;
+        let shift = 0;
+        for (const h of f.hunks) if (h.oldStart + h.oldLines <= o) shift += h.newLines - h.oldLines;
+        return o + shift;
+      };
+    };
+    const changedSet = (f: DiffFile, op: '+' | '-') => new Set(f.hunks.flatMap((h) => h.lines.filter((l) => l[0] === op).map((l) => (op === '-' ? l[1] : l[2])!)));
+
+    const decisions = (list: Decision[] | undefined, where: string) => (list ?? []).map((d, i) => {
+      const w = `${where}.decisions[${i}]`;
+      if (!d?.title || !d.why) { err(`${w} needs a "title" and a "why".`); return ''; }
+      if (words(d.title) > 16) warn(`${w}.title has ${words(d.title)} words. Name the choice in one line.`);
+      shortSentences(d.why, `${w}.why`);
+      return `<details class="gr-decision"><summary><span class="gr-lbl">Decision</span><span class="ttl">${md(d.title, w)}</span>`
+        + (d.implicit ? '<span class="gr-implicit" title="Made while building, with no discussion.">Implicit</span>' : '')
+        + `${CHEV}</summary><div class="bd">${paras(d.why).map((p) => `<p>${md(p, w)}</p>`).join('')}`
+        + (d.tradeoff ? `<div class="cost"><span class="gr-lbl">Trade-off</span>${paras(d.tradeoff).map((p) => `<p>${md(p, w)}</p>`).join('')}</div>` : '')
+        + (d.discarded ? discardedHtml([d.discarded].flat() as string[], w) : '')
+        + '</div></details>';
+    }).join('');
+    function discardedHtml(list: Text[] | undefined, where: string) {
+      return (list ?? []).map((t, i) => `<aside class="gr-discarded"><span class="gr-lbl">Discarded idea</span>${paras(t).map((p) => `<p>${md(p, `${where}.discarded[${i}]`)}</p>`).join('')}</aside>`).join('');
+    }
+    const MARK = { added: ['+', 'Added'], modified: ['~', 'Modified'], removed: ['−', 'Removed'] } as const;
+    function testsHtml(list: TestFile[] | undefined, where: string) {
+      if (!list?.length) return '';
+      return `<div class="gr-tests">${list.map((tf, i) => {
+        const w = `${where}.tests[${i}]`;
+        const f = FILES.get(tf.path);
+        if (!f) { err(`${w}: "${tf.path}" is not a file in this pull request.`); return ''; }
+        let group: string | undefined;
+        const items = (tf.tests ?? []).map((t, k) => {
+          const wt = `${w}.tests[${k}]`;
+          if (!t?.name || !Number.isInteger(t.line) || !(t.change in MARK)) { err(`${wt} needs a "name", a "line" and a "change" (added, modified or removed).`); return ''; }
+          const side = t.change === 'removed' ? 'o' : 'n';
+          const lines = realText(f.path, side);
+          if (!lines) err(`${wt}: ${f.path} is not at the ${side === 'o' ? 'base' : 'head'}, so it has no ${t.change} test.`);
+          else if (t.line < 1 || t.line > lines.length || !lines[t.line - 1].trim()) err(`${wt}: line ${t.line} of ${f.path} at the ${side === 'o' ? 'base' : 'head'} is ${t.line > lines.length ? 'past the end of the file' : 'blank'}. Give the line where the test starts.`);
+          shownLines++;
+          const head = t.group !== group ? (t.group ? `<li class="gr-tgroup">${md(t.group, wt)}</li>` : '') : '';
+          group = t.group;
+          const [sym, word] = MARK[t.change];
+          return `${head}<li class="is-${t.change}${t.group ? ' in-group' : ''}"><span class="mk" title="${word}">${sym}</span>`
+            + `<a href="#" data-ref="${esc(f.path)}" data-line="${t.line}" data-side="${side}" title="${esc(f.path)}:${t.line}">${md(t.name, wt)}</a></li>`;
+        }).join('');
+        return `<div class="gr-tests-file"><header>${esc(tf.path)}</header><ul>${items}</ul></div>`;
+      }).join('')}</div>`;
+    }
+
+    const where0 = 'condensed';
+    if (!paras(cx.lede).join('').trim()) err('condensed.lede is missing: say what changed and why in a line or two, or as Before and Now lines.');
+    else {
+      if (words(paras(cx.lede).join(' ')) > 60) warn(`condensed.lede has ${words(paras(cx.lede).join(' '))} words. Keep it under 60: the code says the rest.`);
+      shortSentences(cx.lede, 'condensed.lede');
+    }
+    shortSentences(cx.notes, 'condensed.notes');
+    const seen0 = new Set<number>();
+    const head = `<section class="gr-sec gr-cx gr-cx-top" id="${P}condensed" data-title="Summary"><div class="gr-cx-text">`
+      + `<div class="gr-lede">${paras(cx.lede).map((p) => `<p>${markTerms(md(p, 'condensed.lede'), seen0)}</p>`).join('')}</div>`
+      + paras(cx.notes).map((p) => `<p class="gr-cx-note">${markTerms(md(p, 'condensed.notes'), seen0)}</p>`).join('')
+      + decisions(cx.decisions, where0) + discardedHtml(cx.discarded, where0) + '</div>'
+      + (cx.diagram ? `<div class="gr-cx-wide">${diagram(cx.diagram, 'condensed', 'condensed.diagram')}</div>` : '') + '</section>';
+    const secs = cx.sections ?? [];
+    if (!secs.length) err('condensed.sections is empty. Give one section per part of the system the change touches.');
+    const secIds = new Set<string>();
+    const parts: string[] = [];
+    for (const [i, sc] of secs.entries()) {
+      const w = `condensed.sections[${i}]${sc.id ? ` (${sc.id})` : ''}`;
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(sc.id ?? '')) err(`${w}: id must be lower case letters, digits and dashes.`);
+      if (secIds.has(sc.id)) err(`${w}: id is used twice.`);
+      secIds.add(sc.id);
+      if (!sc.title) err(`${w}: title is missing.`);
+      const bw = paras(sc.body).reduce((n, p) => n + words(p), 0);
+      if (bw > 80) warn(`${w}: the body has ${bw} words. Keep it under 80; say only what the code cannot show.`);
+      shortSentences(sc.body, `${w}.body`);
+      if (!sc.code?.length && !sc.tests?.length && !sc.examples?.length && !sc.table && !sc.diagram) err(`${w} shows nothing: give it code, tests, examples, a table or a diagram.`);
+      const snippets: PageSection['snippets'] = [];
+      for (const [k, sn] of (sc.code ?? []).entries()) {
+        const ws = `${w}.code[${k}]`;
+        const f = FILES.get(sn?.path);
+        if (!f) { err(`${ws}: "${sn?.path}" is not a file in this pull request.`); continue; }
+        const m = mapSnippet(sn, f.status === 'added' ? null : realText(f.path, 'o'), f.status === 'deleted' ? null : realText(f.path, 'n'), changedSet(f, '-'), changedSet(f, '+'), sameAsOf(f));
+        for (const e of m.errors) err(`${ws} (${f.path}) ${e}`);
+        for (const x of m.warns) warn(`${ws} (${f.path}) ${x}`);
+        shownLines += m.add + m.del;
+        snippets.push({ path: f.path, ...(sn.name ? { name: sn.name } : {}), rows: m.rows, at: m.at });
+      }
+      const examples = (sc.examples ?? []).map((ex, k) => {
+        if (!ex?.lang || !String(ex.code ?? '').trim()) err(`${w}.examples[${k}] needs a "lang" and its "code".`);
+        for (const [n, l] of String(ex?.code ?? '').split('\n').entries()) if (width(l) > 100) warn(`${w}.examples[${k}] line ${n + 1} is ${width(l)} columns. Break it at 100.`);
+        return { lang: String(ex?.lang ?? 'text'), code: String(ex?.code ?? '').replace(/\n+$/, ''), title: ex?.title };
+      });
+      cxSections.push({ id: sc.id, title: sc.title, snippets, examples: examples.map(({ lang, code, title }) => ({ lang, code, ...(title ? { title: String(title) } : {}) })) });
+      const seen = new Set<number>();
+      parts.push(`<section class="gr-sec gr-cx" id="${P}x-${esc(sc.id)}" data-section="${esc(sc.id)}" data-title="${esc(sc.title)}"><div class="gr-cx-text"><h2>${esc(sc.title)}</h2>`
+        + decisions(sc.decisions, w)
+        + paras(sc.body).map((p) => `<p>${markTerms(md(p, `${w}.body`), seen)}</p>`).join('') + '</div>'
+        + `<div class="gr-cx-wide">${sc.diagram ? diagram(sc.diagram, `x-${sc.id}`, `${w}.diagram`) : ''}${table(sc.table, `${w}.table`)}`
+        + (examples.length ? `<div class="gr-examples" data-section="${esc(sc.id)}"></div>` : '')
+        + `<div class="gr-files" data-section="${esc(sc.id)}"></div>${testsHtml(sc.tests, w)}</div>`
+        + `<div class="gr-cx-text">${discardedHtml(sc.discarded, w)}</div></section>`);
+    }
+    // A condensed diagram's node leads to the section that shows its line.
+    for (const [key, dg] of Object.entries(drawings)) {
+      if (key !== 'condensed' && !key.startsWith('x-')) continue;
+      for (const r of Object.values(dg.refs ?? {})) {
+        if (r.url) continue;
+        const k = cxSections.findIndex((x) => x.snippets.some((sn) => sn.path === r.path && sn.at.some((a) => a[r.side === 'o' ? 0 : 1] === r.line)));
+        delete r.ch;
+        if (k >= 0) { r.sec = cxSections[k].id; r.title = `${r.path.split('/').pop()} ${r.line}, ${cxSections[k].title}`; }
+      }
+    }
+    const total0 = diff.files.reduce((n, f) => n + f.add + f.del, 0);
+    const budget = Math.max(30, Math.ceil(total0 * 0.2));
+    if (shownLines > budget) err(`condensed shows ${shownLines} changed lines and test names, over its budget of ${budget} (20% of the pull request's ${total0}, and at least 30). Cut code that repeats a pattern already shown, and implementation the names already say.`);
+    condensedHtml = `<div class="gr-view gr-condensed">${head}${parts.join('\n')}</div>`;
+    const shownPaths = new Set([...cxSections.flatMap((x) => x.snippets.map((sn) => sn.path)), ...secs.flatMap((x) => (x.tests ?? []).map((t) => t.path))]);
+    cxReport = `  condensed: ${secs.length} sections, ${shownLines} of ${budget} lines shown; not shown: ${diff.files.filter((f) => !shownPaths.has(f.path)).map((f) => f.path).join(', ') || 'none'}`;
+  }
+
   for (const { i, t } of termDefs) if (!termUsed.has(i)) warn(`overview.terms[${i}] (${t.term}) is in no text outside a link, so the page marks it nowhere. Write the term as the text uses it, or leave it out.`);
 
   const links = (guide.links ?? []).map((l, i) => {
@@ -482,12 +636,13 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
     `guide ${num || esc(pr.title)}: ${n} chapters, ${diff.files.length} files, ${hunkCount} hunks, ${Object.keys(drawings).length} diagrams`,
     ...chapters.map((ch, i) => `  ${pad2(i + 1)} ${(ch.kind ?? 'core').padEnd(9)} ${String(paras(ch.body).reduce((s, p) => s + words(p), 0)).padStart(3)} words  ${ch.title}`),
   ];
+  if (cxReport) report.push(cxReport);
   const tag = multi ? `${num || id}: ` : '';
   return {
     id, prefix: P, number: pr.number ?? null, title: pr.title, url: pr.url ?? null, name: guide.name, repo: repoUrl,
     base, branch, add: total[0], del: total[1], files: diff.files.length,
     errors: errors.map((e) => tag + e), warns: warns.map((w) => tag + w), report,
-    meta, sections: sections.join('\n'),
+    meta, sections: sections.join('\n'), condensed: condensedHtml,
     diffView: `<div class="gr-view gr-diff" hidden><aside class="gr-tree"><h3>${diff.files.length} files</h3><div class="gr-tree-host"></div></aside><div class="gr-diff-cards"></div></div>`,
     footer: `<footer class="gr-foot"><span>Guided review of ${ofWhat} at ${headShort}, ${diff.base.slice(0, 7)}..${headShort}</span><span>${keys}</span></footer>`,
     links: (specUrl ? `<a class="k-btn is-sm" href="${esc(specUrl)}" target="_blank" rel="noopener" title="The spec this change was built from">Spec<span aria-hidden="true">↗</span></a>` : '')
@@ -497,7 +652,7 @@ function buildPr(guide: Guide, diff: Diff, index: number): Built {
       id, prefix: P, key: `gr:${pr.number ?? branch ?? diff.snapshotOf ?? diff.head}`, number: pr.number ?? null, title: pr.title, head: diff.head,
       ...(pr.readOnly ? { mode: 'read-only' as const } : diff.snapshotOf ? { mode: 'uncommitted' as const } : {}),
       ...(repoUrl ? { blob: `${repoUrl}/blob/${linkRev}/` } : {}),
-      chapters: chapters.map((c, i) => ({ id: c.id, title: c.title, files: sel[i] ?? [] })), files: diff.files, diagrams: drawings,
+      chapters: chapters.map((c, i) => ({ id: c.id, title: c.title, files: sel[i] ?? [] })), ...(cx != null ? { condensed: cxSections } : {}), files: diff.files, diagrams: drawings,
     },
   };
 }
@@ -558,13 +713,14 @@ const barTitle = (p: Built, i: number) => `<div class="gr-bar-title" data-pr="${
   + `<span class="files">${p.files} file${p.files === 1 ? '' : 's'}</span><span class="stat">${statHtml(p.add, p.del)}</span></span></div></div>`;
 const markup = `<div class="k-bar gr-bar"><div class="gr-wrap">
 <button type="button" class="k-btn is-ghost is-icon is-sm gr-panel-toggle" data-panel-toggle aria-expanded="true" aria-label="Hide the chapter text" title="Hide the chapter text (b)">${PANEL}</button>
-<div class="k-seg is-sm gr-tabs" role="tablist"><button type="button" class="gr-tab" role="tab" data-view="guide" aria-selected="true">Guide</button><button type="button" class="gr-tab" role="tab" data-view="diff" aria-selected="false">Diff</button></div>
+<div class="k-seg is-sm gr-tabs" role="tablist">${prs.some((p) => p.condensed) ? '<button type="button" class="gr-tab" role="tab" data-view="condensed" aria-selected="false">Condensed</button>' : ''}<button type="button" class="gr-tab" role="tab" data-view="guide" aria-selected="true">Guided</button><button type="button" class="gr-tab" role="tab" data-view="diff" aria-selected="false">Diff</button></div>
 ${prs.map(barTitle).join('')}${prs.map((p, i) => `<span class="gr-progress" data-pr="${p.id}"${hide(i)}></span>`).join('')}<span class="k-seg is-sm gr-seg" role="group" aria-label="Diff layout"><button type="button" data-diff-style="unified" aria-pressed="${diffStyle === 'unified'}">Unified</button><button type="button" data-diff-style="split" aria-pressed="${diffStyle === 'split'}">Split</button></span><span class="gr-ct" data-code-theme data-uncommentable><button type="button" class="k-btn is-ghost is-icon is-sm" aria-haspopup="menu" aria-expanded="false" aria-label="Code theme" title="Code theme">${PALETTE}</button><div class="k-menu gr-ct-menu" role="menu" aria-label="Code theme" hidden></div></span>${themeButton('k-btn is-ghost is-icon is-sm')}${soundButton('k-btn is-ghost is-icon is-sm')}<span class="gr-bell-wrap"><button type="button" class="k-btn is-ghost is-icon is-sm gr-bell" data-bell aria-haspopup="dialog" aria-expanded="false" aria-controls="gr-inbox" aria-label="Unread answers from Claude" title="Unread answers from Claude">${BELL}<span class="gr-bell-n" hidden></span></button><div class="gr-inbox" id="gr-inbox" role="dialog" aria-label="Unread answers from Claude" data-uncommentable hidden></div></span><button type="button" class="k-btn is-sm gr-note-toggle" data-notes-toggle aria-pressed="true" aria-label="Hide comments" title="Hide comments (c)">${COMMENT}<span class="long">Comments</span><span class="gr-note-count" hidden>0</span></button><button type="button" class="k-btn is-sm gr-send" data-note-send hidden><span class="n">Send</span><span class="long">to Claude</span></button>${prs.map((p, i) => (p.links ? `<span class="gr-barlinks" data-pr="${p.id}"${hide(i)}>${p.links}</span>` : '')).join('')}
 </div></div>
 <div class="gr-wrap">
 ${prs.map((p, i) => `<div class="gr-pr" id="${multi ? p.id : 'gr-pr'}" data-pr="${p.id}"${hide(i)}>
 <header class="gr-head">${picker(p, i)}<div class="gr-meta">${p.meta}<button type="button" class="gr-head-note" data-note-general title="Comment on the pull request as a whole">${COMMENT}Comment</button></div></header>
 <main>
+${p.condensed}
 <div class="gr-view gr-guide">
 ${p.sections}
 </div>

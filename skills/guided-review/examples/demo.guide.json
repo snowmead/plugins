@@ -257,5 +257,110 @@
     "src/api/schema.gen.ts"
    ]
   }
- ]
+ ],
+ "condensed": {
+  "lede": [
+   "**Before** Each delivery got one post. A timeout, or a 503 while the customer deployed, lost the event.",
+   "**Now** A failure that can pass later gets more posts, with a longer wait each time: up to 6 posts over about 15 minutes. Any other failure still fails at once."
+  ],
+  "decisions": [
+   {
+    "title": "Retry only a timeout, a network error, a 408, a 429 or a 5xx",
+    "implicit": true,
+    "why": "Those answers say the endpoint may work later. Any other 4xx says the request is wrong, and the same post fails again.",
+    "tradeoff": "An endpoint that answers 404 while it deploys loses the event."
+   }
+  ],
+  "sections": [
+   {
+    "id": "backoff",
+    "title": "When to post again",
+    "decisions": [
+     {
+      "title": "Wait 30 s, then twice as long each time, with up to 20% random change",
+      "implicit": true,
+      "why": "The random part spreads the retries of endpoints that fail at the same time, so they do not all come back at once.",
+      "tradeoff": "A delivery can wait up to about 10 minutes for its last post."
+     }
+    ],
+    "code": [
+     {
+      "path": "src/webhooks/backoff.ts",
+      "new": "export const MAX_ATTEMPTS = 6;\n// ...\n\nexport function nextAttemptAt(attempts: number, now: number, random = Math.random): number {\n  // ...\n}\n\n/** A network error, a timeout, rate limiting or a server error may pass later; any other 4xx will not. */\nexport function retryable(code: number | null): boolean {\n  return code === null || code === 408 || code === 429 || code >= 500;\n}"
+     }
+    ],
+    "examples": [
+     {
+      "title": "Calls, with values from the tests",
+      "lang": "typescript",
+      "code": "// The next post after the first failure, with no random part: 30 s later\nnextAttemptAt(1, 0, () => 0.5); // 30_000\n\n// A 503 may pass later; a 404 will not\nretryable(503); // true\nretryable(404); // false"
+     }
+    ]
+   },
+   {
+    "id": "deliver",
+    "title": "The outcome of a post",
+    "body": "A delivery that fails for good keeps its `failed` status, so the code that reads it does not change.",
+    "code": [
+     {
+      "path": "src/webhooks/deliver.ts",
+      "old": "export interface Outcome {\n  status: 'delivered' | 'failed';\n  // ...\n}\n\nexport async function deliver(/* ... */, delivery: Delivery): Promise<Outcome> {\n  // ...\n  const ok = code !== null && code >= 200 && code < 300;\n  await db.deliveries.update(delivery.id, { status: ok ? 'delivered' : 'failed', lastCode: code });\n  // ...\n}",
+      "new": "export interface Outcome {\n  status: 'delivered' | 'retrying' | 'failed';\n  // ...\n}\n\nexport async function deliver(/* ... */, delivery: Delivery, now = Date.now()): Promise<Outcome> {\n  // ...\n  const attempts = delivery.attempts + 1;\n  // ...\n  if (retryable(code) && attempts < MAX_ATTEMPTS) {\n    await db.deliveries.update(/* ... */, nextAttemptAt: nextAttemptAt(attempts, now) });\n    // ...\n  }\n  // ...\n}"
+     }
+    ]
+   },
+   {
+    "id": "worker",
+    "title": "The worker takes due retries",
+    "code": [
+     {
+      "path": "src/webhooks/queue.ts",
+      "old": "//> The worker loop calls this every few seconds.\nexport async function drain(db: Db, batch = 50): Promise<number> {\n  const due = await db.deliveries.find({ status: 'pending' }, { limit: batch, order: 'createdAt' });\n  // ...\n}",
+      "new": "//> The worker loop calls this every few seconds.\nexport async function drain(db: Db, batch = 50, now = Date.now()): Promise<number> {\n  const due = await db.deliveries.find(\n    { status: ['pending', 'retrying'], nextAttemptAt: { lte: now } },\n    { limit: batch, order: 'nextAttemptAt' },\n  );\n  // ...\n}"
+     }
+    ]
+   },
+   {
+    "id": "tests",
+    "title": "Tests",
+    "tests": [
+     {
+      "path": "tests/backoff.ts",
+      "tests": [
+       {
+        "name": "the delay doubles and stops at an hour",
+        "line": 4,
+        "change": "added"
+       },
+       {
+        "name": "only failures that may pass later are retried",
+        "line": 11,
+        "change": "added"
+       }
+      ]
+     },
+     {
+      "path": "tests/deliver.ts",
+      "tests": [
+       {
+        "name": "a 500 is retried later",
+        "line": 11,
+        "change": "modified"
+       },
+       {
+        "name": "a 404 fails at once",
+        "line": 18,
+        "change": "added"
+       },
+       {
+        "name": "the sixth failure fails for good",
+        "line": 24,
+        "change": "added"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
 }

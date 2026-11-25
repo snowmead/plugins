@@ -45,7 +45,11 @@ const CHECK = (FG: string) => `(async () => {
     }
     return null;
   };
-  const guide = await drawn(document);
+  // The tab the page opens on (Condensed, or Guided without it), then Guided, then the Diff tab.
+  const first = await drawn(document);
+  if (first) return first;
+  document.querySelector('.gr-tab[data-view="guide"]')?.click();
+  const guide = await drawn(document.querySelector('.gr-guide'));
   if (guide) return guide;
   document.querySelector('.gr-tab[data-view="diff"]')?.click();
   const tree = await until(() => document.querySelector('.gr-tree-host')?.shadowRoot?.querySelector('[data-item-path]'), 15000);

@@ -1,8 +1,8 @@
 /* Moving around: the pull request on screen, its Guide and Diff views and their left columns, jumps from a ref to its
    line, the chapter rail, j and k. */
 import { $, $$, esc, store } from '../kit/web/dom';
-import { type CardState, card, cards, findRow, markStuck, select, setFold } from './cards';
-import { type Ctx, active, ctxs, diffOf, guideOf, setActive } from './ctx';
+import { type CardState, card, cards, exampleCard, findRow, markStuck, select, setFold, snippetCard } from './cards';
+import { type Ctx, active, condensedOf, ctxs, diffOf, guideOf, setActive } from './ctx';
 import { buildTree, progress, restoreChapters, showFile } from './marks';
 
 // ---------------------------------------------------------------- views
@@ -17,6 +17,19 @@ function renderGuide(c: Ctx) {
   for (const f of c.pr.files) showFile(c, f.path);
   restoreChapters(c);
 }
+/** A pull request's Condensed cards, made the first time its tab is on screen. */
+function renderCondensed(c: Ctx) {
+  if (c.condensedDone) return;
+  c.condensedDone = true;
+  const root = condensedOf(c);
+  if (!root) return;
+  for (const sec of c.pr.condensed ?? []) {
+    const files = $(`.gr-files[data-section="${CSS.escape(sec.id)}"]`, root);
+    for (const sn of sec.snippets) files?.append(snippetCard(c, sn, sec.id));
+    const ex = $(`.gr-examples[data-section="${CSS.escape(sec.id)}"]`, root);
+    for (const e of sec.examples) ex?.append(exampleCard(c, e));
+  }
+}
 export function renderDiff(c: Ctx) {
   if (c.diffDone) return;
   c.diffDone = true;
@@ -25,45 +38,69 @@ export function renderDiff(c: Ctx) {
   for (const f of c.pr.files) showFile(c, f.path);
   void buildTree(c, $('.gr-tree-host', c.root)!);
 }
-export type View = 'guide' | 'diff';
-let shown: View = 'guide';
-export const view = (): View => shown;
-/** Guide or Diff, for the pull request on screen; the tab stays when the reader picks another. */
+export type View = 'condensed' | 'guide' | 'diff';
+// A page opens on Condensed when a guide has it, else on Guided.
+let shown: View = ctxs.some((c) => condensedOf(c)) ? 'condensed' : 'guide';
+export const view = (): View => onScreenView();
+/** The view to open on, before the first pull request is drawn: an anchor's, so the page draws no other first. */
+export const startOn = (v: View) => { shown = v; };
+/** The view's element of a pull request: Condensed, Guided or Diff. */
+export const viewEl = (c: Ctx, v: View = onScreenView()) => (v === 'condensed' ? condensedOf(c) ?? guideOf(c) : v === 'guide' ? guideOf(c) : diffOf(c));
+/** Condensed, Guided or Diff, for the pull request on screen; the tab stays when the reader picks another. A pull
+    request with no Condensed view shows Guided in its place. */
 export function show(v: View) {
   shown = v;
   const c = active();
-  for (const t of $$('.gr-tab')) t.setAttribute('aria-selected', String(t.dataset.view === v));
-  guideOf(c).hidden = v !== 'guide';
-  diffOf(c).hidden = v !== 'diff';
-  $('.gr-rail')?.toggleAttribute('hidden', v !== 'guide');
+  const cx = condensedOf(c);
+  const real = onScreenView();
+  for (const t of $$('.gr-tab')) {
+    t.setAttribute('aria-selected', String(t.dataset.view === real));
+    if (t.dataset.view === 'condensed') t.hidden = !cx;
+  }
+  if (cx) cx.hidden = real !== 'condensed';
+  guideOf(c).hidden = real !== 'guide';
+  diffOf(c).hidden = real !== 'diff';
+  document.body.dataset.view = real;
+  $('.gr-rail')?.toggleAttribute('hidden', real === 'diff');
   paintPanel();
-  if (v === 'diff') renderDiff(c);
+  if (real === 'condensed') renderCondensed(c);
+  if (real === 'diff') renderDiff(c);
+  buildRail();
+  onScroll();
   // The comments' margin follows the view on screen.
   document.dispatchEvent(new Event('gr:view'));
 }
+/** The view on screen: Guided takes Condensed's place for a pull request with no Condensed view. */
+function onScreenView(): View { return shown === 'condensed' && !condensedOf(active()) ? 'guide' : shown; }
 
 // ---------------------------------------------------------------- the left column
 // Each view's left column, the chapter text or the file tree, opens and closes on its own, and stays as the reader
 // left it.
-const closed: Record<View, boolean> = { guide: false, diff: false, ...store.get<Record<View, boolean>>('gr:panel-closed') };
+// Condensed is one column, with no left column to close: it keeps no state here.
+type Panel = 'guide' | 'diff';
+const closed: Record<Panel, boolean> = { guide: false, diff: false, ...store.get<Record<Panel, boolean>>('gr:panel-closed') };
+const panel = (): Panel => (onScreenView() === 'diff' ? 'diff' : 'guide');
 function paintPanel() {
   document.body.classList.toggle('gr-guide-panel-closed', closed.guide);
   document.body.classList.toggle('gr-diff-panel-closed', closed.diff);
-  const label = `${closed[shown] ? 'Show' : 'Hide'} ${shown === 'guide' ? 'the chapter text' : 'the file tree'}`;
+  const label = `${closed[panel()] ? 'Show' : 'Hide'} ${panel() === 'diff' ? 'the file tree' : 'the chapter text'}`;
+  // Condensed is one column: it has no left column to close.
+  for (const b of $$('[data-panel-toggle]')) b.hidden = onScreenView() === 'condensed';
   for (const b of $$('[data-panel-toggle]')) {
-    b.setAttribute('aria-expanded', String(!closed[shown]));
+    b.setAttribute('aria-expanded', String(!closed[panel()]));
     b.setAttribute('aria-label', label);
     b.title = `${label} (b)`;
   }
 }
 /** Open or close the left column of the view on screen. What is at the reading line stays where it is. */
-export function togglePanel(open = closed[shown]) {
-  const scope = shown === 'guide' ? guideOf(active()) : diffOf(active());
+export function togglePanel(open = closed[panel()]) {
+  if (onScreenView() === 'condensed') return;
+  const scope = viewEl(active());
   const y = innerHeight * 0.3;
   const at = $$('.gr-card', scope).find((x) => { const r = x.getBoundingClientRect(); return r.top <= y && r.bottom > y; })
-    ?? (shown === 'guide' ? current() : null);
+    ?? (panel() === 'guide' ? current() : null);
   const top = at?.getBoundingClientRect().top ?? 0;
-  closed[shown] = !open;
+  closed[panel()] = !open;
   store.set('gr:panel-closed', closed);
   paintPanel();
   if (at) scrollBy(0, at.getBoundingClientRect().top - top);
@@ -75,7 +112,6 @@ export function choose(c: Ctx) {
   for (const el of $$('[data-pr]')) el.hidden = el.dataset.pr !== c.pr.id;
   renderGuide(c);
   show(shown);
-  buildRail();
   progress(c);
   if (was !== c) scrollTo(0, 0);
   onScroll();
@@ -120,7 +156,7 @@ function unpin() {
 export function toCard(c: Ctx, path: string, scope: Element | null) {
   const el = $$('.gr-file', scope ?? c.root).find((x) => x.dataset.path === path);
   if (!el) return;
-  if (scope?.classList.contains('gr-diff')) show('diff');
+  if (scope) show(viewOfEl(scope));
   setFold(el, false);
   pin(el);
 }
@@ -133,24 +169,28 @@ function flash(st: CardState, row: Element, line: number, side: 'o' | 'n') {
 /** Jump to a line of a pull request: the guide's card that holds it, else the Diff tab's card of the whole file. */
 export async function jump(c: Ctx, path: string, line: number, side: 'o' | 'n', chapter: string | null, from: Element | null) {
   const inDiff = !!from?.closest('.gr-diff');
-  const of = (scope: Element) => $$('.gr-file', scope).filter((x) => x.dataset.path === path);
-  // A card whose hunks hold the line first, then the guide's cards before the Diff tab's, then the chapter's own.
-  const holds = (x: Element) => (line && cards.get(x)?.hunks.some((h) => h.lines.some((l) => (side === 'o' ? l[1] : l[2]) === line)) ? 4 : 0);
-  const rank = (x: Element) => holds(x) + (x.closest('.gr-guide') ? 2 : 0) + (chapter && x.closest(`[data-chapter="${CSS.escape(chapter)}"]`) ? 1 : 0);
+  const here = from?.closest('.gr-condensed') ? 'condensed' : from?.closest('.gr-guide') ? 'guide' : onScreenView();
+  const of = (scope: Element | null) => (scope ? $$('.gr-file', scope).filter((x) => x.dataset.path === path) : []);
+  // A card whose hunks hold the line first, then the cards of the view the jump starts in, then the guide's before the
+  // Diff tab's, then the chapter's own.
+  const holds = (x: Element) => (line && cards.get(x)?.hunks.some((h) => h.lines.some((l) => (side === 'o' ? l[1] : l[2]) === line)) ? 8 : 0);
+  const rank = (x: Element) => holds(x) + (x.closest(`.gr-${here}`) ? 4 : 0) + (x.closest('.gr-guide') ? 2 : 0) + (chapter && x.closest(`[data-chapter="${CSS.escape(chapter)}"], [data-section="${CSS.escape(chapter)}"]`) ? 1 : 0);
   renderDiff(c);
-  const list = (inDiff ? of(diffOf(c)) : [...of(guideOf(c)), ...of(diffOf(c))]).sort((x, y) => rank(y) - rank(x));
+  renderCondensed(c);
+  const list = (inDiff ? of(diffOf(c)) : [...of(condensedOf(c)), ...of(guideOf(c)), ...of(diffOf(c))]).sort((x, y) => rank(y) - rank(x));
   for (const x of list) {
-    show(x.closest('.gr-diff') ? 'diff' : 'guide');
+    show(viewOfEl(x));
     setFold(x, false);
     if (!line) { pin(x); return; }
     const row = await findRow(x, line, side);
     if (row) { flash(cards.get(x)!, row, line, side); return; }
   }
-  if (list[0]) { show(list[0].closest('.gr-diff') ? 'diff' : 'guide'); setFold(list[0], false); pin(list[0]); }
+  if (list[0]) { show(viewOfEl(list[0])); setFold(list[0], false); pin(list[0]); }
 }
+const viewOfEl = (x: Element): View => (x.closest('.gr-diff') ? 'diff' : x.closest('.gr-condensed') ? 'condensed' : 'guide');
 
 // ---------------------------------------------------------------- the rail, j and k
-const sections = () => $$('.gr-sec', guideOf(active()));
+const sections = () => (onScreenView() === 'diff' ? [] : $$('.gr-sec', viewEl(active())));
 /** The section at the reading line, 30% down the screen. */
 export function current() {
   const y = innerHeight * 0.3;
@@ -168,7 +208,7 @@ function buildRail() {
     const b = document.createElement('button');
     b.type = 'button';
     b.dataset.target = s.id;
-    if (s.dataset.chapter) b.dataset.chapter = s.dataset.chapter;
+    if (s.dataset.chapter && !s.closest('.gr-condensed')) b.dataset.chapter = s.dataset.chapter;
     if (s.classList.contains('label-start')) b.classList.add('gap');
     b.innerHTML = `<span>${esc(s.dataset.title || '')}</span>`;
     b.setAttribute('aria-label', s.dataset.title || s.id);

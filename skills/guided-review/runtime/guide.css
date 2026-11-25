@@ -681,3 +681,71 @@ body.gr-diff-panel-closed .gr-tree { display: none; }
 /* Code reads as typed, with no `===` or `=>` ligatures. Last, since the `font`
    shorthands above reset it. */
 code, .mono, .gr-plain, .gr-sep .sc, .gr-move { font-variant-ligatures: none; }
+
+/* ---------- Condensed: one column, the text short and narrow, the code wide ---------- */
+.gr-sec.gr-cx { display: block; padding-block: 32px; }
+.gr-condensed > .gr-sec:last-child { min-height: 60vh; }
+.gr-cx-text { max-width: 72ch; color: var(--fg-2); }
+.gr-cx-text h2 { font-size: 18px; line-height: 1.35; font-weight: 600; margin: 0 0 10px; color: var(--fg); text-wrap: balance; }
+.gr-cx-text p { margin: 0 0 10px; }
+.gr-cx-text code, .gr-tests code, .gr-decision code {
+  font-size: .86em; background: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: .1em .35em; color: var(--fg);
+}
+.gr-cx-text a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+.gr-lede { font-size: 15.5px; line-height: 1.55; color: var(--fg); }
+.gr-lede p { margin: 0 0 6px; }
+.gr-lede b { font-weight: 600; }
+.gr-cx-note { color: var(--fg-2); }
+.gr-cx-wide { display: grid; gap: 14px; min-width: 0; margin-top: 16px; }
+.gr-cx-wide:empty { display: none; }
+.gr-cx-wide > .gr-files, .gr-cx-wide > .gr-examples { display: grid; gap: 14px; min-width: 0; }
+.gr-cx-wide > .gr-files:empty, .gr-cx-wide > .gr-examples:empty { display: none; }
+.gr-cx-wide > .gr-table { margin-top: 0; }
+.gr-lbl { font-size: 11px; font-weight: 500; letter-spacing: .03em; text-transform: uppercase; color: var(--muted-fg); }
+
+/* a decision: a card that opens on its why and trade-off */
+.gr-decision { margin: 12px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+.gr-decision > summary {
+  list-style: none; display: flex; align-items: baseline; gap: 10px; padding: 9px 12px; cursor: pointer; color: var(--fg);
+}
+.gr-decision > summary::-webkit-details-marker { display: none; }
+.gr-decision > summary .gr-lbl { flex: none; color: var(--c1); }
+.gr-decision > summary .ttl { flex: 1; font-weight: 500; }
+.gr-decision > summary svg { flex: none; align-self: center; width: 14px; height: 14px; color: var(--muted-fg); transform: rotate(-90deg); transition: transform .15s; }
+.gr-decision[open] > summary svg { transform: none; }
+.gr-implicit { flex: none; font-size: 11px; color: var(--muted-fg); border: 1px solid var(--border-strong); border-radius: 5px; padding: 0 6px; line-height: 18px; }
+.gr-decision .bd { padding: 0 12px 10px; color: var(--fg-2); }
+.gr-decision .bd p { margin: 0 0 8px; }
+.gr-decision .cost .gr-lbl { display: block; margin-bottom: 2px; color: var(--c1); }
+/* an approach the author dropped: muted, a dashed line at its left */
+.gr-discarded { margin: 12px 0; padding: 2px 0 2px 12px; border-left: 2px dashed var(--border-strong); color: var(--muted-fg); }
+.gr-discarded .gr-lbl { display: block; margin-bottom: 2px; }
+.gr-discarded p { margin: 0 0 6px; }
+
+/* cut code: the header links to the whole change on the Diff tab */
+.gr-card .gr-to-diff { flex: none; font-size: 12px; color: var(--muted-fg); padding: 2px 6px; border-radius: 5px; }
+.gr-card .gr-to-diff:hover { color: var(--fg); background: var(--muted); }
+.gr-sep.none { display: none; }
+.gr-example-card .fstat .st { font-style: italic; }
+
+/* the tests the change adds, changes or removes, by file */
+.gr-tests { display: grid; gap: 12px; }
+.gr-tests-file { border: 1px solid var(--border); border-radius: 8px; background: var(--card); padding: 8px 12px; }
+.gr-tests-file > header { font: 12px var(--mono); color: var(--muted-fg); margin-bottom: 4px; overflow-wrap: anywhere; }
+.gr-tests ul { list-style: none; margin: 0; padding: 0; }
+.gr-tests li { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
+.gr-tests li.in-group { padding-left: 16px; }
+.gr-tests li.gr-tgroup { color: var(--fg); font-weight: 500; padding-top: 6px; }
+.gr-tests .mk { flex: none; width: 12px; text-align: center; font: 600 13px var(--mono); }
+.gr-tests .is-added .mk { color: var(--add-fg); }
+.gr-tests .is-modified .mk { color: var(--c2); }
+.gr-tests .is-removed .mk { color: var(--del-fg); }
+.gr-tests a { color: var(--muted-fg); text-decoration: none; }
+.gr-tests a:hover { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+/* Review marks count Guided's chapters. */
+body[data-view="condensed"] .gr-progress { display: none; }
+/* A phone has no room for three tabs and the GitHub button: the title's #number links to GitHub there. */
+@media (max-width: 560px) {
+  .gr-bar:has(.gr-tab[data-view="condensed"]:not([hidden])) .k-btn.is-primary { display: none; }
+  .gr-tabs .gr-tab { padding-inline: 8px; }
+}

@@ -1,7 +1,7 @@
 /* Code cards. @pierre/diffs draws each card's code in its own shadow root: syntax highlighting, the words that
    changed within a line, light and dark themes. The folds between hunks, the moved-code chips and the review comments
    are ours, slotted in. A card renders when it comes near the screen, so a long guide opens at once. */
-import type { DiffFile, DiffStyle, Hunk, Move, PageChapter, PierreAnnotation, PierreFileDiff, PierreFileDiffMeta, PierreHunkSeparator, PierreLineRange } from './types';
+import type { DiffFile, DiffStyle, Hunk, Line, Move, PageChapter, PageSnippet, PierreAnnotation, PierreFileDiff, PierreFileDiffMeta, PierreHunkSeparator, PierreLineRange } from './types';
 import { $, $$, esc, store } from '../kit/web/dom';
 import { ICON } from '../kit/web/icons';
 import { onTheme, themeType } from '../kit/web/theme';
@@ -50,6 +50,19 @@ export interface CardState {
   flashTimer?: number;
   /** A Markdown file's preview and its switches (prose.ts). */
   prose?: Prose | null;
+  /** A Condensed card: its code is cut by hand, so its rows are numbered in the cut code. `hunks` holds the real line
+      numbers, which the comments and jumps use; `f.hunks` the cut ones, which the library draws. */
+  snip?: Snip;
+  /** A code example: highlighted code, with no change and no comments. */
+  example?: boolean;
+  /** Styles of a Condensed card's own: its page notes. */
+  css?: string;
+}
+interface Snip {
+  /** "o12" or "n12" (a real line at the base or the head) → its line in the cut code, on the same side. */
+  toCut: Map<string, number>;
+  /** The rows, with each cut line number and real line number. */
+  rows: { op: Line[0]; o: number | null; n: number | null; ro: number | null; rn: number | null }[];
 }
 export const cards = new WeakMap<Element, CardState>();
 const mounted = new Set<CardState>();
@@ -72,6 +85,7 @@ function redraw(st: CardState) {
   stale.delete(st);
   // The theme type too: a change of theme reaches the card through setThemeType, not its options.
   st.opts = { ...st.opts, diffStyle: diffStyle(), themeType: themeType(), ...codeOptions() };
+  if (st.css) st.opts.unsafeCSS = `${codeOptions().unsafeCSS ?? ''}\n${st.css}`;
   st.inst!.setOptions(st.opts);
   st.inst!.rerender();
 }
@@ -160,6 +174,12 @@ function separator(st: CardState, h: PierreHunkSeparator) {
   return el;
 }
 
+function noSeparator() {
+  const el = document.createElement('div');
+  el.className = 'gr-sep none';
+  return el;
+}
+
 function moveChip(f: DiffFile, mv: Move) {
   const el = document.createElement('div');
   el.className = `gr-move ${mv.side === '-' ? 'del' : 'add'}`;
@@ -178,7 +198,14 @@ function movesIn(f: DiffFile, hunks: Hunk[]): PierreAnnotation<Note>[] {
     .map((mv) => ({ side: mv.side === '-' ? 'deletions' : 'additions', lineNumber: mv.to, metadata: moveNote(mv) }));
 }
 /** What the card draws under its lines: moved-code chips, then review comments and an open composer. */
-const notesOf = (st: CardState) => [...movesIn(st.f, st.hunks), ...commentNotes(st)];
+const notesOf = (st: CardState) => {
+  if (st.example) return [];
+  if (!st.snip) return [...movesIn(st.f, st.hunks), ...commentNotes(st)];
+  return commentNotes(st).flatMap((a) => {
+    const line = toCut(st, a.lineNumber, a.side === 'deletions' ? 'o' : 'n');
+    return line == null ? [] : [{ ...a, lineNumber: line }];
+  });
+};
 
 /** Without the library: the hunks as plain text. */
 function plain(hunks: Hunk[]) {
@@ -195,7 +222,8 @@ export function mount(card: Element): Promise<void> | undefined {
     const { diffs } = await libs;
     await codeReady;
     const host = $('.gr-code', card)!;
-    const { f, hunks } = st;
+    const { f } = st;
+    const hunks = st.snip || st.example ? f.hunks : st.hunks;
     const fallback = () => { host.innerHTML = plain(hunks); host.style.minHeight = ''; };
     if (!diffs) return fallback();
     let fd: PierreFileDiffMeta;
@@ -216,16 +244,20 @@ export function mount(card: Element): Promise<void> | undefined {
       themeType: themeType(),
       diffStyle: diffStyle(),
       disableFileHeader: true,
-      overflow: f.lang === 'markdown' ? 'wrap' : 'scroll',
-      hunkSeparators: (h: PierreHunkSeparator) => separator(st, h),
+      // Cut code is short and read in full, so its long lines wrap, as Markdown's do.
+      overflow: f.lang === 'markdown' || st.snip || st.example ? 'wrap' : 'scroll',
+      hunkSeparators: (h: PierreHunkSeparator) => (st.snip || st.example ? noSeparator() : separator(st, h)),
       expansionLineCount: STEP,
       collapsedContextThreshold: fd.isPartial ? 0 : 3,
       renderAnnotation: (a: PierreAnnotation<Note>) => (a.metadata.kind === 'move' ? moveChip(f, a.metadata.mv) : noteEl(a.metadata)),
       // The "+" beside the line under the pointer starts a comment; dragging it takes a block of lines. A click on a
       // line number selects the line, a Shift-click selects the lines up to another, and the "+" then sits on the
       // last of them and takes them all.
-      enableGutterUtility: true,
-      enableLineSelection: true,
+      enableGutterUtility: !st.example,
+      enableLineSelection: !st.example,
+      // Cut code has no real line numbers to show; its rows hold them for comments and jumps.
+      ...(st.snip || st.example ? { disableLineNumbers: true } : {}),
+      ...(st.css ? { unsafeCSS: `${codeOptions().unsafeCSS ?? ''}\n${st.css}` } : {}),
       onGutterUtilityClick: (range: PierreLineRange) => openLine(st, range),
       // A selection the reader starts outlives a jump's highlight of its line.
       onLineSelectionStart: () => clearTimeout(st.flashTimer),
@@ -370,7 +402,8 @@ export function openProseFold(el: Element, from: number) {
   reflow(st);
 }
 /** Select lines in a card: in its code, or the blocks that hold them in its preview. */
-export function select(st: CardState, range: PierreLineRange | null) {
+export function select(st: CardState, real: PierreLineRange | null) {
+  const range = real && st.snip ? rangeToCut(st, real) : real;
   if (st.prose) light(st.prose, previewOn(st) ? range : null);
   if (!previewOn(st) || !range) st.inst?.setSelectedLines(range);
 }
@@ -385,7 +418,9 @@ export function commentBlock(block: HTMLElement) {
 // ---------------------------------------------------------------- rows
 /** The row of a line in a rendered card: a removed line by its old number, any other by its new one. Split cards
     number each column by its own side, so the line is looked up in the deletions or the additions column. */
-export function rowOf(st: CardState, line: number, side: 'o' | 'n') {
+export function rowOf(st: CardState, real: number, side: 'o' | 'n') {
+  const line = toCut(st, real, side);
+  if (line == null) return null;
   if (previewOn(st)) return st.prose!.painted ? blockAt(st.prose!, line, side) : null;
   const root = st.host?.shadowRoot;
   if (!root) return null;
@@ -417,4 +452,109 @@ export async function findRow(cardEl: Element, line: number, side: 'o' | 'n') {
   if (i < 0) i = st.hunks.length;
   st.inst.expandHunk(i, 'both', Number.POSITIVE_INFINITY);
   return rowOf(st, line, side);
+}
+
+// ---------------------------------------------------------------- Condensed cards
+/** A real line's row in a card, by its number in the card's code: the same number, but in cut code its cut one. */
+export function toCut(st: CardState, line: number, side: 'o' | 'n') {
+  return st.snip ? st.snip.toCut.get(`${side}${line}`) ?? null : line;
+}
+function rangeToCut(st: CardState, r: PierreLineRange): PierreLineRange | null {
+  const side = (x?: string) => (x === 'deletions' ? 'o' : 'n');
+  const a = toCut(st, r.start, side(r.side)), b = toCut(st, r.end, side(r.endSide ?? r.side));
+  if (a == null && b == null) return null;
+  return { ...r, start: a ?? b!, end: b ?? a! };
+}
+/** Lines picked in cut code, as real lines. A pick that starts or ends on a line only on the page (a `// ...`, a
+    note) takes the nearest real line inside it; one with no real line returns null. */
+export function rangeToReal(st: CardState, r: PierreLineRange): PierreLineRange | null {
+  const rows = st.snip!.rows;
+  const find = (line: number, s?: string) => rows.findIndex((x) => (s === 'deletions' ? x.op === '-' || x.op === ' ' ? x.o === line : false : x.n === line && x.op !== '-'));
+  let i = find(r.start, r.side), j = find(r.end, r.endSide ?? r.side);
+  if (i < 0 || j < 0) return null;
+  if (i > j) [i, j] = [j, i];
+  const realOf = (x: Snip['rows'][number]) => (x.op === '-' ? (x.ro != null ? { line: x.ro, side: 'deletions' as const } : null) : x.rn != null ? { line: x.rn, side: 'additions' as const } : x.ro != null ? { line: x.ro, side: 'deletions' as const } : null);
+  let a = null, b = null;
+  for (let k = i; k <= j && !a; k++) a = realOf(rows[k]);
+  for (let k = j; k >= i && !b; k--) b = realOf(rows[k]);
+  if (!a || !b) return null;
+  return { start: a.line, side: a.side, end: b.line, endSide: b.side };
+}
+
+/** A page note (`//> text`) is the page's voice, not the code's: it draws in the accent color, in italics, on no
+    change color, wherever it sits. The library numbers rows in the cut code, so each note is styled by its row. */
+const NOTE = /^\s*(?:\/\/|#|--)>(?:\s|$)/;
+function noteCss(rows: Line[]) {
+  const sel = rows.filter((l) => NOTE.test(l[3])).flatMap(([op, o, n]) => (op === '-'
+    ? [`[data-line-type="change-deletion"][data-line="${o}"]`, `[data-deletions] [data-line="${o}"]`]
+    : [`[data-line="${n}"]:not([data-line-type="change-deletion"])`, `[data-additions] [data-line="${n}"]`, ...(op === ' ' ? [`[data-deletions] [data-line="${o}"]`] : [])]));
+  if (!sel.length) return '';
+  const all = sel.join(', ');
+  return `:is(${all}) { background: transparent !important; }\n:is(${all}) span { color: var(--c1) !important; font-style: italic; }`;
+}
+const count = (rows: Line[], op: '-' | '+') => rows.filter((l) => l[0] === ' ' || l[0] === op).length;
+/** One hunk of cut code: numbered from 1 on each side, or from 0 on a side it has not. */
+function cutHunk(rows: Line[]): Hunk {
+  const oldLines = count(rows, '-'), newLines = count(rows, '+');
+  return { id: 1, oldStart: oldLines ? 1 : 0, oldLines, newStart: newLines ? 1 : 0, newLines, header: '', label: '', scope: [], lines: rows };
+}
+function cutCard(ctx: Ctx, f: DiffFile, title: string, dir: string, stats: string, extra: string, cls: string) {
+  const el = document.createElement('article');
+  el.className = `gr-card gr-file ${cls}`;
+  el.dataset.path = f.path;
+  const rows = f.hunks[0].lines.length;
+  el.innerHTML =
+    `<header><button type="button" class="gr-fold" aria-label="Fold ${esc(title)}" aria-expanded="true">${ICON.down}</button>`
+    + `<span class="gr-lang">${esc(chipOf(f))}</span><span class="fname">${esc(title)}</span>`
+    + `<span class="fdir" title="${esc(f.path)}">${esc(dir)}</span><span class="fstat">${stats}</span>${extra}</header>`
+    + `<div class="gr-notes" hidden></div><div class="gr-code" style="min-height:${rows * 20}px"></div>`;
+  return el;
+}
+/** A Condensed card: a file's code, cut by hand, with its change. */
+export function snippetCard(ctx: Ctx, sn: PageSnippet, section: string) {
+  const real = ctx.files.get(sn.path)!;
+  const rows = sn.rows;
+  const hasOld = rows.some((l) => l[0] !== '+'), hasNew = rows.some((l) => l[0] !== '-');
+  const f: DiffFile = {
+    ...real, oldPath: null, status: !hasOld ? 'added' : !hasNew ? 'deleted' : 'modified',
+    old: null, new: null, moves: [], preview: undefined, hunks: [cutHunk(rows)],
+  };
+  const snip: Snip = { toCut: new Map(), rows: rows.map((l, i) => ({ op: l[0], o: l[1], n: l[2], ro: sn.at[i][0], rn: sn.at[i][1] })) };
+  for (const x of snip.rows) {
+    if (x.o != null && x.ro != null) snip.toCut.set(`o${x.ro}`, x.o);
+    if (x.n != null && x.rn != null) snip.toCut.set(`n${x.rn}`, x.n);
+  }
+  // The real line numbers, for the comments and jumps that look a line up in a card's hunks.
+  const realHunk: Hunk = { ...f.hunks[0], lines: snip.rows.map((x) => [x.op, x.op === '+' ? null : x.ro, x.op === '-' ? null : x.rn, '']) as Line[] };
+  let a = 0, d = 0;
+  // Only code counts: a `// ...`, a note or a blank line is not a line the pull request changes.
+  for (const x of snip.rows) { if (x.op === '+' && x.rn != null) a++; else if (x.op === '-' && x.ro != null) d++; }
+  const [name, dir] = split(sn.path);
+  const first = snip.rows.find((x) => x.op === '+' && x.rn != null)?.rn ?? snip.rows.find((x) => x.rn != null)?.rn;
+  const el = cutCard(ctx, f, sn.name ?? name, sn.name ? sn.path : dir, stat(a, d),
+    `<button type="button" class="gr-note-btn" data-note-file aria-label="Comment on ${esc(name)}" title="Comment on this file">${COMMENT}</button>`
+    + (first != null && real.status !== 'deleted' ? `<button type="button" class="gr-to-diff" data-diff-go="${first}" title="The whole change to this file, on the Diff tab">Full diff</button>` : ''),
+    'gr-cut');
+  el.dataset.section = section;
+  cards.set(el, { el, ctx, f, hunks: [realHunk], whole: false, elsewhere: [], prose: null, snip, css: noteCss(rows) });
+  if (mounter) mounter.observe(el); else wake(el);
+  fileNotes(ctx, el);
+  watcher?.observe(el);
+  return el;
+}
+const EXT: Record<string, string> = { typescript: 'ts', javascript: 'js', rust: 'rs', python: 'py', go: 'go', bash: 'sh', shell: 'sh', sql: 'sql', json: 'json', yaml: 'yaml', toml: 'toml', markdown: 'md', tsx: 'tsx', jsx: 'jsx', ruby: 'rb', java: 'java', kotlin: 'kt', swift: 'swift', c: 'c', cpp: 'cpp', css: 'css', html: 'html' };
+/** A code example: code that is not in the pull request, highlighted, with no change. */
+export function exampleCard(ctx: Ctx, ex: { lang: string; code: string; title?: string }) {
+  const ext = EXT[ex.lang.toLowerCase()] ?? ex.lang.toLowerCase();
+  const lines = ex.code.split('\n');
+  const rows: Line[] = lines.map((t, i) => [' ', i + 1, i + 1, t]);
+  const f: DiffFile = {
+    path: `example.${ext}`, oldPath: null, status: 'modified', kind: 'core', lang: ex.lang, binary: false, add: 0, del: 0,
+    old: null, new: null, oldCount: null, newCount: null, moves: [], hunks: [cutHunk(rows)],
+  };
+  const el = cutCard(ctx, f, ex.title ?? 'Example', '', '<span class="st">not in the pull request</span>', '', 'gr-example-card');
+  el.removeAttribute('data-path');
+  cards.set(el, { el, ctx, f, hunks: [], whole: false, elsewhere: [], prose: null, example: true });
+  if (mounter) mounter.observe(el); else wake(el);
+  return el;
 }

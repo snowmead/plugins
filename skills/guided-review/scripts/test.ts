@@ -266,6 +266,43 @@ for (const [name, guide, message] of refusals) {
   check(`build refuses ${name}`, r.status === 1 && message.test(r.log), r.log);
 }
 
+// The Condensed tab: code cut by hand, each shown line found in the real file, so a comment on it lands on its line.
+const cut = (old: string, nu: string) => ({ path: 'src/a.rs', old, new: nu });
+const condensedOf = (sections: unknown[]) => ({ ...guideFor('One.'), condensed: { lede: '**Before** x10 was 10. **Now** it is 100.', sections } });
+const ONE_OLD = 'fn one() {\n    // ...\n    let x10 = 10;\n    // ...\n}', ONE_NEW = 'fn one() {\n    // ...\n    let x10 = 100;\n    // ...\n}';
+const cx = build(condensedOf([
+  { id: 'values', title: 'The values', decisions: [{ title: 'Ten times more', implicit: true, why: 'Ten was too small.', tradeoff: 'More memory.' }], code: [cut(ONE_OLD, ONE_NEW)] },
+  { id: 'tests', title: 'Tests', tests: [{ path: 'tests/a_test.rs', tests: [{ name: 'works', line: 2, change: 'added' }] }] },
+]));
+check('a guide with a condensed part builds', cx.status === 0, cx.log);
+check('Condensed is the first tab, then Guided, then Diff', /data-view="condensed"[^>]*>Condensed<\/button><button[^>]*data-view="guide"[^>]*>Guided<\/button><button[^>]*data-view="diff"/.test(cx.html), cx.html.slice(cx.html.indexOf('gr-tabs'), cx.html.indexOf('gr-tabs') + 400));
+check('a guide without one has no Condensed tab', !built.html.includes('data-view="condensed"'));
+const cxData = /^window\.GR_DATA = (.*);\n$/s.exec(cx.data)?.[1];
+const snip = cxData ? JSON.parse(cxData).prs[0].condensed?.[0]?.snippets?.[0] : null;
+same('each shown row keeps its real lines at the base and the head', snip?.rows.map((r: unknown[], i: number) => [r[0], ...snip.at[i]]), [
+  [' ', 1, 1], [' ', null, null], ['-', 11, null], ['+', null, 11], [' ', null, null], [' ', 22, 22],
+]);
+check('a decision shows as a card, closed, with its trade-off', /<details class="gr-decision"><summary><span class="gr-lbl">Decision<\/span><span class="ttl">Ten times more<\/span><span class="gr-implicit"/.test(cx.html) && cx.html.includes('<span class="gr-lbl">Trade-off</span><p>More memory.</p>'), cx.html);
+check('a test links to its line', /<li class="is-added"><span class="mk" title="Added">\+<\/span><a href="#" data-ref="tests\/a_test\.rs" data-line="2" data-side="n"[^>]*>works<\/a><\/li>/.test(cx.html), cx.html);
+check('the build reports what Condensed leaves out', /condensed: 2 sections, 3 of 30 lines shown; not shown: .*src\/gone\.rs/.test(cx.log), cx.log);
+const skipped = build(condensedOf([{ id: 'v', title: 'V', code: [cut('fn one() {\n    let x10 = 10;\n}', 'fn one() {\n    let x10 = 100;\n}')] }]));
+check('code left out with no // ... warns', skipped.status === 0 && /old line 2, "let x10 = 10;", follows a gap of 9 lines of code with no \/\/ \.\.\./.test(skipped.log), skipped.log);
+const joined = build(condensedOf([{ id: 'v', title: 'V', code: [cut('fn one() {/* ... */let x10 = 10;\n    // ...\n}', 'fn one() {/* ... */let x10 = 100;\n    // ...\n}')] }]));
+check('one shown line can stand for several real ones, with /* ... */', joined.status === 0, joined.log);
+const cxRefusals: [string, unknown, RegExp][] = [
+  ['shown code the file does not have', condensedOf([{ id: 'v', title: 'V', code: [cut(ONE_OLD, ONE_NEW.replace('100', '1000'))] }]), /new line 3, "let x10 = 1000;", is not in the file at the head/],
+  ['unchanged code shown as added', condensedOf([{ id: 'v', title: 'V', code: [cut(ONE_OLD, ONE_NEW.replace('    let x10', '    let x9 = 9;\n    let x10'))] }]), /new line 3, "let x9 = 9;", shows as added, but the pull request does not add it \(head line 10\)/],
+  ['old code in a new file', condensedOf([{ id: 'v', title: 'V', code: [{ path: 'src/n.rs', old: 'fn moves() {', new: 'fn moves() {' }] }]), /has "old" code, but the file is not at the base/],
+  ['more lines than its budget', condensedOf([{ id: 't', title: 'T', tests: [{ path: 'tests/a_test.rs', tests: Array.from({ length: 31 }, () => ({ name: 'works', line: 2, change: 'added' })) }] }]), /condensed shows 31 changed lines and test names, over its budget of 30/],
+  ['a test past the end of its file', condensedOf([{ id: 't', title: 'T', tests: [{ path: 'tests/a_test.rs', tests: [{ name: 'works', line: 99, change: 'added' }] }] }]), /line 99 of tests\/a_test\.rs at the head is past the end of the file/],
+  ['a section that shows nothing', condensedOf([{ id: 'v', title: 'V', body: 'Words only.' }]), /condensed\.sections\[0\] \(v\) shows nothing/],
+  ['a condensed part with no lede', { ...guideFor('One.'), condensed: { lede: '', sections: [{ id: 'v', title: 'V', code: [cut(ONE_OLD, ONE_NEW)] }] } }, /condensed\.lede is missing/],
+];
+for (const [name, guide, message] of cxRefusals) {
+  const r = build(guide);
+  check(`build refuses ${name}`, r.status === 1 && message.test(r.log), r.log);
+}
+
 // Several pull requests on one page: a stack.json lists each guide with its diff.
 function buildStack(guides: unknown[]) {
   const prs = guides.map((g, i) => { writeFileSync(join(tmp, `g${i}.json`), JSON.stringify(g)); return { guide: `g${i}.json`, diff: 'diff.json' }; });
@@ -649,7 +686,7 @@ const MD_EXPECT: Record<string, unknown> = {
 // opens #43, and a jump inside it.
 const STACK_RUN = `
   const vis = (q) => [...document.querySelectorAll(q)].filter((e) => !e.hidden && !e.closest('[hidden]'));
-  r.startsOn = vis('.gr-pr')[0]?.dataset.pr; r.count = vis('.gr-pick-n')[0]?.textContent;
+  r.startsOn = vis('.gr-pr')[0]?.dataset.pr + ' ' + document.body.dataset.view; r.count = vis('.gr-pick-n')[0]?.textContent;
   r.stacked = !!vis('.gr-picklist.stacked, .gr-pick .stacked').length || !!document.querySelector('.gr-pr:not([hidden]) .gr-picklist.stacked');
   vis('.gr-pick-btn')[0].click();
   r.opens = vis('.gr-picklist').length === 1 && document.activeElement?.dataset.pick === 'pr42';
@@ -657,11 +694,13 @@ const STACK_RUN = `
   r.arrowMoves = document.activeElement?.dataset.pick;
   ms.pick = t(() => document.activeElement.click());
   r.picked = vis('.gr-pr')[0]?.dataset.pr; r.closed = vis('.gr-picklist').length === 0;
+  // #43 has no Condensed tab: Guided takes its place, and #42 gets it back.
+  r.noCondensed = $('.gr-tab[data-view="condensed"]').hidden + ' ' + document.body.dataset.view;
   r.followers = [vis('.gr-head .t')[0]?.textContent, vis('.gr-bar .k-btn.is-primary')[0]?.textContent.trim(), vis('.gr-progress')[0]?.textContent].join(' | ');
   r.rail = [...document.querySelectorAll('.gr-rail button')].map((b) => b.dataset.target).join(' ');
   await until(() => vis('.gr-file diffs-container').length);
   ms.back = t(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: '[', bubbles: true })));
-  r.bracketBack = vis('.gr-pr')[0]?.dataset.pr;
+  r.bracketBack = vis('.gr-pr')[0]?.dataset.pr + ' ' + document.body.dataset.view;
   document.dispatchEvent(new KeyboardEvent('keydown', { key: ']', bubbles: true }));
   r.bracketNext = vis('.gr-pr')[0]?.dataset.pr;
   vis('input[data-review-chapter="counts"]')[0].click();
@@ -671,9 +710,9 @@ const STACK_RUN = `
   $('#pr43-overview .k-dia-wide .pele-node.is-ref[data-id="F"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
   r.jump = await until(() => vis('.gr-file').find((c) => c.dataset.path === 'src/api/endpoint.ts')?.querySelector('diffs-container')?.shadowRoot?.querySelector('[data-line="17"][data-selected-line]'));`;
 const STACK_EXPECT: Record<string, unknown> = {
-  startsOn: 'pr42', count: '1 of 2', stacked: true, opens: true, arrowMoves: 'pr43', picked: 'pr43', closed: true,
+  startsOn: 'pr42 condensed', count: '1 of 2', noCondensed: 'true guide', stacked: true, opens: true, arrowMoves: 'pr43', picked: 'pr43', closed: true,
   followers: 'Show retrying deliveries on the endpoint page | Open #43 on GitHub↗ | 0 of 3 chapters reviewed',
-  rail: 'pr43-overview pr43-c-counts pr43-c-docs pr43-c-tests', bracketBack: 'pr42', bracketNext: 'pr43',
+  rail: 'pr43-overview pr43-c-counts pr43-c-docs pr43-c-tests', bracketBack: 'pr42 condensed', bracketNext: 'pr43',
   ownMarks: 'true,false', pickerProgress: '1/3', jump: true, anchor: 'pr43', anchorAt: true,
 };
 
@@ -727,7 +766,9 @@ async function runPage(name: string, file: string, run: string, expect: Record<s
 // kept in this browser. A click on a box brings it forward and selects its lines. A reply waits with the next send
 // and names its thread; a composer's Send sends at once; Resolve folds a thread; the bar hides and shows the margin;
 // a narrow screen draws the boxes in the code instead.
-async function runComments(file: string) {
+async function runComments(page: string) {
+  // These checks are about Guided's cards; the demo opens on Condensed.
+  const file = `${page}#guide`;
   const name = 'comments';
   const tab = await browser(join(dirname(file), `profile-${name}`), { warnings: true });
   const got: Record<string, unknown> = {}, ms: Record<string, number> = {};
@@ -968,7 +1009,76 @@ const VIEWER = `(() => {
 // Outdated, with its code. A click on the moved one selects the lines it is on now. With the viewer's database:
 // another reader's thread shows; Send writes the send for Claude to read; an answer Claude writes comes into its
 // thread at once; a reply sent at once carries its thread to Claude; Resolve writes a mark.
-async function runThreads(file: string) {
+// The Condensed tab: the demo opens on it, its cut code draws, and a comment on a cut line is a comment on the real
+// line, picked with real mouse events: the "+" beside `const attempts` names head line 26, and a comment kept on head
+// line 31 sits level with the row that shows it.
+async function runCondensed(file: string) {
+  const name = 'condensed';
+  const tab = await browser(join(dirname(file), `profile-${name}`), { warnings: true });
+  const got: Record<string, unknown> = {};
+  const mouse = (type: string, x: number, y: number) => tab.send('Input.dispatchMouseEvent', { type, x, y, button: type !== 'mouseMoved' ? 'left' : 'none', buttons: type === 'mousePressed' ? 1 : 0, clickCount: 1 });
+  const root = `[...document.querySelectorAll('.gr-condensed .gr-file')].find((c) => c.dataset.path === 'src/webhooks/deliver.ts').querySelector('diffs-container').shadowRoot`;
+  const row = (text: string) => `[...${root}.querySelectorAll('[data-line]')].find((r) => r.textContent.includes(${JSON.stringify(text)}))`;
+  try {
+    await tab.open('file://' + file);
+    await inPage(tab, `localStorage.setItem('gr:42:comments', JSON.stringify([{ id: 'cx1', kind: 'line', path: 'src/webhooks/deliver.ts', start: 31, side: 'n', end: 31, endSide: 'n', code: [['+', 'x']], text: 'Kept on head 31', head: window.GR_DATA.prs[0].head, at: '2026-01-01T00:00:00Z' }]));`);
+    await tab.open('about:blank');
+    await tab.open('file://' + file);
+    const at = (await inPage(tab, `await sleep(300);
+      r.view = document.body.dataset.view;
+      r.tabs = [...document.querySelectorAll('.gr-tab')].map((t) => t.textContent).join(' ');
+      r.progressHidden = getComputedStyle($('.gr-progress')).display === 'none';
+      const cutCard = card('.gr-condensed', 'src/webhooks/deliver.ts');
+      cutCard.scrollIntoView({ block: 'center' });
+      await until(() => ${row('const attempts')});
+      await sleep(300);
+      r.stat = cutCard.querySelector('.fstat').textContent;
+      r.cutNumbers = ${row('const attempts')}.dataset.line;
+      const kept = [...document.querySelectorAll('.gr-margin > [data-key]')].find((x) => x.textContent.includes('Kept on head 31'));
+      r.keptLevel = kept && Math.round(kept.getBoundingClientRect().top - ${row('if (retryable')}.getBoundingClientRect().top);
+      const ex = document.querySelector('.gr-condensed .gr-example-card');
+      ex.scrollIntoView({ block: 'center' });
+      r.example = await until(() => ex.querySelector('diffs-container')?.shadowRoot?.textContent.includes('nextAttemptAt(1, 0, () => 0.5)')) && !ex.querySelector('diffs-container').shadowRoot.querySelector('[data-line-type^="change"]');
+      const queue = card('.gr-condensed', 'src/webhooks/queue.ts');
+      queue.scrollIntoView({ block: 'center' });
+      const noteRow = () => [...(queue.querySelector('diffs-container')?.shadowRoot?.querySelectorAll('[data-line]') ?? [])].find((x) => x.textContent.includes('worker loop calls'));
+      await until(noteRow);
+      r.note = noteRow() && getComputedStyle(noteRow().querySelector('span span') ?? noteRow().querySelector('span')).fontStyle + ' ' + noteRow().dataset.lineType;
+      cutCard.scrollIntoView({ block: 'center' });
+      await sleep(200);
+      const b = ${row('const attempts')}.getBoundingClientRect();
+      r.x = b.left + 60; r.y = b.top + b.height / 2;`)).r;
+    Object.assign(got, at);
+    await mouse('mouseMoved', at.x as number, at.y as number);
+    await Bun.sleep(150);
+    const plus = JSON.parse(await tab.run(`(() => { const u = ${root}.querySelector('[data-utility-button]')?.getBoundingClientRect(); return JSON.stringify(u ? { x: u.left + u.width / 2, y: u.top + u.height / 2 } : null); })()`));
+    got.plus = !!plus;
+    if (plus) { await mouse('mouseMoved', plus.x, plus.y); await mouse('mousePressed', plus.x, plus.y); await mouse('mouseReleased', plus.x, plus.y); }
+    Object.assign(got, (await inPage(tab, `await sleep(150);
+      r.composer = document.querySelector('.gr-margin > [data-key="draft"] .gr-composer-where')?.textContent;
+      $('.gr-tab[data-view="guide"]').click();
+      await sleep(50);
+      r.guided = document.body.dataset.view + ' ' + $('.gr-condensed').hidden + ' ' + $('.gr-guide').hidden;`)).r);
+    // On a phone, three tabs fit in the bar, and nothing makes the page scroll sideways.
+    await tab.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    Object.assign(got, (await inPage(tab, `$('.gr-tab[data-view="condensed"]').click();
+      await sleep(300);
+      const bar = $('.gr-bar .gr-wrap');
+      r.phone = document.documentElement.scrollWidth <= innerWidth && bar.scrollWidth <= bar.clientWidth;`)).r);
+    delete got.x; delete got.y;
+    same('condensed', got, {
+      view: 'condensed', tabs: 'Condensed Guided Diff', progressHidden: true, stat: '+6−4', cutNumbers: '8', keptLevel: 0,
+      example: true, note: 'italic context',
+      plus: true, composer: 'Comment on line 26', guided: 'guide true false', phone: true,
+    });
+    for (const e of tab.errors) check(`${name}: no console errors`, false, e);
+    if (!tab.errors.length && JSON.stringify(got).length) console.log(`ok    ${name}`);
+  } finally {
+    tab.close();
+  }
+}
+async function runThreads(page: string) {
+  const file = `${page}#guide`;
   const name = 'threads';
   const tab = await browser(join(dirname(file), `profile-${name}`), { warnings: true });
   const got: Record<string, unknown> = {}, ms: Record<string, number> = {};
@@ -1171,14 +1281,14 @@ try {
   const demo = buildDemo(join(dir, 'demo'), true);
   const stack = buildStackDemo(join(dir, 'stack'), true);
   if (demo.code || stack.code) { console.log(demo.log + stack.log); process.exit(1); }
-  await runPage('page', join(dir, 'demo.preview.html'), RUN, expect, budget, async (tab, r) => {
+  await runPage('page', join(dir, 'demo.preview.html#guide'), RUN, expect, budget, async (tab, r) => {
     // A stored theme the catalog does not have (renamed, or from another release) would leave every card empty: the
     // page shows the default instead, and the cards draw. The run's other state goes, so the chapter is not folded.
     // Then, under a dark system, the reader picks light: a redraw (Split here) keeps the light the reader picked.
     await tab.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
     await tab.run(`localStorage.clear(); localStorage.setItem('gr:code-theme', JSON.stringify({ light: 'no-such-theme', dark: 'pierre-dark' }))`);
     await tab.open('about:blank');
-    await tab.open('file://' + join(dir, 'demo.preview.html'));
+    await tab.open('file://' + join(dir, 'demo.preview.html#guide'));
     const { r: again } = await inPage(tab, `
       $('#c-retry-decision').scrollIntoView();
       const root = () => card('#c-retry-decision', 'src/webhooks/deliver.ts')?.querySelector('diffs-container')?.shadowRoot;
@@ -1214,7 +1324,7 @@ try {
     term.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     term.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, relatedTarget: document.body }));
     r.leave = tip.hidden;`, { marked: 'endpoint, delivery, worker', open: true, beside: true, inside: true, escape: true, leave: true }, { boot: BUDGET.boot });
-  await runPage('markdown', join(dir, 'demo.preview.html'), MD_RUN, MD_EXPECT, { boot: BUDGET.boot, mdFold: BUDGET.interaction, mdChanges: BUDGET.interaction, mdSource: BUDGET.interaction, mdNote: BUDGET.interaction }, async (tab, r) => {
+  await runPage('markdown', join(dir, 'demo.preview.html#guide'), MD_RUN, MD_EXPECT, { boot: BUDGET.boot, mdFold: BUDGET.interaction, mdChanges: BUDGET.interaction, mdSource: BUDGET.interaction, mdNote: BUDGET.interaction }, async (tab, r) => {
     // Narrower, there is no margin: the comment sits under its block, as a line comment sits under its line.
     await tab.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 900, deviceScaleFactor: 1, mobile: false });
     r.narrow = JSON.parse(await tab.run(`(async () => { await new Promise((ok) => setTimeout(ok, 300));
@@ -1224,6 +1334,7 @@ try {
   });
   await runComments(join(dir, 'demo.preview.html'));
   await runThreads(join(dir, 'demo.preview.html'));
+  await runCondensed(join(dir, 'demo.preview.html'));
   await runPage('stack', join(dir, 'stack.preview.html'), STACK_RUN, STACK_EXPECT, { boot: BUDGET.boot, pick: BUDGET.interaction, back: BUDGET.interaction }, async (tab, r) => {
     // A link with #pr43-c-docs opens on #43, at that chapter.
     // Another document first: a navigation that changes only the anchor fires no load.

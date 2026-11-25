@@ -16,6 +16,7 @@ export interface Ctx {
   marks: Marks;
   tree: PierreFileTree | null;
   guideDone: boolean;
+  condensedDone: boolean;
   diffDone: boolean;
 }
 
@@ -25,7 +26,7 @@ export const ctxs: Ctx[] = D.prs.map((pr) => {
   return {
     pr, root: document.querySelector<HTMLElement>(`.gr-pr[data-pr="${pr.id}"]`)!,
     files: new Map(pr.files.map((f) => [f.path, f])), holders,
-    marks: { c: {}, f: {}, ...store.get<Marks>(pr.key) }, tree: null, guideDone: false, diffDone: false,
+    marks: { c: {}, f: {}, ...store.get<Marks>(pr.key) }, tree: null, guideDone: false, condensedDone: false, diffDone: false,
   };
 });
 
@@ -42,4 +43,6 @@ export const byId = (id: string) => ctxs.find((c) => c.pr.id === id) ?? null;
 /** An element of a pull request by its id inside the panel, the prefix added. */
 export const byOwnId = (c: Ctx, id: string) => document.getElementById(c.pr.prefix + id);
 export const guideOf = (c: Ctx) => c.root.querySelector<HTMLElement>('.gr-guide')!;
+/** The Condensed tab's view, when the guide has one. */
+export const condensedOf = (c: Ctx) => c.root.querySelector<HTMLElement>('.gr-condensed');
 export const diffOf = (c: Ctx) => c.root.querySelector<HTMLElement>('.gr-diff')!;

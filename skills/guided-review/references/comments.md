@@ -21,6 +21,10 @@ Each opens a composer with three buttons: **Cancel**; **Add to queue**, which ke
 and **Send** (or ⌘↵), which sends that one comment to Claude at once. A queued comment has its own **Send** too, and
 **Edit** and **Delete**. While any are queued, the bar shows **Send N to Claude**, which sends the queue.
 
+The Condensed tab's code is cut by hand, but each of its lines keeps its real line: a comment there is on that line
+of the file, and shows on the Guided and Diff tabs too. A comment on a `// ...` or a note takes the nearest real line
+inside what was picked.
+
 On a wide screen every comment is a box in a margin at the right of the code, level with what it is on: a line
 comment with its first line, a file comment with its file's header, a general one with the title. Boxes that would
 overlap stack down the margin. A click on a comment goes to its code: a card folded or marked reviewed opens, the

@@ -93,6 +93,69 @@ export interface StateTable {
   note?: string;
 }
 export interface Term { term: string; means: string }
+/** A choice that shapes the change, and that a reviewer can want done another way. */
+export interface Decision {
+  title: string;
+  /** Made while building, with no discussion. */
+  implicit?: boolean;
+  why: Text;
+  tradeoff?: Text;
+  /** An approach the author dropped for this choice, and why. */
+  discarded?: Text;
+}
+/** One piece of code the Condensed tab shows, cut by hand: the text at the base (`old`) and at the head (`new`). A
+    line of `// ...` leaves out statements, `/* ... *\/` inside a line leaves out part of it, and `//> text` is a note
+    that is on the page only. build.ts finds each other line in the real file and keeps its line number. */
+export interface Snippet {
+  path: string;
+  /** A shorter name than the path to show in the card's header. */
+  name?: string;
+  old?: string;
+  new?: string;
+}
+/** Code that is not in the pull request and shows how a caller uses the change. */
+export interface Example { title?: string; lang: string; code: string }
+export type TestChange = 'added' | 'modified' | 'removed';
+export interface ShownTest {
+  /** The test's name in words, as close to its name in the code as the assertions allow. */
+  name: string;
+  /** The test's line at the head, or at the base for a removed test. */
+  line: number;
+  change: TestChange;
+  /** The describe block it is in, in words. */
+  group?: string;
+}
+export interface TestFile { path: string; tests: ShownTest[] }
+/** One part of the system in the Condensed tab, in the order the data moves. */
+export interface CondensedSection {
+  id: string;
+  title: string;
+  /** Only what the code cannot show: a why, a trade-off, a cost, a fact about code the page leaves out. */
+  body?: Text;
+  decisions?: Decision[];
+  /** A flow chart, only when the change adds or moves a link between parts of the system. */
+  diagram?: Diagram;
+  table?: StateTable;
+  examples?: Example[];
+  code?: Snippet[];
+  tests?: TestFile[];
+  /** Approaches dropped for this part, each with why. */
+  discarded?: Text[];
+}
+/** The Condensed tab: only the core of the change, its code cut to what a reviewer checks. */
+export interface Condensed {
+  /** What changed and why, in a few lines. A line can start with **Before** or **Now**. */
+  lede: Text;
+  /** The author's motivation, scope and follow-ups, in short paragraphs. */
+  notes?: Text;
+  /** Decisions about the whole change. */
+  decisions?: Decision[];
+  /** Approaches dropped for the whole change, each with why. */
+  discarded?: Text[];
+  /** The flow across parts of the system, only when the change adds or moves a link between them. */
+  diagram?: Diagram;
+  sections: CondensedSection[];
+}
 export type FileSel = string | { path: string; hunks?: number[] };
 export interface Chapter {
   id: string;
@@ -129,6 +192,8 @@ export interface Guide {
     diagram: Diagram;
   };
   chapters: Chapter[];
+  /** The Condensed tab, the page's first. Without it, the page opens on Guided. */
+  condensed?: Condensed;
 }
 
 // ---------------------------------------------------------------- stack.json
@@ -143,6 +208,17 @@ export interface Stack {
 
 // ---------------------------------------------------------------- the page's data (window.GR_DATA)
 export interface PageChapter { id: string; title: string; files: { path: string; hunks: number[] | null }[] }
+/** A snippet as the Condensed tab draws it. `rows` are numbered in the cut code, from 1 on each side; `at` holds each
+    row's real line at the base and at the head, or null for a line that is only on the page (a `// ...`, a note, a
+    blank line). */
+export interface PageSnippet {
+  path: string;
+  name?: string;
+  rows: Line[];
+  at: [old: number | null, new: number | null][];
+}
+/** A Condensed section's code: its snippets and examples, in the order the page shows them. */
+export interface PageSection { id: string; title: string; snippets: PageSnippet[]; examples: { lang: string; code: string; title?: string }[] }
 export interface PagePr {
   /** The PR's panel id ("pr42"), and the prefix of every element id inside it: "pr42-", or "" on a page with one PR. */
   id: string;
@@ -159,13 +235,15 @@ export interface PagePr {
   /** Where a file the pull request does not change is on GitHub: the start of its URL. Left out with no repository. */
   blob?: string;
   chapters: PageChapter[];
+  /** The Condensed tab's sections, when the guide has one. */
+  condensed?: PageSection[];
   files: DiffFile[];
   /** Each section's diagram, drawn at build: by "overview" or "c-<chapter id>". */
   diagrams: Record<string, PageDiagram>;
 }
 /** Where a diagram's node leads: a line of the diff (in chapter `ch`), or `url` on GitHub for a file the pull request
     does not change. `title` is the node's tooltip. */
-export interface DiagramRef { path: string; line: number; side?: Side; ch?: string; url?: string; title: string }
+export interface DiagramRef { path: string; line: number; side?: Side; ch?: string; sec?: string; url?: string; title: string }
 /** A drawn diagram: the SVG for its box (kit/build/diagram.ts), and its nodes' refs by node id. */
 export interface PageDiagram { html: string; refs?: Record<string, DiagramRef> }
 export interface PageData {
