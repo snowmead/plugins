@@ -1,8 +1,7 @@
 ---
 name: tigerstyle
-description: TigerStyle for the code you write, and swarm riding for how you drive the work. Run it by hand on a task.
+description: TigerStyle, TigerBeetle's coding style (bounds on every loop and queue, paired assertions, static allocation, 70-line functions), for the code, and swarm riding (a measurable goal, deterministic simulation and differential tests, persistence) for how the work is driven. Use when the user asks for TigerStyle or Tiger Style, to write, rewrite or reimplement code to it, to check code against it, to add deterministic simulation or differential tests, or to hit a measurable goal such as making code 10x faster. Not for ordinary coding where no such style or goal was asked for.
 argument-hint: "[task]"
-disable-model-invocation: true
 license: Apache-2.0. Complete terms in LICENSE.txt
 metadata:
   repository: https://github.com/snowmead/plugins
@@ -19,8 +18,7 @@ This skill joins two sources into one way of working:
   https://www.paradigm.xyz/writing/swarms), governs how you drive the work: the goal, the prompts, the tests and the
   environment. The essay is paraphrased here, not copied.
 
-Apply this skill only when the user invoked it. The task is `$ARGUMENTS`; when that is empty, the task is the work in
-progress in this conversation.
+The task is `$ARGUMENTS`; when that is empty, the task is the work in progress in this conversation.
 
 ## Order of work
 
@@ -150,7 +148,7 @@ The essay's view: the agent is an accelerator, and the environment it runs in de
 ### Repository changes that need the user's word
 
 The essay also tells readers to reshape the repository itself. Each of these changes needs the user's explicit request
-for that change. Invoking this skill is not that request.
+for that change. Loading this skill is not that request.
 
 - Delete comments wholesale, or delete `docs/` and skills folders.
 - Ban agent-written unit tests in `AGENTS.md` or `CLAUDE.md`.

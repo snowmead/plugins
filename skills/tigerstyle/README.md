@@ -6,7 +6,8 @@ functions, exact names. Swarm riding, from Georgios Konstantopoulos's essay "Eff
 (Paradigm), sets how the agent drives the work: a measurable goal, prompts that set a hill to climb, deterministic
 simulation and differential tests, and persistence until the goal is met.
 
-Only a person can start it. The agent does not load it on its own (`disable-model-invocation: true`).
+Run it by hand, or let the agent load it when you ask for TigerStyle, deterministic simulation or differential tests,
+or a measurable goal such as 10x faster.
 
 Install in Claude Code:
 
